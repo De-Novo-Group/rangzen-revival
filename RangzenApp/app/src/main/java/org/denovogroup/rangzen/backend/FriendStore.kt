@@ -93,27 +93,46 @@ class FriendStore private constructor(context: Context) :
      * Initialize or retrieve the user's identity keypair.
      */
     fun getOrCreateIdentity(): AsymmetricCipherKeyPair {
-        // Check if we already have keys
+        // Check if we already have keys.
         val publicKey = getStoredKey(KEY_PUBLIC)
         val privateKey = getStoredKey(KEY_PRIVATE)
 
         if (publicKey != null && privateKey != null) {
-            // Reconstruct keypair from stored keys
-            val pubKeyParams = Crypto.decodeDHPublicKey(publicKey)
-            val privKeyParams = Crypto.decodeDHPrivateKey(privateKey)
-            return AsymmetricCipherKeyPair(pubKeyParams, privKeyParams)
+            try {
+                // Reconstruct keypair from stored keys.
+                val pubKeyParams = Crypto.decodeDHPublicKey(publicKey)
+                // Reconstruct private key from stored bytes.
+                val privKeyParams = Crypto.decodeDHPrivateKey(privateKey)
+                // Return the restored keypair.
+                return AsymmetricCipherKeyPair(pubKeyParams, privKeyParams)
+            } catch (e: Exception) {
+                // Log the failure so we don't silently hide invalid keys.
+                Timber.e(e, "Stored identity keys invalid; regenerating")
+                // Clear stored keys to avoid repeated failures.
+                clearStoredIdentity()
+            }
         }
 
-        // Generate new identity
+        // Generate new identity.
         val keypair = Crypto.generateUserID()
         if (keypair != null) {
-            // Store the keys
+            // Store the keys.
             storeKey(KEY_PUBLIC, Crypto.generatePublicID(keypair))
             storeKey(KEY_PRIVATE, Crypto.generatePrivateID(keypair))
             Timber.i("New identity generated and stored")
         }
 
         return keypair!!
+    }
+
+    /**
+     * Remove any stored identity keys after decode failure.
+     */
+    private fun clearStoredIdentity() {
+        // Delete any identity rows to force regeneration.
+        val rows = writableDatabase.delete(TABLE_IDENTITY, null, null)
+        // Log how many rows were cleared.
+        Timber.w("Cleared $rows stored identity rows")
     }
 
     /**
