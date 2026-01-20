@@ -17,8 +17,10 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
@@ -65,6 +67,7 @@ class FeedFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         messageStore = MessageStore.getInstance(requireContext())
         setupRecyclerView()
+        setupSwipeRefresh()
         observeMessages()
     }
 
@@ -83,6 +86,12 @@ class FeedFragment : Fragment() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Force a refresh when returning to the feed.
+        refreshFeedFromDb()
+    }
+
     private fun setupRecyclerView() {
         messageAdapter = MessageAdapter(
             onLikeClick = { message ->
@@ -96,6 +105,13 @@ class FeedFragment : Fragment() {
         binding.recyclerMessages.apply {
             layoutManager = LinearLayoutManager(context)
             adapter = messageAdapter
+        }
+    }
+
+    private fun setupSwipeRefresh() {
+        binding.swipeRefresh.setOnRefreshListener {
+            // Force refresh to pull latest DB state.
+            refreshFeedFromDb()
         }
     }
 
@@ -133,6 +149,18 @@ class FeedFragment : Fragment() {
             getString(R.string.status_peers_found, peerCount)
         } else {
             getString(R.string.status_discovering)
+        }
+    }
+
+    private fun refreshFeedFromDb() {
+        // Refresh on a background thread to avoid blocking UI.
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            // Force store refresh then post UI update.
+            messageStore.refreshMessagesNow()
+            // Stop the spinner on the main thread.
+            withContext(Dispatchers.Main) {
+                binding.swipeRefresh.isRefreshing = false
+            }
         }
     }
 

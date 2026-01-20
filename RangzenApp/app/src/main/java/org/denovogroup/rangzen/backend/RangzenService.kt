@@ -14,6 +14,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -160,6 +161,12 @@ class RangzenService : Service() {
         if (!readyToConnect()) {
             return
         }
+        // Avoid initiating while we are serving an inbound exchange.
+        if (bleAdvertiser.activeConnectionCount.value > 0) {
+            // Skip initiating to reduce BLE contention.
+            Timber.i("Skipping exchange initiation; inbound session active")
+            return
+        }
         val currentPeers = bleScanner.peers.value
         // Clean exchange history to keep only active peers.
         exchangeHistory.cleanHistory(currentPeers.map { it.address })
@@ -197,6 +204,11 @@ class RangzenService : Service() {
                 if (result != null) {
                     // Update exchange history on success.
                     updateExchangeHistory(peer.address, result.messagesReceived > 0)
+                    // Refresh messages when we receive data to update the UI feed.
+                    if (result.messagesReceived > 0) {
+                        // Trigger a store refresh to notify observers.
+                        messageStore.refreshMessagesNow()
+                    }
                     Timber.i(
                         "Exchange completed with ${peer.address} " +
                             "commonFriends=${result.commonFriends} " +
@@ -278,14 +290,16 @@ class RangzenService : Service() {
     }
 
     private fun shouldInitiateExchange(peer: DiscoveredPeer): Boolean {
-        // If backoff is enabled, always initiate (legacy behavior).
-        if (AppConfig.useBackoff(this)) return true
-        // Fetch the local Bluetooth address.
-        val localAddress = bluetoothAddressOrNull()
-        // If address is unavailable, default to initiating.
-        if (localAddress.isNullOrBlank()) return true
-        // Use legacy deterministic initiator selection.
-        return whichInitiates(localAddress, peer.address) == localAddress
+        // Fetch the local initiator identifier.
+        val localId = deviceIdForInitiator()
+        // If the ID is unavailable, default to initiating.
+        if (localId.isNullOrBlank()) return true
+        // Use deterministic initiator selection to avoid collisions.
+        val initiator = whichInitiates(localId, peer.address)
+        // If initiator is unknown, allow initiation to avoid deadlock.
+        if (initiator.isNullOrBlank()) return true
+        // Only initiate when we are the selected initiator.
+        return initiator == localId
     }
 
     private fun bluetoothAddressOrNull(): String? {
@@ -295,6 +309,17 @@ class RangzenService : Service() {
         // Treat dummy address as unavailable.
         if (address == "02:00:00:00:00:00") return null
         return address
+    }
+
+    private fun deviceIdForInitiator(): String? {
+        // Prefer Bluetooth address when it is usable.
+        val bluetooth = bluetoothAddressOrNull()
+        // Return Bluetooth address if available.
+        if (!bluetooth.isNullOrBlank()) return bluetooth
+        // Fall back to Android ID for deterministic selection.
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        // Return the Android ID if it is present.
+        return androidId
     }
 
     private fun whichInitiates(a: String, b: String): String? {

@@ -70,6 +70,12 @@ class MessageStore private constructor(context: Context) :
         refreshMessages()
     }
 
+    init {
+        // Load existing messages into the flow at startup.
+        // This keeps the feed in sync even before new inserts occur.
+        refreshMessages()
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         val createTable = """
             CREATE TABLE $TABLE_MESSAGES (
@@ -398,6 +404,14 @@ class MessageStore private constructor(context: Context) :
      */
     private fun refreshMessages() {
         _messages.value = getAllMessages()
+    }
+
+    /**
+     * Force a refresh for UI pull-to-refresh actions.
+     */
+    fun refreshMessagesNow() {
+        // Refresh immediately to notify observers even if no new data arrived.
+        refreshMessages()
     }
 
     /**

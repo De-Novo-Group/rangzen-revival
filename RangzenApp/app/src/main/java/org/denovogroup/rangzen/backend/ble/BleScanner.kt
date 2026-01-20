@@ -277,19 +277,16 @@ class BleScanner(private val context: Context) {
                     payload,
                     BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
                 )
-                // If the stack is busy, avoid fallback and retry later.
+                // If the stack is busy, try the legacy API once before giving up.
                 if (status == BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY) {
                     // Log the busy state explicitly.
-                    Timber.w("GATT write busy; scheduling retry after delay")
-                    Log.w(LOG_TAG, "GATT write busy; scheduling retry after delay")
-                    // Schedule a retry using the configured initial delay.
-                    val delayMs = AppConfig.initialWriteDelayMs(context)
-                    // Update the pending write so it is retried.
-                    pendingWrite = payload
-                    // Post the retry after the delay.
-                    handler.postDelayed({ writeTransportFrame(gatt, payload) }, delayMs)
-                    // Return busy status so callers can log it.
-                    BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY
+                    Timber.w("GATT write busy; attempting legacy write fallback")
+                    Log.w(LOG_TAG, "GATT write busy; attempting legacy write fallback")
+                    // Populate the characteristic value for legacy writes.
+                    characteristic.value = payload
+                    // Attempt legacy write to clear the busy state.
+                    if (gatt.writeCharacteristic(characteristic)) 0
+                    else BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY
                 } else if (status != BluetoothStatusCodes.SUCCESS) {
                     // Log the modern API failure for visibility.
                     Timber.w("GATT write returned status=$status; falling back to legacy API")
@@ -321,9 +318,11 @@ class BleScanner(private val context: Context) {
                 handler.postDelayed(readFallbackRunnable, delayMs)
                 Timber.i("Scheduled GATT read fallback after ${delayMs}ms")
             } else if (writeResult == BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY) {
-                // Do not treat busy as a hard failure; retry is already scheduled.
-                Timber.w("GATT write busy; waiting for retry schedule")
-                Log.w(LOG_TAG, "GATT write busy; waiting for retry schedule")
+                // Treat BUSY as a hard failure after legacy fallback.
+                Timber.e("GATT write busy after fallback; closing connection")
+                Log.e(LOG_TAG, "GATT write busy after fallback; closing connection")
+                gatt.close()
+                if (continuation.isActive && !responded) continuation.resume(null)
             } else {
                 Timber.e("GATT transport write could not be started (code=$writeResult)")
                 if (writeRetryCount < maxWriteRetries) {

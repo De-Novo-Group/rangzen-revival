@@ -71,6 +71,10 @@ class BleAdvertiser(private val context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _activeConnectionCount = MutableStateFlow(0)
+    val activeConnectionCount: StateFlow<Int> = _activeConnectionCount.asStateFlow()
+    private val activeConnections = mutableSetOf<String>()
+
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
             _isAdvertising.value = true
@@ -173,10 +177,16 @@ class BleAdvertiser(private val context: Context) {
             Log.i(LOG_TAG, "GATT server connection change: status=$status newState=$newState device=${device.address}")
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Timber.i("GATT server connected to ${device.address}")
+                // Track active connections to avoid initiating while serving.
+                activeConnections.add(device.address)
+                _activeConnectionCount.value = activeConnections.size
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Timber.i("GATT server disconnected from ${device.address}")
                 // Clear any in-flight transport session for this device.
                 clearSession(device)
+                // Update active connection tracking.
+                activeConnections.remove(device.address)
+                _activeConnectionCount.value = activeConnections.size
             }
         }
 
