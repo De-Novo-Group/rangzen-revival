@@ -10,6 +10,7 @@ package org.denovogroup.rangzen.backend.ble
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.*
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.denovogroup.rangzen.backend.AppConfig
 import timber.log.Timber
+import java.io.ByteArrayOutputStream
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
@@ -143,6 +145,8 @@ class BleScanner(private val context: Context) {
         val writePayload = data
         // Keep a reference to the active GATT for fallback reads.
         var activeGatt: BluetoothGatt? = null
+        // Track whether the CCCD write callback fired.
+        var cccdWriteAcknowledged = false
         // Runnable for the read fallback when write callbacks are missing.
         val readFallbackRunnable = Runnable {
             // Only attempt fallback if we haven't responded yet.
@@ -167,25 +171,395 @@ class BleScanner(private val context: Context) {
                 Log.i(LOG_TAG, "GATT fallback read requested: started=$readStarted")
             }
         }
+
+        // Track the negotiated MTU to size transport chunks.
+        var negotiatedMtu = 23
+        // Track the transport header size.
+        val transportHeaderSize = TransportProtocol.headerSize()
+        // Track the maximum payload size for transport chunks.
+        var maxChunkPayloadSize = 1
+        // Track request offset for chunked transfer.
+        var requestOffset = 0
+        // Track response assembly state.
+        var responseTotalLength = 0
+        var responseReceived = 0
+        // Buffer for response accumulation.
+        val responseBuffer = ByteArrayOutputStream()
+        // Track whether a GATT write is in progress.
+        var writeInProgress = false
+        // Hold the next payload to write when the current write completes.
+        var pendingWrite: ByteArray? = null
+        // Track write retry attempts.
+        var writeRetryCount = 0
+        // Maximum write retries for transient errors.
+        val maxWriteRetries = 3
+        // Delay between write retries.
+        val writeRetryDelayMs = 200L
+        // Track whether a request start is already scheduled.
+        var requestStartScheduled = false
+        // Hold the pending GATT for scheduled request starts.
+        var pendingStartGatt: BluetoothGatt? = null
+
+        fun updateChunkSize(mtu: Int) {
+            // BLE payload is MTU - 3 bytes for ATT header.
+            val attPayloadLimit = mtu - 3
+            // Read the configured max attribute length for safety.
+            val maxAttributeLength = AppConfig.gattMaxAttributeLength(context)
+            // Clamp the payload limit to the max attribute length.
+            val payloadLimit = minOf(attPayloadLimit, maxAttributeLength)
+            // Deduct transport header to get usable payload space.
+            val computed = payloadLimit - transportHeaderSize
+            // Ensure we have at least one byte of payload.
+            maxChunkPayloadSize = if (computed > 0) computed else 1
+        }
+
+        fun resetResponse() {
+            // Reset response tracking when starting a new response.
+            responseTotalLength = 0
+            responseReceived = 0
+            responseBuffer.reset()
+        }
+
+        fun buildRequestFrame(): ByteArray {
+            // Compute remaining bytes to send.
+            val remaining = writePayload.size - requestOffset
+            // Determine chunk length based on negotiated MTU.
+            val chunkSize = minOf(remaining, maxChunkPayloadSize)
+            // Slice the payload for this chunk.
+            val chunk = writePayload.copyOfRange(requestOffset, requestOffset + chunkSize)
+            // Build a DATA frame for this chunk.
+            val frame = TransportFrame(
+                op = TransportProtocol.OP_DATA,
+                totalLength = writePayload.size,
+                offset = requestOffset,
+                payload = chunk
+            )
+            // Advance the request offset for the next chunk.
+            requestOffset += chunkSize
+            // Encode the frame as bytes for GATT write.
+            return TransportProtocol.encode(frame)
+        }
+
+        fun buildContinueFrame(): ByteArray {
+            // Ask for the next response chunk.
+            val frame = TransportFrame(
+                op = TransportProtocol.OP_CONTINUE,
+                totalLength = 0,
+                offset = responseReceived,
+                payload = ByteArray(0)
+            )
+            // Encode the frame as bytes for GATT write.
+            return TransportProtocol.encode(frame)
+        }
+
+        fun writeTransportFrame(gatt: BluetoothGatt, payload: ByteArray) {
+            // Queue the write if a previous write is still in progress.
+            if (writeInProgress) {
+                pendingWrite = payload
+                Timber.w("Write in progress, queued transport frame (size=${payload.size})")
+                return
+            }
+            // Ensure characteristic exists.
+            val characteristic = exchangeCharacteristic
+            if (characteristic == null) {
+                Timber.e("Cannot write transport frame; characteristic missing")
+                gatt.close()
+                if (continuation.isActive && !responded) continuation.resume(null)
+                return
+            }
+            // Ensure write type is explicit.
+            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            // Perform the write using the appropriate API.
+            val writeResult = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                // Attempt the modern API first on Android 13+.
+                val status = gatt.writeCharacteristic(
+                    characteristic,
+                    payload,
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                )
+                // If the stack is busy, avoid fallback and retry later.
+                if (status == BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY) {
+                    // Log the busy state explicitly.
+                    Timber.w("GATT write busy; scheduling retry after delay")
+                    Log.w(LOG_TAG, "GATT write busy; scheduling retry after delay")
+                    // Schedule a retry using the configured initial delay.
+                    val delayMs = AppConfig.initialWriteDelayMs(context)
+                    // Update the pending write so it is retried.
+                    pendingWrite = payload
+                    // Post the retry after the delay.
+                    handler.postDelayed({ writeTransportFrame(gatt, payload) }, delayMs)
+                    // Return busy status so callers can log it.
+                    BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY
+                } else if (status != BluetoothStatusCodes.SUCCESS) {
+                    // Log the modern API failure for visibility.
+                    Timber.w("GATT write returned status=$status; falling back to legacy API")
+                    Log.w(LOG_TAG, "GATT write returned status=$status; falling back to legacy API")
+                    // Populate the characteristic value for legacy writes.
+                    characteristic.value = payload
+                    // Attempt the legacy write and map the boolean to status code.
+                    if (gatt.writeCharacteristic(characteristic)) 0 else -1
+                } else {
+                    // Return the success status as-is for consistent handling.
+                    status
+                }
+            } else {
+                // Use the legacy API on pre-Android 13 devices.
+                characteristic.value = payload
+                if (gatt.writeCharacteristic(characteristic)) 0 else -1
+            }
+            // Log the write result.
+            Timber.i("GATT transport write started=$writeResult device=${peer.address}")
+            Log.i(LOG_TAG, "GATT transport write started=$writeResult device=${peer.address}")
+            // Schedule a fallback read if the write was accepted.
+            if (writeResult == 0) {
+                // Mark write as in progress once accepted.
+                writeInProgress = true
+                // Reset retry count on success.
+                writeRetryCount = 0
+                val delayMs = AppConfig.gattReadFallbackDelayMs(context)
+                handler.removeCallbacks(readFallbackRunnable)
+                handler.postDelayed(readFallbackRunnable, delayMs)
+                Timber.i("Scheduled GATT read fallback after ${delayMs}ms")
+            } else if (writeResult == BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY) {
+                // Do not treat busy as a hard failure; retry is already scheduled.
+                Timber.w("GATT write busy; waiting for retry schedule")
+                Log.w(LOG_TAG, "GATT write busy; waiting for retry schedule")
+            } else {
+                Timber.e("GATT transport write could not be started (code=$writeResult)")
+                if (writeRetryCount < maxWriteRetries) {
+                    writeRetryCount += 1
+                    pendingWrite = payload
+                    Timber.w("Scheduling transport write retry #$writeRetryCount")
+                    handler.postDelayed({ writeTransportFrame(gatt, payload) }, writeRetryDelayMs)
+                } else {
+                    Timber.e("Transport write retries exhausted; closing connection")
+                    gatt.close()
+                    if (continuation.isActive && !responded) continuation.resume(null)
+                }
+            }
+        }
+
+        fun startRequestTransfer(gatt: BluetoothGatt) {
+            // Grab the characteristic needed for writes.
+            val characteristic = exchangeCharacteristic
+            // Fail loudly if the characteristic is missing.
+            if (characteristic == null) {
+                // Log the missing characteristic for visibility.
+                Timber.e("GATT request start aborted: characteristic missing")
+                Log.e(LOG_TAG, "GATT request start aborted: characteristic missing")
+                // Close the GATT to avoid leaks.
+                gatt.close()
+                return
+            }
+            // Clear the scheduled flag now that we are starting.
+            requestStartScheduled = false
+            // Reset response tracking before first request chunk.
+            resetResponse()
+            // Reset request offset before first request chunk.
+            requestOffset = 0
+            // Build the first request frame.
+            val payload = buildRequestFrame()
+            // Write the transport frame to begin the request transfer.
+            writeTransportFrame(gatt, payload)
+        }
+
+        // Runnable to begin the request transfer after a small delay.
+        val startRequestRunnable = Runnable {
+            // Fetch the pending GATT reference.
+            val gatt = pendingStartGatt
+            // Abort if we no longer have a GATT.
+            if (gatt == null) {
+                // Log that the runnable fired without a GATT reference.
+                Timber.w("Request start runnable fired without active GATT")
+                Log.w(LOG_TAG, "Request start runnable fired without active GATT")
+                // Reset the scheduled flag when we cannot proceed.
+                requestStartScheduled = false
+                return@Runnable
+            }
+            // Do not proceed if we already responded.
+            if (responded) {
+                // Log that the runnable fired after a response arrived.
+                Timber.w("Request start runnable skipped: response already received")
+                Log.w(LOG_TAG, "Request start runnable skipped: response already received")
+                // Reset the scheduled flag when the exchange is done.
+                requestStartScheduled = false
+                return@Runnable
+            }
+            // Log that we are starting the request transfer.
+            Timber.i("Request start runnable fired; starting transfer now")
+            Log.i(LOG_TAG, "Request start runnable fired; starting transfer now")
+            // Begin the request transfer now that the delay elapsed.
+            startRequestTransfer(gatt)
+        }
+
+        fun scheduleRequestStart(gatt: BluetoothGatt, reason: String) {
+            // Avoid scheduling multiple starts for the same exchange.
+            if (requestStartScheduled) {
+                // Log that a start is already scheduled.
+                Timber.i("Request start already scheduled; skipping (reason=$reason)")
+                Log.i(LOG_TAG, "Request start already scheduled; skipping (reason=$reason)")
+                return
+            }
+            // Mark that a request start is scheduled.
+            requestStartScheduled = true
+            // Track the GATT we should use for the scheduled start.
+            pendingStartGatt = gatt
+            // Clear any prior scheduled start to avoid duplicate runs.
+            handler.removeCallbacks(startRequestRunnable)
+            // Resolve the initial delay from config for this device.
+            val initialDelayMs = AppConfig.initialWriteDelayMs(context)
+            // Log the scheduling reason for debugging.
+            Timber.i("Scheduling request start: reason=$reason delayMs=$initialDelayMs")
+            Log.i(LOG_TAG, "Scheduling request start: reason=$reason delayMs=$initialDelayMs")
+            // Post the start after a short delay to avoid GATT busy errors.
+            handler.postDelayed(startRequestRunnable, initialDelayMs)
+        }
+
+        // Runnable for CCCD write timeouts so the request can still start.
+        val cccdFallbackRunnable = Runnable {
+            // Only proceed if we are still waiting on CCCD and no response yet.
+            if (!responded && !cccdWriteAcknowledged) {
+                // Log the missing CCCD callback for debugging.
+                Timber.w("GATT CCCD callback missing; proceeding with request transfer")
+                Log.w(LOG_TAG, "GATT CCCD callback missing; proceeding with request transfer")
+                // Use the active GATT if available.
+                val gatt = activeGatt
+                // Abort if the GATT is missing.
+                if (gatt == null) {
+                    // Fail loudly when we cannot proceed.
+                    Timber.e("GATT CCCD fallback aborted: missing active GATT")
+                    Log.e(LOG_TAG, "GATT CCCD fallback aborted: missing active GATT")
+                    return@Runnable
+                }
+                // Schedule the request transfer without waiting for CCCD callback.
+                scheduleRequestStart(gatt, "cccd-fallback")
+            }
+        }
+
+        fun handleTransportResponse(gatt: BluetoothGatt, response: ByteArray) {
+            // Decode the transport frame.
+            val frame = TransportProtocol.decode(response)
+            if (frame == null) {
+                Timber.e("Failed to decode transport frame from ${peer.address}")
+                gatt.close()
+                if (continuation.isActive && !responded) continuation.resume(null)
+                return
+            }
+            // Log the decoded frame to trace transport flow.
+            Timber.i(
+                "Transport frame op=${frame.op} total=${frame.totalLength} " +
+                    "offset=${frame.offset} payload=${frame.payload.size} from ${peer.address}"
+            )
+            Log.i(
+                LOG_TAG,
+                "Transport frame op=${frame.op} total=${frame.totalLength} " +
+                    "offset=${frame.offset} payload=${frame.payload.size} from ${peer.address}"
+            )
+            // Handle ACK frames for request transfer.
+            if (frame.op == TransportProtocol.OP_ACK) {
+                // Send next request chunk if any remain.
+                if (requestOffset < writePayload.size) {
+                    val payload = buildRequestFrame()
+                    writeTransportFrame(gatt, payload)
+                } else {
+                    // Request complete; wait for response chunks.
+                    Timber.i("Request transfer complete; awaiting response")
+                }
+                return
+            }
+            // Handle DATA frames for response transfer.
+            if (frame.op == TransportProtocol.OP_DATA) {
+                // Initialize response tracking on first chunk.
+                if (responseTotalLength == 0) {
+                    responseTotalLength = frame.totalLength
+                    responseReceived = 0
+                }
+                // Handle empty responses immediately.
+                if (responseTotalLength == 0) {
+                    responded = true
+                    handler.removeCallbacks(readFallbackRunnable)
+                    gatt.close()
+                    if (continuation.isActive) continuation.resume(ByteArray(0))
+                    return
+                }
+                // Verify offset matches expected position.
+                if (frame.offset != responseReceived) {
+                    Timber.e("Response offset mismatch expected=$responseReceived got=${frame.offset}")
+                    gatt.close()
+                    if (continuation.isActive && !responded) continuation.resume(null)
+                    return
+                }
+                // Append payload to response buffer.
+                responseBuffer.write(frame.payload)
+                responseReceived += frame.payload.size
+                // If response complete, finish the exchange.
+                if (responseReceived >= responseTotalLength) {
+                    responded = true
+                    handler.removeCallbacks(readFallbackRunnable)
+                    gatt.close()
+                    if (continuation.isActive) continuation.resume(responseBuffer.toByteArray())
+                } else {
+                    // Request next response chunk.
+                    val payload = buildContinueFrame()
+                    writeTransportFrame(gatt, payload)
+                }
+                return
+            }
+            // Unknown frame type; fail loudly.
+            Timber.e("Unknown transport op=${frame.op} from ${peer.address}")
+            gatt.close()
+            if (continuation.isActive && !responded) continuation.resume(null)
+        }
         
         val callback = object : BluetoothGattCallback() {
+            var servicesRequested = false
+
+            private fun requestServicesOnce(gatt: BluetoothGatt) {
+                if (servicesRequested) return
+                servicesRequested = true
+                gatt.discoverServices()
+            }
+
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                 // Trace connection state transitions and status codes.
                 Timber.i("GATT connection state change: status=$status newState=$newState device=${peer.address}")
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     // Store active GATT connection for fallback reads.
                     activeGatt = gatt
-                    // Request service discovery once connected.
-                    gatt.discoverServices()
+                    // Initialize chunk size before MTU negotiation.
+                    updateChunkSize(negotiatedMtu)
+                    val mtuRequested = try {
+                        val mtu = AppConfig.bleMtu(context)
+                        gatt.requestMtu(mtu)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to request MTU, falling back to service discovery")
+                        false
+                    }
+                    if (!mtuRequested) {
+                        requestServicesOnce(gatt)
+                    }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     // Cancel any pending fallback when disconnected.
                     handler.removeCallbacks(readFallbackRunnable)
+                    // Cancel any scheduled request start when disconnected.
+                    handler.removeCallbacks(startRequestRunnable)
+                    // Cancel any pending CCCD fallback when disconnected.
+                    handler.removeCallbacks(cccdFallbackRunnable)
                     // Clear active GATT reference on disconnect.
                     activeGatt = null
                     // Close and finish if we disconnect early.
                     gatt.close()
                     if (continuation.isActive && !responded) continuation.resume(null)
                 }
+            }
+
+            override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+                Timber.i("GATT MTU changed: mtu=$mtu status=$status device=${peer.address}")
+                Log.i(LOG_TAG, "GATT MTU changed: mtu=$mtu status=$status device=${peer.address}")
+                // Track the negotiated MTU and update chunk size.
+                negotiatedMtu = mtu
+                updateChunkSize(negotiatedMtu)
+                requestServicesOnce(gatt)
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -206,6 +580,10 @@ class BleScanner(private val context: Context) {
                     Log.i(LOG_TAG, "GATT notifications enabled local=$notifySet device=${peer.address}")
                     // If descriptor exists, write CCCD to enable notifications on remote.
                     exchangeDescriptor?.let { descriptor ->
+                        // Mark CCCD as pending before the write.
+                        cccdWriteAcknowledged = false
+                        // Ensure any prior fallback is cleared.
+                        handler.removeCallbacks(cccdFallbackRunnable)
                         // Set CCCD value for notifications.
                         val cccdValue = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                         val cccdWriteResult = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -218,48 +596,24 @@ class BleScanner(private val context: Context) {
                         }
                         Timber.i("GATT CCCD write started=$cccdWriteResult device=${peer.address}")
                         Log.i(LOG_TAG, "GATT CCCD write started=$cccdWriteResult device=${peer.address}")
-                        // We will start the characteristic write in onDescriptorWrite.
+                        // Schedule a fallback to start the request if CCCD callback never arrives.
+                        handler.postDelayed(
+                            cccdFallbackRunnable,
+                            AppConfig.gattReadFallbackDelayMs(context)
+                        )
+                        // Proceed immediately if the CCCD write could not be started.
+                        if (cccdWriteResult != 0) {
+                            // Log the write failure for visibility.
+                            Timber.w("GATT CCCD write failed to start; proceeding without callback")
+                            Log.w(LOG_TAG, "GATT CCCD write failed to start; proceeding without callback")
+                            // Schedule the request transfer without waiting for CCCD callback.
+                            scheduleRequestStart(gatt, "cccd-write-failed")
+                        }
+                        // We will start the characteristic write in onDescriptorWrite or fallback.
                         return
                     }
-                    // Ensure write type is explicit to avoid platform defaults.
-                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                    // Write the request payload to the characteristic.
-                    val writeResult = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        // Use the new API on Android 13+ for better reliability.
-                        gatt.writeCharacteristic(
-                            characteristic,
-                            data,
-                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                        )
-                    } else {
-                        // Fallback to legacy API on older devices.
-                        characteristic.value = data
-                        // Convert legacy boolean to an integer-style status code.
-                        if (gatt.writeCharacteristic(characteristic)) 0 else -1
-                    }
-                    // Determine whether write was accepted for execution.
-                    val writeAccepted = writeResult == 0
-                    // Log write start result for debugging.
-                    Timber.i("GATT write started=$writeResult device=${peer.address}")
-                    // Mirror to Android Log for visibility.
-                    Log.i(LOG_TAG, "GATT write started=$writeResult device=${peer.address}")
-                    // Schedule a read fallback if the write was accepted.
-                    if (writeAccepted) {
-                        // Load the fallback delay from config (fail loud if missing).
-                        val delayMs = AppConfig.gattReadFallbackDelayMs(context)
-                        // Remove any existing scheduled fallback.
-                        handler.removeCallbacks(readFallbackRunnable)
-                        // Schedule a fallback read in case onCharacteristicWrite never fires.
-                        handler.postDelayed(readFallbackRunnable, delayMs)
-                        // Log the scheduled fallback delay.
-                        Timber.i("Scheduled GATT read fallback after ${delayMs}ms")
-                        Log.i(LOG_TAG, "Scheduled GATT read fallback after ${delayMs}ms")
-                    } else {
-                        // Log the failure and close the GATT connection.
-                        Timber.e("GATT write could not be started; closing connection")
-                        Log.e(LOG_TAG, "GATT write could not be started; closing connection")
-                        gatt.close()
-                    }
+                    // Start the request immediately when CCCD is absent.
+                    scheduleRequestStart(gatt, "cccd-missing")
                 } else {
                     // Log missing service/characteristic for troubleshooting.
                     Timber.w("GATT service/characteristic not found on device=${peer.address}")
@@ -276,11 +630,20 @@ class BleScanner(private val context: Context) {
                 Log.i(LOG_TAG, "GATT characteristic write status=$status uuid=${characteristic.uuid}")
                 // Cancel fallback once we receive the write callback.
                 handler.removeCallbacks(readFallbackRunnable)
+                // Mark write as complete.
+                writeInProgress = false
                 if (status == BluetoothGatt.GATT_SUCCESS) {
-                    // Mark that we are explicitly triggering a read.
-                    readTriggered = true
-                    // Trigger read to fetch response.
-                    gatt.readCharacteristic(characteristic)
+                    // Do not issue an immediate read here.
+                    // We rely on notifications for responses to avoid reading stale values.
+                    // Allow the fallback read to fire only if notifications never arrive.
+                    readTriggered = false
+                    // Flush any queued write after a successful write completes.
+                    pendingWrite?.let { queued ->
+                        // Clear the queue before issuing the next write.
+                        pendingWrite = null
+                        // Start the next write now that the GATT write pipeline is free.
+                        writeTransportFrame(gatt, queued)
+                    }
                 } else {
                     // Close on write failure to avoid dangling connections.
                     gatt.close()
@@ -302,46 +665,12 @@ class BleScanner(private val context: Context) {
                 }
                 // Only proceed if this is the CCCD we wrote.
                 if (descriptor.uuid == CCCD_UUID) {
-                    // Grab the characteristic for writing the payload.
-                    val characteristic = exchangeCharacteristic
-                    if (characteristic == null) {
-                        // Fail loudly if characteristic is missing.
-                        Timber.e("GATT write aborted: characteristic missing after CCCD write")
-                        Log.e(LOG_TAG, "GATT write aborted: characteristic missing after CCCD write")
-                        gatt.close()
-                        return
-                    }
-                    // Ensure write type is explicit before writing.
-                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                    // Write the payload now that notifications are enabled.
-                    val writeResult = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        // Use new API on Android 13+.
-                        gatt.writeCharacteristic(
-                            characteristic,
-                            writePayload,
-                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                        )
-                    } else {
-                        // Use legacy API on older devices.
-                        characteristic.value = writePayload
-                        if (gatt.writeCharacteristic(characteristic)) 0 else -1
-                    }
-                    // Interpret result code for logging.
-                    Timber.i("GATT write after CCCD started=$writeResult device=${peer.address}")
-                    Log.i(LOG_TAG, "GATT write after CCCD started=$writeResult device=${peer.address}")
-                    // Schedule fallback if write was accepted.
-                    if (writeResult == 0) {
-                        val delayMs = AppConfig.gattReadFallbackDelayMs(context)
-                        handler.removeCallbacks(readFallbackRunnable)
-                        handler.postDelayed(readFallbackRunnable, delayMs)
-                        Timber.i("Scheduled GATT read fallback after ${delayMs}ms")
-                        Log.i(LOG_TAG, "Scheduled GATT read fallback after ${delayMs}ms")
-                    } else {
-                        // Close if write could not be started.
-                        Timber.e("GATT write could not be started after CCCD; closing")
-                        Log.e(LOG_TAG, "GATT write could not be started after CCCD; closing")
-                        gatt.close()
-                    }
+                    // Mark CCCD as acknowledged to stop fallback.
+                    cccdWriteAcknowledged = true
+                    // Cancel any pending CCCD fallback since we got a callback.
+                    handler.removeCallbacks(cccdFallbackRunnable)
+                    // Schedule the request transfer now that CCCD is enabled.
+                    scheduleRequestStart(gatt, "cccd-write-complete")
                 }
             }
 
@@ -354,13 +683,8 @@ class BleScanner(private val context: Context) {
                 Log.i(LOG_TAG, "GATT notification received uuid=${characteristic.uuid}")
                 // Cancel any pending fallback since we got a response.
                 handler.removeCallbacks(readFallbackRunnable)
-                // Resume the coroutine with the notification payload.
-                if (continuation.isActive) {
-                    responded = true
-                    continuation.resume(characteristic.value)
-                }
-                // Close the connection after handling the response.
-                gatt.close()
+                // Handle the transport response using the notification payload.
+                handleTransportResponse(gatt, characteristic.value)
             }
 
             override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
@@ -371,13 +695,8 @@ class BleScanner(private val context: Context) {
                 // Cancel any pending fallback once read completes.
                 handler.removeCallbacks(readFallbackRunnable)
                 if (status == BluetoothGatt.GATT_SUCCESS) {
-                    if (continuation.isActive) {
-                        responded = true
-                        // Resume with the read value.
-                        continuation.resume(characteristic.value)
-                    }
-                    // Close after successful read.
-                    gatt.close()
+                    // Handle the transport response using the read payload.
+                    handleTransportResponse(gatt, characteristic.value)
                 } else {
                     // Close on read failure.
                     gatt.close()
@@ -390,6 +709,10 @@ class BleScanner(private val context: Context) {
         continuation.invokeOnCancellation {
             // Cancel any pending fallback before closing.
             handler.removeCallbacks(readFallbackRunnable)
+            // Cancel any scheduled request start before closing.
+            handler.removeCallbacks(startRequestRunnable)
+            // Cancel any pending CCCD fallback before closing.
+            handler.removeCallbacks(cccdFallbackRunnable)
             // Close the connection to avoid leaks.
             gatt.close()
         }

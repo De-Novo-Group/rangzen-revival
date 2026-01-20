@@ -6,6 +6,10 @@
  */
 package org.denovogroup.rangzen.objects;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.Random;
 import java.util.UUID;
 
 /**
@@ -48,11 +52,39 @@ public class RangzenMessage {
     /** Message expiration time (Unix millis), 0 = never expires */
     private long expirationTime;
 
+    /** Optional location in "lat lng" format */
+    private String latLong;
+
+    /** Optional parent message id */
+    private String parentId;
+
+    /** Optional big parent message id */
+    private String bigParentId;
+
     /** Maximum message length in characters */
     public static final int MAX_MESSAGE_LENGTH = 140;
     
     /** Default trust score for new messages */
     public static final double DEFAULT_TRUST = 0.5;
+
+    /** Legacy protocol defaults */
+    public static final double LEGACY_DEFAULT_TRUST = 0.01d;
+
+    /** Legacy JSON keys (from the original Rangzen/Murmur protocol) */
+    public static final String MESSAGE_ID_KEY = "messageId";
+    public static final String TEXT_KEY = "text";
+    public static final String TRUST_KEY = "trust";
+    public static final String PRIORITY_KEY = "priority";
+    public static final String PSEUDONYM_KEY = "pseudonym";
+    public static final String LATLONG_KEY = "latlang";
+    public static final String TIMEBOUND_KEY = "timebound";
+    public static final String PARENT_KEY = "parent";
+    public static final String BIGPARENT_KEY = "bigparent";
+    public static final String HOP_KEY = "hop";
+    public static final String MIN_USERS_P_HOP_KEY = "min_users_p_hop";
+
+    /** Random source for legacy trust noise */
+    private static final Random TRUST_RANDOM = new Random();
 
     /**
      * Create a new message with default values.
@@ -180,16 +212,44 @@ public class RangzenMessage {
         this.expirationTime = expirationTime;
     }
 
+    public String getLatLong() {
+        return latLong;
+    }
+
+    public void setLatLong(String latLong) {
+        this.latLong = latLong;
+    }
+
+    public String getParentId() {
+        return parentId;
+    }
+
+    public void setParentId(String parentId) {
+        this.parentId = parentId;
+    }
+
+    public String getBigParentId() {
+        return bigParentId;
+    }
+
+    public void setBigParentId(String bigParentId) {
+        this.bigParentId = bigParentId;
+    }
+
     /**
      * Check if this message has expired.
      * 
      * @return true if expired, false otherwise
      */
     public boolean isExpired() {
+        // Treat zero as "never expires".
         if (expirationTime == 0) {
             return false; // Never expires
         }
-        return System.currentTimeMillis() > expirationTime;
+        // Expiration time is stored as a duration (legacy behavior).
+        long expiryAt = timestamp + expirationTime;
+        // Message is expired when now exceeds timestamp + duration.
+        return System.currentTimeMillis() > expiryAt;
     }
 
     /**
@@ -221,6 +281,98 @@ public class RangzenMessage {
         double likesComponent = Math.min(1.0, Math.log10(likes + 1) / 3) * LIKES_WEIGHT;
         
         return trustComponent + recencyComponent + likesComponent;
+    }
+
+    /**
+     * Convert this message to the legacy JSON format used by the original Rangzen protocol.
+     */
+    public JSONObject toLegacyJson() {
+        return toLegacyJson(true, true, true, 0.0);
+    }
+
+    /**
+     * Convert this message to the legacy JSON format used by the original Rangzen protocol.
+     *
+     * @param includePseudonym include the pseudonym field when available
+     * @param shareLocation include the location field when available
+     * @param includeTrust include the trust field when enabled
+     * @param trustNoiseVariance variance for Gaussian noise added to trust (0 for none)
+     */
+    public JSONObject toLegacyJson(boolean includePseudonym,
+                                   boolean shareLocation,
+                                   boolean includeTrust,
+                                   double trustNoiseVariance) {
+        JSONObject result = new JSONObject();
+        try {
+            // Required fields.
+            result.put(MESSAGE_ID_KEY, messageId);
+            result.put(TEXT_KEY, text);
+            result.put(PRIORITY_KEY, likes);
+            result.put(HOP_KEY, hopCount + 1);
+            result.put(MIN_USERS_P_HOP_KEY, minContactsForHop);
+            // Optional parent linkage.
+            if (parentId != null && !parentId.isEmpty()) {
+                result.put(PARENT_KEY, parentId);
+            }
+            if (bigParentId != null && !bigParentId.isEmpty()) {
+                result.put(BIGPARENT_KEY, bigParentId);
+            }
+            // Optional timebound expiry.
+            if (expirationTime > 0) {
+                result.put(TIMEBOUND_KEY, expirationTime);
+            }
+            // Optional pseudonym.
+            if (includePseudonym && pseudonym != null && !pseudonym.isEmpty()) {
+                result.put(PSEUDONYM_KEY, pseudonym);
+            }
+            // Optional location.
+            if (shareLocation && latLong != null && !latLong.isEmpty()) {
+                result.put(LATLONG_KEY, latLong);
+            }
+            // Optional trust with noise.
+            if (includeTrust) {
+                double noisyTrust = trustScore + legacyTrustNoise(trustNoiseVariance);
+                result.put(TRUST_KEY, noisyTrust);
+            }
+        } catch (JSONException e) {
+            throw new IllegalStateException("Failed to serialize RangzenMessage to legacy JSON", e);
+        }
+        return result;
+    }
+
+    /**
+     * Generate Gaussian noise for legacy trust values.
+     */
+    private static double legacyTrustNoise(double variance) {
+        if (variance <= 0.0) {
+            return 0.0;
+        }
+        return TRUST_RANDOM.nextGaussian() * Math.sqrt(variance);
+    }
+
+    /**
+     * Build a RangzenMessage from the legacy JSON format.
+     */
+    public static RangzenMessage fromLegacyJson(JSONObject json) {
+        RangzenMessage message = new RangzenMessage();
+        String messageId = json.optString(MESSAGE_ID_KEY, null);
+        String text = json.optString(TEXT_KEY, null);
+        if (messageId == null || text == null) {
+            throw new IllegalArgumentException("Legacy JSON missing messageId or text");
+        }
+        message.setMessageId(messageId);
+        message.setText(text);
+        message.setTrustScore(json.optDouble(TRUST_KEY, LEGACY_DEFAULT_TRUST));
+        message.setLikes(json.optInt(PRIORITY_KEY, 0));
+        message.setPseudonym(json.optString(PSEUDONYM_KEY, null));
+        message.setLatLong(json.optString(LATLONG_KEY, null));
+        message.setExpirationTime(json.optLong(TIMEBOUND_KEY, 0L));
+        message.setParentId(json.optString(PARENT_KEY, null));
+        message.setBigParentId(json.optString(BIGPARENT_KEY, null));
+        message.setHopCount(json.optInt(HOP_KEY, 0));
+        message.setMinContactsForHop(json.optInt(MIN_USERS_P_HOP_KEY, 0));
+        message.setTimestamp(System.currentTimeMillis());
+        return message;
     }
 
     @Override

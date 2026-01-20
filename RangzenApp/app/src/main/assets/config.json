@@ -1,3 +1,23 @@
 {
-  "gattReadFallbackDelayMs": 1500
+  "gattReadFallbackDelayMs": 1500,
+  "initialWriteDelayMs": 1500,
+  "gattMaxAttributeLength": 512,
+  "maxMessagesPerExchange": 50,
+  "exchangeSessionTimeoutMs": 30000,
+  "bleMtu": 247,
+  "useTrust": true,
+  "minSharedContactsForExchange": 0,
+  "includePseudonym": true,
+  "shareLocation": false,
+  "trustNoiseVariance": 0.003
+  ,
+  "autodeleteEnabled": false,
+  "autodeleteTrustThreshold": 0.05,
+  "autodeleteAgeDays": 14,
+  "exchangeCooldownSeconds": 5,
+  "randomExchange": true,
+  "useBackoff": true,
+  "backoffAttemptMillis": 10000,
+  "backoffMaxMillis": 320000,
+  "timeboundPeriodDays": 3
 }

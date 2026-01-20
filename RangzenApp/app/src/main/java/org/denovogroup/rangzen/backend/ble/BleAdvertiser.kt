@@ -24,7 +24,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
+import java.io.ByteArrayOutputStream
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * BLE Advertiser for making this device discoverable to other Rangzen peers.
@@ -48,7 +50,20 @@ class BleAdvertiser(private val context: Context) {
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager?.adapter
     private var bleAdvertiser: BluetoothLeAdvertiser? = null
     private var gattServer: BluetoothGattServer? = null
-    var onDataReceived: ((ByteArray) -> ByteArray)? = null
+    var onDataReceived: ((BluetoothDevice, ByteArray) -> ByteArray?)? = null
+    // Track per-device transport sessions for chunked requests.
+    private val sessions = ConcurrentHashMap<String, TransportSession>()
+
+    // Session state for assembling requests and streaming responses.
+    private data class TransportSession(
+        var expectedLength: Int = 0,
+        var receivedLength: Int = 0,
+        var requestBuffer: ByteArrayOutputStream = ByteArrayOutputStream(),
+        var responseBytes: ByteArray? = null,
+        var responseOffset: Int = 0,
+        var maxChunkSize: Int = 0,
+        var lastActivityMs: Long = System.currentTimeMillis()
+    )
 
     private val _isAdvertising = MutableStateFlow(false)
     val isAdvertising: StateFlow<Boolean> = _isAdvertising.asStateFlow()
@@ -71,6 +86,84 @@ class BleAdvertiser(private val context: Context) {
         }
     }
 
+    private fun getSession(device: BluetoothDevice): TransportSession {
+        // Return existing session or create a new one for this device.
+        return sessions.getOrPut(device.address) { TransportSession() }
+    }
+
+    private fun clearSession(device: BluetoothDevice) {
+        // Remove the session to avoid stale state.
+        sessions.remove(device.address)
+    }
+
+    private fun sendNotification(
+        device: BluetoothDevice,
+        characteristic: BluetoothGattCharacteristic,
+        payload: ByteArray
+    ) {
+        // Update characteristic value before notifying.
+        characteristic.value = payload
+        // Notify the client with the payload, using API-specific methods.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            gattServer?.notifyCharacteristicChanged(device, characteristic, false, payload)
+        } else {
+            gattServer?.notifyCharacteristicChanged(device, characteristic, false)
+        }
+    }
+
+    private fun sendAck(
+        device: BluetoothDevice,
+        characteristic: BluetoothGattCharacteristic
+    ) {
+        // Encode an ACK frame with no payload.
+        val frame = TransportFrame(
+            op = TransportProtocol.OP_ACK,
+            totalLength = 0,
+            offset = 0,
+            payload = ByteArray(0)
+        )
+        val payload = TransportProtocol.encode(frame)
+        // Notify the client with the ACK frame.
+        sendNotification(device, characteristic, payload)
+    }
+
+    private fun sendResponseChunk(
+        device: BluetoothDevice,
+        characteristic: BluetoothGattCharacteristic,
+        session: TransportSession
+    ) {
+        // Ensure we have response bytes to send.
+        val response = session.responseBytes ?: return
+        // Compute remaining bytes to send.
+        val remaining = response.size - session.responseOffset
+        // Determine chunk size based on the client-provided chunk size.
+        val chunkSize = if (session.maxChunkSize > 0) {
+            minOf(remaining, session.maxChunkSize)
+        } else {
+            remaining
+        }
+        // Slice the response for this chunk.
+        val chunk = response.copyOfRange(
+            session.responseOffset,
+            session.responseOffset + chunkSize
+        )
+        // Build a DATA frame for this chunk.
+        val frame = TransportFrame(
+            op = TransportProtocol.OP_DATA,
+            totalLength = response.size,
+            offset = session.responseOffset,
+            payload = chunk
+        )
+        // Advance response offset.
+        session.responseOffset += chunkSize
+        // Notify the client with the response frame.
+        sendNotification(device, characteristic, TransportProtocol.encode(frame))
+        // Clear session if we have sent the full response.
+        if (session.responseOffset >= response.size) {
+            clearSession(device)
+        }
+    }
+
     private val gattServerCallback = object : BluetoothGattServerCallback() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             super.onConnectionStateChange(device, status, newState)
@@ -82,6 +175,8 @@ class BleAdvertiser(private val context: Context) {
                 Timber.i("GATT server connected to ${device.address}")
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Timber.i("GATT server disconnected from ${device.address}")
+                // Clear any in-flight transport session for this device.
+                clearSession(device)
             }
         }
 
@@ -121,18 +216,91 @@ class BleAdvertiser(private val context: Context) {
             // Mirror to Android Log for visibility.
             Log.i(LOG_TAG, "GATT write request: device=${device.address} requestId=$requestId offset=$offset uuid=${characteristic.uuid} size=${value.size}")
             if (characteristic.uuid == RANGZEN_CHARACTERISTIC_UUID) {
-                val response = onDataReceived?.invoke(value) ?: "NOOP".toByteArray()
-                characteristic.value = response
-                if (responseNeeded) {
-                    gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                if (preparedWrite || offset > 0) {
+                    Timber.e("Prepared/offset writes are not supported (offset=$offset prepared=$preparedWrite)")
+                    if (responseNeeded) {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                    }
+                    return
                 }
-                // Send response via notification to avoid client-side read issues.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    // Use new notify API with value payload.
-                    gattServer?.notifyCharacteristicChanged(device, characteristic, false, response)
-                } else {
-                    // Fallback to legacy notify API.
-                    gattServer?.notifyCharacteristicChanged(device, characteristic, false)
+                // Decode the transport frame.
+                val frame = TransportProtocol.decode(value)
+                if (frame == null) {
+                    Timber.e("Failed to decode transport frame from ${device.address}")
+                    if (responseNeeded) {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                    }
+                    return
+                }
+                // Update session activity timestamp.
+                val session = getSession(device)
+                session.lastActivityMs = System.currentTimeMillis()
+                when (frame.op) {
+                    TransportProtocol.OP_DATA -> {
+                        // Initialize request tracking if needed.
+                        if (session.expectedLength == 0) {
+                            session.expectedLength = frame.totalLength
+                            session.receivedLength = 0
+                            session.requestBuffer = ByteArrayOutputStream()
+                            session.responseBytes = null
+                            session.responseOffset = 0
+                            session.maxChunkSize = frame.payload.size
+                        }
+                        // Enforce sequential offsets.
+                        if (frame.offset != session.receivedLength) {
+                            Timber.e("Request offset mismatch expected=${session.receivedLength} got=${frame.offset}")
+                            clearSession(device)
+                            if (responseNeeded) {
+                                gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                            }
+                            return
+                        }
+                        // Append payload to the request buffer.
+                        session.requestBuffer.write(frame.payload)
+                        session.receivedLength += frame.payload.size
+                        // Acknowledge the write immediately.
+                        if (responseNeeded) {
+                            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                        }
+                        // If request is incomplete, send ACK and wait for more data.
+                        if (session.receivedLength < session.expectedLength) {
+                            sendAck(device, characteristic)
+                            return
+                        }
+                        // Build the full request payload.
+                        val requestPayload = session.requestBuffer.toByteArray()
+                        // Process the request using the legacy handler.
+                        val responsePayload = onDataReceived?.invoke(device, requestPayload)
+                        if (responsePayload == null) {
+                            Timber.e("No response generated for ${device.address}; rejecting request")
+                            clearSession(device)
+                            return
+                        }
+                        // Store response bytes and send the first chunk.
+                        session.responseBytes = responsePayload
+                        session.responseOffset = 0
+                        sendResponseChunk(device, characteristic, session)
+                    }
+                    TransportProtocol.OP_CONTINUE -> {
+                        // Acknowledge the continue request.
+                        if (responseNeeded) {
+                            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
+                        }
+                        // Send the next response chunk if available.
+                        if (session.responseBytes == null) {
+                            Timber.e("Continue requested without response data for ${device.address}")
+                            clearSession(device)
+                            return
+                        }
+                        sendResponseChunk(device, characteristic, session)
+                    }
+                    else -> {
+                        Timber.e("Unknown transport op=${frame.op} from ${device.address}")
+                        clearSession(device)
+                        if (responseNeeded) {
+                            gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, 0, null)
+                        }
+                    }
                 }
             } else if (responseNeeded) {
                 // Respond with failure for unknown characteristic UUIDs.
@@ -173,7 +341,7 @@ class BleAdvertiser(private val context: Context) {
         return advertisePermission && connectPermission
     }
 
-    fun setExchangeCallback(callback: (ByteArray) -> ByteArray) {
+    fun setExchangeCallback(callback: (BluetoothDevice, ByteArray) -> ByteArray?) {
         onDataReceived = callback
     }
 

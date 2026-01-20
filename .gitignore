@@ -11,3 +11,22 @@
 # Logs and debug artifacts
 ble-logs/
 *.apk
+
+# Node / web tooling
+node_modules/
+
+# Local copies of legacy repo
+rangzen-production/
+
+# Office temp/lock files
+.~lock*.docx#
+
+# Proposal artifacts
+rangzen_revival_proposal_v0.3.docx
+rangzen_revival_proposal_v0.3_google_docs.html
+
+# Local docx tooling
+create_docx.js
+create_docx_v2.js
+package.json
+package-lock.json
