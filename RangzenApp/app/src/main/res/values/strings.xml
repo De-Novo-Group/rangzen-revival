@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rangzen</string>
+    
+    <!-- Service -->
+    <string name="service_notification_title">Rangzen Active</string>
+    <string name="service_notification_text">Connecting with nearby devices…</string>
+    
+    <!-- Main Activity -->
+    <string name="title_feed">Feed</string>
+    <string name="title_compose">Compose</string>
+    <string name="title_friends">Friends</string>
+    <string name="title_settings">Settings</string>
+    
+    <!-- Compose -->
+    <string name="hint_compose">What\'s happening?</string>
+    <string name="btn_send">Send</string>
+    <string name="char_count">%1$d / 140</string>
+    
+    <!-- Settings -->
+    <string name="pref_service_enabled">Enable Rangzen</string>
+    <string name="pref_service_enabled_summary">Run background service to exchange messages</string>
+    <string name="pref_qa_mode">QA Testing Mode</string>
+    <string name="pref_qa_mode_summary">Enable telemetry for testing (does not use internet for messages)</string>
+    
+    <!-- Permissions -->
+    <string name="permission_bluetooth_title">Bluetooth Permission Required</string>
+    <string name="permission_bluetooth_message">Rangzen needs Bluetooth to discover nearby users and exchange messages.</string>
+    <string name="permission_location_title">Location Permission Required</string>
+    <string name="permission_location_message">Rangzen needs location permission to use WiFi Direct for faster message exchange. Your location is never stored or transmitted.</string>
+    
+    <!-- Empty states -->
+    <string name="empty_feed">No messages yet.\nMessages from nearby Rangzen users will appear here.</string>
+    <string name="empty_friends">No friends added.\nScan a friend\'s QR code to add them.</string>
+    
+    <!-- Actions -->
+    <string name="action_like">Like</string>
+    <string name="action_share">Share</string>
+    <string name="action_add_friend">Add Friend</string>
+    <string name="action_show_qr">Show My QR Code</string>
+    <string name="action_scan_qr">Scan QR Code</string>
+    
+    <!-- Status -->
+    <string name="status_discovering">Discovering peers…</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_exchanging">Exchanging messages…</string>
+    <string name="status_idle">Waiting for peers</string>
+    <string name="status_peers_found">%1$d peers nearby</string>
+</resources>

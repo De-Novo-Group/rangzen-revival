@@ -1,0 +1,13 @@
+.DS_Store
+.vscode/
+.idea/
+**/*.iml
+
+# Android/Gradle
+**/.gradle/
+**/build/
+**/local.properties
+
+# Logs and debug artifacts
+ble-logs/
+*.apk
