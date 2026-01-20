@@ -64,6 +64,12 @@ class MessageStore private constructor(context: Context) :
     private val _messages = MutableStateFlow<List<RangzenMessage>>(emptyList())
     val messages: StateFlow<List<RangzenMessage>> = _messages.asStateFlow()
 
+    init {
+        // Load existing messages into the flow at startup.
+        // This keeps the feed in sync even before new inserts occur.
+        refreshMessages()
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         val createTable = """
             CREATE TABLE $TABLE_MESSAGES (
