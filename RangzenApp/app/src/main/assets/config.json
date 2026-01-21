@@ -20,5 +20,9 @@
   "backoffAttemptMillis": 10000,
   "backoffMaxMillis": 320000,
   "timeboundPeriodDays": 3,
-  "inboundSessionGraceMs": 4000
+  "inboundSessionGraceMs": 4000,
+  "telemetryEnabled": false,
+  "telemetryServerUrl": "",
+  "telemetryBatchSize": 50,
+  "telemetryFlushIntervalMs": 60000
 }

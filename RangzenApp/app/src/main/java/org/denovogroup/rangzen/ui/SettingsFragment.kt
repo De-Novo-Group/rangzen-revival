@@ -4,6 +4,7 @@
  */
 package org.denovogroup.rangzen.ui
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -14,6 +15,7 @@ import androidx.fragment.app.Fragment
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.databinding.FragmentSettingsBinding
 
 /**
@@ -58,8 +60,37 @@ class SettingsFragment : Fragment() {
         // QA Mode toggle
         binding.switchQaMode.isChecked = prefs.getBoolean("qa_mode", false)
         binding.switchQaMode.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("qa_mode", isChecked).apply()
+            if (isChecked) {
+                // Show confirmation dialog when enabling
+                showQaModeConfirmation(prefs)
+            } else {
+                // Disable without confirmation
+                prefs.edit().putBoolean("qa_mode", false).apply()
+                TelemetryClient.getInstance()?.setEnabled(false)
+            }
         }
+    }
+
+    private fun showQaModeConfirmation(prefs: android.content.SharedPreferences) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Enable QA Testing Mode")
+            .setMessage(
+                "By enabling QA testing mode, you allow the app to share details of how it is functioning and being used.\n\n" +
+                "This helps developers improve the app. No personal messages or friend information is shared."
+            )
+            .setPositiveButton("Enable") { _, _ ->
+                prefs.edit().putBoolean("qa_mode", true).apply()
+                TelemetryClient.getInstance()?.setEnabled(true)
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                // Revert the toggle
+                binding.switchQaMode.isChecked = false
+            }
+            .setOnCancelListener {
+                // Revert the toggle if dismissed
+                binding.switchQaMode.isChecked = false
+            }
+            .show()
     }
 
     private fun loadStats() {

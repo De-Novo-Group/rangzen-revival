@@ -1,4 +1,12 @@
+# ===========================================
+# SECURITY: This is a PUBLIC repository
+# Never commit secrets, server code, or PII
+# ===========================================
+
+# OS files
 .DS_Store
+
+# IDE/Editor
 .vscode/
 .idea/
 **/*.iml
@@ -8,30 +16,55 @@
 **/build/
 **/local.properties
 
-# Logs and debug artifacts
-ble-logs/
+# APKs and databases (may contain user data)
 *.apk
 *.db
 *.db-journal
 tmp_*_messages.db
 
-# Node / web tooling
+# ===========================================
+# LOCAL-ONLY: Never track or push these
+# ===========================================
+
+# Telemetry server (private, not for public repo)
+telemetry-server/
+
+# Local working files
+local-only/
+
+# AutoClaude VS Code extension
+.autoclaude/
+
+# Debug logs (may contain device info)
+ble-logs/
+*.log
+
+# Node tooling (for local docx generation)
 node_modules/
-
-# Local copies of legacy repo
-rangzen-production/
-
-# Office temp/lock files
-.~lock*.docx#
-
-# Proposal artifacts
-rangzen_revival_proposal_v0.3.docx
-rangzen_revival_proposal_v0.3_google_docs.html
-
-# Local docx tooling
-create_docx.js
-create_docx_v2.js
 package.json
 package-lock.json
+
+# ===========================================
+# LOCAL PLANNING & DOCS (not for GitHub)
+# ===========================================
+
+# Planning documents
+plans/
+
+# Proposal artifacts
 proposal/
 docs/
+rangzen_revival_proposal*.docx
+rangzen_revival_proposal*.html
+create_docx*.js
+
+# Legacy repo copy
+rangzen-production/
+
+# Office temp files
+.~lock*
+~$*
+
+# Claude plans and backups
+.claude/
+.claude_agent_farm_backups/

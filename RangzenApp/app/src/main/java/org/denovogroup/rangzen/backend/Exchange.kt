@@ -12,6 +12,8 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.denovogroup.rangzen.objects.RangzenMessage
 import timber.log.Timber
 import java.io.BufferedReader
@@ -41,7 +43,9 @@ class Exchange(
     private val inputStream: InputStream,
     private val outputStream: OutputStream,
     private val friendStore: FriendStore,
-    private val messageStore: MessageStore
+    private val messageStore: MessageStore,
+    private val peerIdHash: String = "unknown",
+    private val transport: String = TelemetryEvent.TRANSPORT_BLE
 ) {
     companion object {
         private const val EXCHANGE_TIMEOUT_MS = 60_000L
@@ -78,10 +82,15 @@ class Exchange(
 
     /**
      * Perform the complete exchange protocol.
-     * 
+     *
      * @return Number of messages exchanged, or -1 on failure
      */
     suspend fun performExchange(): Int = withContext(Dispatchers.IO) {
+        val startTime = System.currentTimeMillis()
+
+        // Track exchange start
+        TelemetryClient.getInstance()?.trackExchangeStart(peerIdHash, transport)
+
         try {
             withTimeout(EXCHANGE_TIMEOUT_MS) {
                 status = ExchangeStatus.IN_PROGRESS
@@ -105,13 +114,34 @@ class Exchange(
 
                 status = ExchangeStatus.SUCCESS
                 Timber.i("Exchange completed successfully. Messages exchanged: $messagesExchanged")
-                
+
+                // Track exchange success
+                val durationMs = System.currentTimeMillis() - startTime
+                TelemetryClient.getInstance()?.trackExchangeSuccess(
+                    peerIdHash = peerIdHash,
+                    transport = transport,
+                    durationMs = durationMs,
+                    messagesSent = messageStore.getMessagesForExchange(mutualFriendCount, limit = 50).size,
+                    messagesReceived = messagesExchanged,
+                    mutualFriends = mutualFriendCount
+                )
+
                 messagesExchanged
             }
         } catch (e: Exception) {
             Timber.e(e, "Exchange failed")
             status = ExchangeStatus.FAILED
             errorMessage = e.message
+
+            // Track exchange failure
+            val durationMs = System.currentTimeMillis() - startTime
+            TelemetryClient.getInstance()?.trackExchangeFailure(
+                peerIdHash = peerIdHash,
+                transport = transport,
+                error = e.message ?: "Unknown error",
+                durationMs = durationMs
+            )
+
             -1
         }
     }

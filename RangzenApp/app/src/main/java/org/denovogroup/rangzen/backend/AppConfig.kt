@@ -62,6 +62,14 @@ object AppConfig {
     private const val KEY_TIMEBOUND_PERIOD_DAYS = "timeboundPeriodDays"
     // JSON key for inbound-session grace window in milliseconds.
     private const val KEY_INBOUND_SESSION_GRACE_MS = "inboundSessionGraceMs"
+    // JSON key for telemetry enabled default.
+    private const val KEY_TELEMETRY_ENABLED = "telemetryEnabled"
+    // JSON key for telemetry server URL.
+    private const val KEY_TELEMETRY_SERVER_URL = "telemetryServerUrl"
+    // JSON key for telemetry batch size.
+    private const val KEY_TELEMETRY_BATCH_SIZE = "telemetryBatchSize"
+    // JSON key for telemetry flush interval.
+    private const val KEY_TELEMETRY_FLUSH_INTERVAL_MS = "telemetryFlushIntervalMs"
 
     // Cached JSON config to avoid repeated disk reads.
     @Volatile
@@ -410,5 +418,38 @@ object AppConfig {
         }
         // Return the configured grace window.
         return config.getLong(KEY_INBOUND_SESSION_GRACE_MS)
+    }
+
+    /**
+     * Read whether telemetry is enabled by default.
+     */
+    fun telemetryEnabled(context: Context): Boolean {
+        val config = loadConfig(context)
+        // Default to false if not specified (privacy-first).
+        return config.optBoolean(KEY_TELEMETRY_ENABLED, false)
+    }
+
+    /**
+     * Read telemetry server URL.
+     */
+    fun telemetryServerUrl(context: Context): String {
+        val config = loadConfig(context)
+        return config.optString(KEY_TELEMETRY_SERVER_URL, "")
+    }
+
+    /**
+     * Read telemetry batch size.
+     */
+    fun telemetryBatchSize(context: Context): Int {
+        val config = loadConfig(context)
+        return config.optInt(KEY_TELEMETRY_BATCH_SIZE, 50)
+    }
+
+    /**
+     * Read telemetry flush interval in milliseconds.
+     */
+    fun telemetryFlushIntervalMs(context: Context): Long {
+        val config = loadConfig(context)
+        return config.optLong(KEY_TELEMETRY_FLUSH_INTERVAL_MS, 60000L)
     }
 }

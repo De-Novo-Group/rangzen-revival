@@ -3,9 +3,12 @@ package org.denovogroup.rangzen;
 import android.app.Application;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.SharedPreferences;
 import android.os.Build;
 
 import org.denovogroup.rangzen.BuildConfig;
+import org.denovogroup.rangzen.backend.AppConfig;
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient;
 import timber.log.Timber;
 
 /**
@@ -31,8 +34,35 @@ public class RangzenApplication extends Application {
         
         // Create notification channels (required for Android 8+)
         createNotificationChannels();
-        
+
+        // Initialize telemetry client
+        initializeTelemetry();
+
         Timber.i("Rangzen Application initialized");
+    }
+
+    /**
+     * Initializes the telemetry client for QA mode.
+     */
+    private void initializeTelemetry() {
+        String serverUrl = AppConfig.INSTANCE.telemetryServerUrl(this);
+        if (serverUrl == null || serverUrl.isEmpty()) {
+            // Use a placeholder - telemetry won't work without a real server
+            serverUrl = "https://telemetry.example.com";
+        }
+
+        // API token would normally come from secure storage
+        // For now, use empty string - server calls will fail gracefully
+        String apiToken = "";
+
+        TelemetryClient client = TelemetryClient.Companion.init(this, serverUrl, apiToken);
+
+        // Restore QA mode state from preferences
+        SharedPreferences prefs = getSharedPreferences("rangzen_prefs", MODE_PRIVATE);
+        boolean qaMode = prefs.getBoolean("qa_mode", false);
+        client.setEnabled(qaMode);
+
+        Timber.d("Telemetry initialized, QA mode: %s", qaMode);
     }
 
     /**
