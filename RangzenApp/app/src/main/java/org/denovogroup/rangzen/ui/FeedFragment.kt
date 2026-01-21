@@ -17,6 +17,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.ItemTouchHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -29,6 +30,7 @@ import org.denovogroup.rangzen.objects.RangzenMessage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.content.SharedPreferences
 
 /**
  * Fragment displaying the message feed.
@@ -42,6 +44,14 @@ class FeedFragment : Fragment() {
     private lateinit var messageStore: MessageStore
     private var rangzenService: RangzenService? = null
     private var isServiceBound = false
+    // Cache the latest message list for filter toggling.
+    private var cachedMessages: List<RangzenMessage> = emptyList()
+    // Track whether the feed should show only liked messages.
+    private var onlyLiked = false
+    // Shared preferences for UI-only hidden messages.
+    private lateinit var feedPrefs: SharedPreferences
+    // Local cache of hidden message IDs.
+    private var hiddenMessageIds: MutableSet<String> = mutableSetOf()
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -69,8 +79,13 @@ class FeedFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         messageStore = MessageStore.getInstance(requireContext())
+        // Initialize feed preferences for hidden messages.
+        feedPrefs = requireContext().getSharedPreferences("feed_prefs", 0)
+        // Load hidden message IDs from preferences.
+        hiddenMessageIds = loadHiddenMessageIds()
         setupRecyclerView()
         setupSwipeRefresh()
+        setupFilters()
         observeMessages()
     }
 
@@ -98,9 +113,17 @@ class FeedFragment : Fragment() {
     private fun setupRecyclerView() {
         messageAdapter = MessageAdapter(
             onLikeClick = { message ->
-                messageStore.likeMessage(message.messageId, !message.isLiked)
+                // Compute the new liked state for instant UI feedback.
+                val newLiked = !message.isLiked
+                // Update the adapter immediately to avoid perceived lag.
+                messageAdapter.updateLikeState(message.messageId, newLiked)
+                // Persist the like in the local store.
+                messageStore.likeMessage(message.messageId, newLiked)
+                // Re-apply filters so unliked messages can disappear instantly.
+                updateUI(applyFilters(cachedMessages))
             },
             onMessageClick = { message ->
+                // Mark the message read in the store.
                 messageStore.markAsRead(message.messageId)
             }
         )
@@ -109,6 +132,33 @@ class FeedFragment : Fragment() {
             layoutManager = LinearLayoutManager(context)
             adapter = messageAdapter
         }
+
+        // Attach swipe handling to hide messages locally.
+        val swipeCallback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean {
+                // Drag-and-drop is not supported for feed items.
+                return false
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                // Look up the swiped message by adapter position.
+                val message = messageAdapter.getMessageAt(viewHolder.adapterPosition)
+                // Guard against missing items.
+                if (message == null) {
+                    // Re-render the list to reset any swiped state.
+                    updateUI(applyFilters(cachedMessages))
+                    return
+                }
+                // Hide the message in the local UI only.
+                hideMessage(message.messageId)
+            }
+        }
+        // Attach the swipe helper to the recycler view.
+        ItemTouchHelper(swipeCallback).attachToRecyclerView(binding.recyclerMessages)
     }
 
     private fun setupSwipeRefresh() {
@@ -118,10 +168,32 @@ class FeedFragment : Fragment() {
         }
     }
 
+    private fun setupFilters() {
+        // Initialize the toggle with the current state.
+        binding.switchOnlyLiked.isChecked = onlyLiked
+        // Update the feed when the filter is toggled.
+        binding.switchOnlyLiked.setOnCheckedChangeListener { _, isChecked ->
+            // Track the current filter state.
+            onlyLiked = isChecked
+            // Re-render the list using the cached messages.
+            updateUI(applyFilters(cachedMessages))
+        }
+        // Wire up the "re-display" button for hidden messages.
+        binding.btnShowHidden.setOnClickListener {
+            // Clear hidden IDs and persist the change.
+            clearHiddenMessages()
+            // Refresh the UI immediately.
+            updateUI(applyFilters(cachedMessages))
+        }
+    }
+
     private fun observeMessages() {
         viewLifecycleOwner.lifecycleScope.launch {
             messageStore.messages.collectLatest { messages ->
-                updateUI(messages)
+                // Cache the latest list for filtering.
+                cachedMessages = messages
+                // Apply filters before rendering.
+                updateUI(applyFilters(messages))
             }
         }
     }
@@ -145,6 +217,47 @@ class FeedFragment : Fragment() {
             binding.recyclerMessages.visibility = View.VISIBLE
             messageAdapter.submitList(messages)
         }
+    }
+
+    private fun applyFilters(messages: List<RangzenMessage>): List<RangzenMessage> {
+        // Return full list when filter is off.
+        val base = if (onlyLiked) {
+            // Filter down to liked messages only.
+            messages.filter { it.isLiked }
+        } else {
+            // Use the full list when not filtering by like.
+            messages
+        }
+        // Filter out any hidden messages for UI-only suppression.
+        return base.filter { !hiddenMessageIds.contains(it.messageId) }
+    }
+
+    private fun hideMessage(messageId: String) {
+        // Add the message to the hidden list.
+        hiddenMessageIds.add(messageId)
+        // Persist the hidden list to preferences.
+        saveHiddenMessageIds(hiddenMessageIds)
+        // Refresh the UI without altering the DB.
+        updateUI(applyFilters(cachedMessages))
+    }
+
+    private fun clearHiddenMessages() {
+        // Clear the in-memory hidden list.
+        hiddenMessageIds.clear()
+        // Remove the persisted entry to reset state.
+        feedPrefs.edit().remove("hidden_message_ids").apply()
+    }
+
+    private fun loadHiddenMessageIds(): MutableSet<String> {
+        // Read the persisted set, defaulting to empty.
+        val stored = feedPrefs.getStringSet("hidden_message_ids", emptySet())
+        // Return a mutable copy to avoid modifying the stored set directly.
+        return stored?.toMutableSet() ?: mutableSetOf()
+    }
+
+    private fun saveHiddenMessageIds(ids: Set<String>) {
+        // Persist a copy of the IDs to avoid SharedPreferences mutation issues.
+        feedPrefs.edit().putStringSet("hidden_message_ids", ids.toSet()).apply()
     }
 
     private fun updateStatusText(peerCount: Int) {
@@ -183,6 +296,32 @@ class MessageAdapter(
     fun submitList(newMessages: List<RangzenMessage>) {
         messages = newMessages
         notifyDataSetChanged()
+    }
+
+    fun updateLikeState(messageId: String, liked: Boolean) {
+        // Find the message in the current list.
+        val index = messages.indexOfFirst { it.messageId == messageId }
+        if (index == -1) {
+            // Nothing to update when the message is missing.
+            return
+        }
+        val message = messages[index]
+        // Update liked state immediately for the UI.
+        message.isLiked = liked
+        // Adjust the like count locally for instant feedback.
+        val delta = if (liked) 1 else -1
+        message.likes = kotlin.math.max(0, message.likes + delta)
+        // Rebind just this item for a smooth update.
+        notifyItemChanged(index)
+    }
+
+    fun getMessageAt(position: Int): RangzenMessage? {
+        // Guard against invalid indices.
+        if (position < 0 || position >= messages.size) {
+            return null
+        }
+        // Return the message at the requested position.
+        return messages[position]
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {

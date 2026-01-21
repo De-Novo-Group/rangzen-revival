@@ -36,6 +36,35 @@
             android:textColor="@color/text_secondary"
             android:layout_marginTop="4dp" />
 
+        <!-- Feed filters row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Feed filter: show only liked messages -->
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switch_only_liked"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Only liked"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary" />
+
+            <!-- Re-display swiped-away messages -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_show_hidden"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="Re-display"
+                android:textSize="12sp"
+                style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        </LinearLayout>
+
     </LinearLayout>
 
     <!-- Swipe refresh with message list -->
