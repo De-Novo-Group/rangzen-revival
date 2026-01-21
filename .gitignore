@@ -11,6 +11,9 @@
 # Logs and debug artifacts
 ble-logs/
 *.apk
+*.db
+*.db-journal
+tmp_*_messages.db
 
 # Node / web tooling
 node_modules/

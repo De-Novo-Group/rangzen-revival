@@ -45,12 +45,15 @@
                 android:hint="Pseudonym (optional)"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
+                <!-- Force readable text colors so dynamic theming can't wash them out. -->
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/edit_pseudonym"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:inputType="text"
-                    android:maxLength="20" />
+                    android:maxLength="20"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -62,6 +65,7 @@
                 android:hint="@string/hint_compose"
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
+                <!-- Explicit text colors keep the input readable across devices. -->
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/edit_message"
                     android:layout_width="match_parent"
@@ -69,7 +73,9 @@
                     android:inputType="textMultiLine"
                     android:minLines="4"
                     android:maxLines="8"
-                    android:gravity="top" />
+                    android:gravity="top"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
