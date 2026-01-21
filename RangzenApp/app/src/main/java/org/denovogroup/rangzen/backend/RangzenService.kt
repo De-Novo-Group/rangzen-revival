@@ -41,6 +41,7 @@ class RangzenService : Service() {
         private const val NOTIFICATION_ID = 1001
         const val ACTION_START = "org.denovogroup.rangzen.action.START"
         const val ACTION_STOP = "org.denovogroup.rangzen.action.STOP"
+        const val ACTION_FORCE_EXCHANGE = "org.denovogroup.rangzen.action.FORCE_EXCHANGE"
         private const val EXCHANGE_INTERVAL_MS = 15_000L // Exchange every 15 seconds
     }
 
@@ -109,6 +110,7 @@ class RangzenService : Service() {
         when (intent?.action) {
             ACTION_START -> startForegroundService()
             ACTION_STOP -> stopService()
+            ACTION_FORCE_EXCHANGE -> triggerImmediateExchange()
         }
         return START_STICKY
     }
@@ -148,7 +150,7 @@ class RangzenService : Service() {
         exchangeJob = serviceScope.launch {
             while (isActive) {
                 delay(EXCHANGE_INTERVAL_MS)
-                performExchangeCycle()
+                performExchangeCycle(forceOutbound = false)
             }
         }
     }
@@ -163,13 +165,13 @@ class RangzenService : Service() {
         }
     }
 
-    private suspend fun performExchangeCycle() {
-        // Check cooldown timing before attempting exchanges.
-        if (!readyToConnect()) {
+    private suspend fun performExchangeCycle(forceOutbound: Boolean) {
+        // Respect cooldown timing unless we are forcing an outbound attempt.
+        if (!forceOutbound && !readyToConnect()) {
             return
         }
-        // Avoid initiating while we are serving an inbound exchange.
-        if (shouldDeferForInboundSession()) {
+        // Avoid initiating while we are serving an inbound exchange unless forced.
+        if (!forceOutbound && shouldDeferForInboundSession()) {
             // Exit early to avoid BLE contention.
             return
         }
@@ -185,23 +187,29 @@ class RangzenService : Service() {
         updateNotification(getString(R.string.status_peers_found, currentPeers.size))
         
         _status.value = ServiceStatus.EXCHANGING
-        // Determine peer selection strategy.
-        val randomExchange = AppConfig.randomExchange(this)
-        val peersToCheck = if (randomExchange) {
-            // Pick the best peer based on last-picked time.
-            pickBestPeer(currentPeers)?.let { listOf(it) } ?: emptyList()
-        } else {
-            // Use all peers when random exchange is disabled.
+        // Determine peer selection strategy unless we are forcing outbound.
+        val peersToCheck = if (forceOutbound) {
+            // When forcing, try all peers to maximize delivery.
             currentPeers
+        } else {
+            // Follow the configured random-exchange strategy.
+            val randomExchange = AppConfig.randomExchange(this)
+            if (randomExchange) {
+                // Pick the best peer based on last-picked time.
+                pickBestPeer(currentPeers)?.let { listOf(it) } ?: emptyList()
+            } else {
+                // Use all peers when random exchange is disabled.
+                currentPeers
+            }
         }
         // Run exchanges for selected peers.
         for (peer in peersToCheck) {
-            // Only initiate if allowed by protocol rules.
-            if (!shouldInitiateExchange(peer)) {
+            // Only initiate if allowed by protocol rules unless forced.
+            if (!forceOutbound && !shouldInitiateExchange(peer)) {
                 continue
             }
-            // Respect backoff rules before starting an exchange.
-            if (!shouldAttemptExchange(peer)) {
+            // Respect backoff rules before starting an exchange unless forced.
+            if (!forceOutbound && !shouldAttemptExchange(peer)) {
                 continue
             }
             try {
@@ -299,6 +307,14 @@ class RangzenService : Service() {
         // Persist the last exchange time for cooldown enforcement.
         val prefs = getSharedPreferences("exchange_state", MODE_PRIVATE)
         prefs.edit().putLong(lastExchangePrefKey, System.currentTimeMillis()).apply()
+    }
+
+    private fun triggerImmediateExchange() {
+        // Launch a one-off exchange attempt without cooldown/backoff gating.
+        serviceScope.launch {
+            // Run the exchange cycle with force enabled.
+            performExchangeCycle(forceOutbound = true)
+        }
     }
 
     private fun shouldAttemptExchange(peer: DiscoveredPeer): Boolean {

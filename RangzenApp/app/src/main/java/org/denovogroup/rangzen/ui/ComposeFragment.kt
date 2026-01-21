@@ -4,6 +4,7 @@
  */
 package org.denovogroup.rangzen.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -15,6 +16,7 @@ import androidx.fragment.app.Fragment
 import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
+import org.denovogroup.rangzen.backend.RangzenService
 import org.denovogroup.rangzen.databinding.FragmentComposeBinding
 import org.denovogroup.rangzen.objects.RangzenMessage
 
@@ -111,7 +113,8 @@ class ComposeFragment : Fragment() {
 
         if (messageStore.addMessage(message)) {
             Toast.makeText(context, "Message sent to the mesh network", Toast.LENGTH_SHORT).show()
-            
+            // Trigger an immediate outbound exchange attempt after local send.
+            forceOutboundExchange()
             // Clear the input
             binding.editMessage.text?.clear()
             
@@ -124,6 +127,15 @@ class ComposeFragment : Fragment() {
         } else {
             Toast.makeText(context, "Failed to send message", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun forceOutboundExchange() {
+        // Build an intent targeting the foreground service.
+        val intent = Intent(requireContext(), RangzenService::class.java)
+        // Set the action that forces an outbound exchange attempt.
+        intent.action = RangzenService.ACTION_FORCE_EXCHANGE
+        // Start the service from within the app process.
+        requireContext().startService(intent)
     }
 
     override fun onDestroyView() {
