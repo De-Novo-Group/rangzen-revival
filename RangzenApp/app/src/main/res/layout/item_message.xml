@@ -29,7 +29,7 @@
             android:orientation="vertical"
             android:padding="12dp">
 
-            <!-- Header row: pseudonym and timestamp -->
+            <!-- Header row: pseudonym + composed/received times -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

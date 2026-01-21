@@ -39,6 +39,9 @@ public class RangzenMessage {
     
     /** Timestamp when message was created (Unix millis) */
     private long timestamp;
+
+    /** Timestamp when message was received/stored locally (Unix millis) */
+    private long receivedTimestamp;
     
     /** Whether this message has been read by the user */
     private boolean read;
@@ -92,6 +95,8 @@ public class RangzenMessage {
     public RangzenMessage() {
         this.messageId = UUID.randomUUID().toString();
         this.timestamp = System.currentTimeMillis();
+        // Initialize to zero; set when storing in the local DB.
+        this.receivedTimestamp = 0L;
         this.trustScore = DEFAULT_TRUST;
         this.hopCount = 0;
         this.minContactsForHop = 0;
@@ -174,6 +179,15 @@ public class RangzenMessage {
 
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public long getReceivedTimestamp() {
+        return receivedTimestamp;
+    }
+
+    public void setReceivedTimestamp(long receivedTimestamp) {
+        // Store the local receipt time separately from the composed time.
+        this.receivedTimestamp = receivedTimestamp;
     }
 
     public boolean isRead() {

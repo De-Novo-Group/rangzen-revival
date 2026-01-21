@@ -25,7 +25,7 @@ class MessageStore private constructor(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "rangzen_messages.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         // Legacy trust bounds for safety.
         private const val MIN_TRUST = 0.01
@@ -40,6 +40,8 @@ class MessageStore private constructor(context: Context) :
         private const val COL_LIKED = "liked"
         private const val COL_PSEUDONYM = "pseudonym"
         private const val COL_TIMESTAMP = "timestamp"
+        // Store local receipt time separately from composed time.
+        private const val COL_RECEIVED_TIMESTAMP = "received_timestamp"
         private const val COL_READ = "read"
         private const val COL_HOP_COUNT = "hop_count"
         private const val COL_MIN_CONTACTS = "min_contacts"
@@ -87,6 +89,7 @@ class MessageStore private constructor(context: Context) :
                 $COL_LIKED INTEGER DEFAULT 0,
                 $COL_PSEUDONYM TEXT,
                 $COL_TIMESTAMP INTEGER NOT NULL,
+                $COL_RECEIVED_TIMESTAMP INTEGER NOT NULL,
                 $COL_READ INTEGER DEFAULT 0,
                 $COL_HOP_COUNT INTEGER DEFAULT 0,
                 $COL_MIN_CONTACTS INTEGER DEFAULT 0,
@@ -111,6 +114,12 @@ class MessageStore private constructor(context: Context) :
             db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_PARENT TEXT")
             db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_BIGPARENT TEXT")
         }
+        if (oldVersion < 3) {
+            // Add a received timestamp column for local receipt tracking.
+            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_RECEIVED_TIMESTAMP INTEGER NOT NULL DEFAULT 0")
+            // Backfill received timestamps with the composed timestamp when missing.
+            db.execSQL("UPDATE $TABLE_MESSAGES SET $COL_RECEIVED_TIMESTAMP = $COL_TIMESTAMP WHERE $COL_RECEIVED_TIMESTAMP = 0")
+        }
     }
 
     /**
@@ -124,6 +133,8 @@ class MessageStore private constructor(context: Context) :
             return false
         }
 
+        // Capture the local receipt time for this insert.
+        val receivedAt = System.currentTimeMillis()
         val values = ContentValues().apply {
             put(COL_MESSAGE_ID, message.messageId)
             put(COL_TEXT, message.text)
@@ -132,7 +143,10 @@ class MessageStore private constructor(context: Context) :
             put(COL_LIKES, message.likes)
             put(COL_LIKED, if (message.isLiked) 1 else 0)
             put(COL_PSEUDONYM, message.pseudonym)
+            // Persist composed time separately from receipt time.
             put(COL_TIMESTAMP, message.timestamp)
+            // Persist receipt time, defaulting to "now" when missing.
+            put(COL_RECEIVED_TIMESTAMP, if (message.receivedTimestamp > 0) message.receivedTimestamp else receivedAt)
             put(COL_READ, if (message.isRead) 1 else 0)
             put(COL_HOP_COUNT, message.hopCount)
             put(COL_MIN_CONTACTS, message.minContactsForHop)
@@ -426,6 +440,8 @@ class MessageStore private constructor(context: Context) :
             isLiked = cursor.getInt(cursor.getColumnIndexOrThrow(COL_LIKED)) == 1
             pseudonym = cursor.getString(cursor.getColumnIndexOrThrow(COL_PSEUDONYM))
             timestamp = cursor.getLong(cursor.getColumnIndexOrThrow(COL_TIMESTAMP))
+            // Read the local receipt time for UI display.
+            receivedTimestamp = cursor.getLong(cursor.getColumnIndexOrThrow(COL_RECEIVED_TIMESTAMP))
             isRead = cursor.getInt(cursor.getColumnIndexOrThrow(COL_READ)) == 1
             hopCount = cursor.getInt(cursor.getColumnIndexOrThrow(COL_HOP_COUNT))
             minContactsForHop = cursor.getInt(cursor.getColumnIndexOrThrow(COL_MIN_CONTACTS))

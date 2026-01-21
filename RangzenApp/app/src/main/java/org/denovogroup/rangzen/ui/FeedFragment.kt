@@ -26,6 +26,9 @@ import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
 import org.denovogroup.rangzen.databinding.FragmentFeedBinding
 import org.denovogroup.rangzen.objects.RangzenMessage
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Fragment displaying the message feed.
@@ -203,34 +206,55 @@ class MessageAdapter(
         private val trustIndicator: View = itemView.findViewById(R.id.trust_indicator)
 
         fun bind(message: RangzenMessage) {
+            // Render the main message body.
             textMessage.text = message.text
+            // Show sender pseudonym or a safe fallback.
             textPseudonym.text = message.pseudonym ?: "Anonymous"
-            textTimestamp.text = formatTimestamp(message.timestamp)
+            // Format composed/received timestamps for the header row.
+            textTimestamp.text = formatHeaderTimes(
+                composedAt = message.timestamp,
+                receivedAt = message.receivedTimestamp
+            )
+            // Render the like count for the action row.
             textLikes.text = message.likes.toString()
+            // Swap the like icon based on user state.
             btnLike.setImageResource(
                 if (message.isLiked) R.drawable.ic_liked else R.drawable.ic_like
             )
+            // Map trust to a visual indicator color.
             val trustColor = when {
                 message.trustScore >= 0.7 -> R.color.trust_high
                 message.trustScore >= 0.4 -> R.color.trust_medium
                 else -> R.color.trust_low
             }
+            // Apply the trust indicator color to the bar.
             trustIndicator.setBackgroundColor(
                 itemView.context.getColor(trustColor)
             )
+            // Wire up like taps.
             btnLike.setOnClickListener { onLikeClick(message) }
+            // Wire up message taps to mark as read.
             itemView.setOnClickListener { onMessageClick(message) }
+            // Reduce alpha for unread messages to make them stand out.
             itemView.alpha = if (message.isRead) 1.0f else 0.9f
         }
 
-        private fun formatTimestamp(timestamp: Long): String {
-            val diff = System.currentTimeMillis() - timestamp
-            return when {
-                diff < 60_000 -> "now"
-                diff < 3600_000 -> "${diff / 60_000}m"
-                diff < 86400_000 -> "${diff / 3600_000}h"
-                else -> "${diff / 86400_000}d"
-            }
+        private fun formatHeaderTimes(composedAt: Long, receivedAt: Long): String {
+            // Choose a usable received time fallback if not set.
+            val safeReceived = if (receivedAt > 0) receivedAt else composedAt
+            // Format the composed time for display.
+            val composedText = formatClockTime(composedAt)
+            // Format the received time for display.
+            val receivedText = formatClockTime(safeReceived)
+            // Build a compact header string.
+            return "C $composedText · R $receivedText"
+        }
+
+        private fun formatClockTime(timestamp: Long): String {
+            // Use a stable locale-aware time formatter.
+            val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+            // Convert to a displayable time string.
+            return formatter.format(Date(timestamp))
         }
     }
 }
