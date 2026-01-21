@@ -94,6 +94,13 @@ class RangzenService : Service() {
             Timber.i("Peer discovered: ${peer.address} (RSSI: ${peer.rssi}) - Total peers: ${_peerCount.value}")
             updateNotification(getString(R.string.status_peers_found, _peerCount.value))
         }
+        // Keep peer count in sync when the list changes (including stale removals).
+        bleScanner.onPeersUpdated = { peers ->
+            // Update the cached count to match the latest list.
+            _peerCount.value = peers.size
+            // Update the notification to avoid stale peer counts.
+            updateNotification(getString(R.string.status_peers_found, _peerCount.value))
+        }
         
         Timber.i("RangzenService created")
     }

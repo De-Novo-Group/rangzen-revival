@@ -46,6 +46,10 @@ class BleScanner(private val context: Context) {
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         // Tag for Android Log fallback in case Timber is filtered.
         private const val LOG_TAG = "BleScanner"
+        // Time window before a peer is considered stale.
+        private const val PEER_STALE_MS = 30_000L
+        // How often we prune stale peers.
+        private const val PEER_CLEANUP_INTERVAL_MS = 10_000L
     }
 
     private val bluetoothManager: BluetoothManager? =
@@ -62,6 +66,50 @@ class BleScanner(private val context: Context) {
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
     var onPeerDiscovered: ((DiscoveredPeer) -> Unit)? = null
+    // Optional callback when the peer list changes.
+    var onPeersUpdated: ((List<DiscoveredPeer>) -> Unit)? = null
+
+    // Handler used to schedule periodic cleanup.
+    private val cleanupHandler = Handler(Looper.getMainLooper())
+    // Runnable that prunes stale peers.
+    private lateinit var cleanupRunnable: Runnable
+
+    init {
+        // Initialize the cleanup runnable after fields are available.
+        cleanupRunnable = Runnable {
+            // Snapshot current time for age calculation.
+            val now = System.currentTimeMillis()
+            // Track whether we removed any peers.
+            var removedAny = false
+            // Iterate over current peers to find stale entries.
+            val iterator = discoveredPeers.entries.iterator()
+            // Loop over all current peer entries.
+            while (iterator.hasNext()) {
+                // Read the next peer entry.
+                val entry = iterator.next()
+                // Compute how old this peer is.
+                val ageMs = now - entry.value.lastSeen
+                // Remove peers older than our threshold.
+                if (ageMs > PEER_STALE_MS) {
+                    // Mark that we removed something.
+                    removedAny = true
+                    // Remove the stale peer.
+                    iterator.remove()
+                }
+            }
+            // Update the exposed list when removals occurred.
+            if (removedAny) {
+                // Rebuild the list sorted by RSSI.
+                _peers.value = discoveredPeers.values.sortedByDescending { it.rssi }
+                // Notify observers of the updated list.
+                onPeersUpdated?.invoke(_peers.value)
+                // Log the cleanup event.
+                Timber.i("Pruned stale peers; remaining=${_peers.value.size}")
+            }
+            // Schedule the next cleanup pass.
+            cleanupHandler.postDelayed(cleanupRunnable, PEER_CLEANUP_INTERVAL_MS)
+        }
+    }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -118,15 +166,24 @@ class BleScanner(private val context: Context) {
         
         // Start scanning with filter and settings.
         bleScanner?.startScan(filters, settings, scanCallback)
+        // Mark scanning state as active.
         _isScanning.value = true
+        // Start periodic cleanup of stale peers.
+        startPeerCleanup()
+        // Log scan start for visibility.
         Timber.i("BLE scanning started")
     }
 
     @SuppressLint("MissingPermission")
     fun stopScanning() {
         if (!_isScanning.value) return
+        // Stop the active scan callback.
         bleScanner?.stopScan(scanCallback)
+        // Mark scanning state as inactive.
         _isScanning.value = false
+        // Stop periodic cleanup when scanning stops.
+        stopPeerCleanup()
+        // Log scan stop for visibility.
         Timber.i("BLE scanning stopped")
     }
 
@@ -731,14 +788,34 @@ class BleScanner(private val context: Context) {
             if (!discoveredPeers.containsKey(peer.address)) {
                 onPeerDiscovered?.invoke(peer)
             }
+            // Persist the peer entry in the map.
             discoveredPeers[peer.address] = peer
+            // Rebuild the list sorted by RSSI.
             _peers.value = discoveredPeers.values.sortedByDescending { it.rssi }
+            // Notify observers whenever the peer list changes.
+            onPeersUpdated?.invoke(_peers.value)
         }
     }
 
     fun clearPeers() {
+        // Clear all discovered peers.
         discoveredPeers.clear()
+        // Reset the exposed peer list.
         _peers.value = emptyList()
+        // Notify observers when peers are cleared.
+        onPeersUpdated?.invoke(_peers.value)
+    }
+
+    private fun startPeerCleanup() {
+        // Ensure no duplicate callbacks are scheduled.
+        cleanupHandler.removeCallbacks(cleanupRunnable)
+        // Schedule the first cleanup pass.
+        cleanupHandler.postDelayed(cleanupRunnable, PEER_CLEANUP_INTERVAL_MS)
+    }
+
+    private fun stopPeerCleanup() {
+        // Remove any pending cleanup callbacks.
+        cleanupHandler.removeCallbacks(cleanupRunnable)
     }
 }
 data class DiscoveredPeer(
