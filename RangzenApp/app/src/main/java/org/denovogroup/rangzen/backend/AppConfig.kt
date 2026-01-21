@@ -60,6 +60,8 @@ object AppConfig {
     private const val KEY_BACKOFF_MAX_MILLIS = "backoffMaxMillis"
     // JSON key for timebound period in days.
     private const val KEY_TIMEBOUND_PERIOD_DAYS = "timeboundPeriodDays"
+    // JSON key for inbound-session grace window in milliseconds.
+    private const val KEY_INBOUND_SESSION_GRACE_MS = "inboundSessionGraceMs"
 
     // Cached JSON config to avoid repeated disk reads.
     @Volatile
@@ -388,5 +390,25 @@ object AppConfig {
             throw IllegalStateException(message)
         }
         return config.getInt(KEY_TIMEBOUND_PERIOD_DAYS)
+    }
+
+    /**
+     * Read inbound session grace window in milliseconds.
+     */
+    fun inboundSessionGraceMs(context: Context): Long {
+        // Load the config JSON.
+        val config = loadConfig(context)
+        // Ensure the key exists to avoid silent defaults.
+        if (!config.has(KEY_INBOUND_SESSION_GRACE_MS)) {
+            // Build a clear error message.
+            val message = "Config missing key: $KEY_INBOUND_SESSION_GRACE_MS"
+            // Log loudly for visibility.
+            Timber.e(message)
+            Log.e(LOG_TAG, message)
+            // Fail fast so we never silently ignore the setting.
+            throw IllegalStateException(message)
+        }
+        // Return the configured grace window.
+        return config.getLong(KEY_INBOUND_SESSION_GRACE_MS)
     }
 }

@@ -74,6 +74,15 @@ class BleAdvertiser(private val context: Context) {
     private val _activeConnectionCount = MutableStateFlow(0)
     val activeConnectionCount: StateFlow<Int> = _activeConnectionCount.asStateFlow()
     private val activeConnections = mutableSetOf<String>()
+    // Track the last inbound activity timestamp to avoid stuck sessions.
+    private val _lastInboundActivityMs = MutableStateFlow(0L)
+    // Expose inbound activity to the service for coordination.
+    val lastInboundActivityMs: StateFlow<Long> = _lastInboundActivityMs.asStateFlow()
+
+    private fun markInboundActivity() {
+        // Record the current time for inbound activity.
+        _lastInboundActivityMs.value = System.currentTimeMillis()
+    }
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
@@ -175,6 +184,8 @@ class BleAdvertiser(private val context: Context) {
             Timber.i("GATT server connection change: status=$status newState=$newState device=${device.address}")
             // Mirror to Android Log for visibility.
             Log.i(LOG_TAG, "GATT server connection change: status=$status newState=$newState device=${device.address}")
+            // Treat connection changes as inbound activity.
+            markInboundActivity()
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Timber.i("GATT server connected to ${device.address}")
                 // Track active connections to avoid initiating while serving.
@@ -202,6 +213,8 @@ class BleAdvertiser(private val context: Context) {
             Timber.i("GATT read request: device=${device.address} requestId=$requestId offset=$offset uuid=${characteristic.uuid}")
             // Mirror to Android Log for visibility.
             Log.i(LOG_TAG, "GATT read request: device=${device.address} requestId=$requestId offset=$offset uuid=${characteristic.uuid}")
+            // Mark inbound activity for read requests.
+            markInboundActivity()
             if (characteristic.uuid == RANGZEN_CHARACTERISTIC_UUID) {
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, characteristic.value)
             } else {
@@ -225,6 +238,8 @@ class BleAdvertiser(private val context: Context) {
             Timber.i("GATT write request: device=${device.address} requestId=$requestId offset=$offset uuid=${characteristic.uuid} size=${value.size}")
             // Mirror to Android Log for visibility.
             Log.i(LOG_TAG, "GATT write request: device=${device.address} requestId=$requestId offset=$offset uuid=${characteristic.uuid} size=${value.size}")
+            // Mark inbound activity for write requests.
+            markInboundActivity()
             if (characteristic.uuid == RANGZEN_CHARACTERISTIC_UUID) {
                 if (preparedWrite || offset > 0) {
                     Timber.e("Prepared/offset writes are not supported (offset=$offset prepared=$preparedWrite)")
@@ -332,6 +347,8 @@ class BleAdvertiser(private val context: Context) {
             // Log CCCD writes to confirm notifications are enabled.
             Timber.i("GATT descriptor write: device=${device.address} requestId=$requestId uuid=${descriptor.uuid} size=${value.size}")
             Log.i(LOG_TAG, "GATT descriptor write: device=${device.address} requestId=$requestId uuid=${descriptor.uuid} size=${value.size}")
+            // Mark inbound activity for CCCD updates.
+            markInboundActivity()
             if (responseNeeded) {
                 // Acknowledge descriptor write to complete subscription.
                 gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, 0, null)
@@ -363,6 +380,8 @@ class BleAdvertiser(private val context: Context) {
             return
         }
 
+        // Initialize inbound activity timestamp for fresh sessions.
+        markInboundActivity()
         bleAdvertiser = bluetoothAdapter.bluetoothLeAdvertiser
         gattServer = bluetoothManager?.openGattServer(context, gattServerCallback)
 

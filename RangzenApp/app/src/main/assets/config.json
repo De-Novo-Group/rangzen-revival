@@ -19,5 +19,6 @@
   "useBackoff": true,
   "backoffAttemptMillis": 10000,
   "backoffMaxMillis": 320000,
-  "timeboundPeriodDays": 3
+  "timeboundPeriodDays": 3,
+  "inboundSessionGraceMs": 4000
 }

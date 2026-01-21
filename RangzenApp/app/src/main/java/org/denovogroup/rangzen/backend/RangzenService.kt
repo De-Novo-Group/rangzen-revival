@@ -169,9 +169,8 @@ class RangzenService : Service() {
             return
         }
         // Avoid initiating while we are serving an inbound exchange.
-        if (bleAdvertiser.activeConnectionCount.value > 0) {
-            // Skip initiating to reduce BLE contention.
-            Timber.i("Skipping exchange initiation; inbound session active")
+        if (shouldDeferForInboundSession()) {
+            // Exit early to avoid BLE contention.
             return
         }
         val currentPeers = bleScanner.peers.value
@@ -266,6 +265,34 @@ class RangzenService : Service() {
         if (lastExchangeMillis == -1L) return true
         // Enforce cooldown interval.
         return System.currentTimeMillis() - lastExchangeMillis >= cooldownMillis
+    }
+
+    private fun shouldDeferForInboundSession(): Boolean {
+        // Read the active inbound connection count.
+        val activeInbound = bleAdvertiser.activeConnectionCount.value
+        // Allow immediately when no inbound sessions are active.
+        if (activeInbound <= 0) return false
+        // Read the last inbound activity timestamp.
+        val lastInboundActivity = bleAdvertiser.lastInboundActivityMs.value
+        // Load the grace window from config.
+        val graceMs = AppConfig.inboundSessionGraceMs(this)
+        // Compute idle time since last inbound activity.
+        val idleMs = System.currentTimeMillis() - lastInboundActivity
+        // Defer when inbound activity is recent.
+        if (idleMs < graceMs) {
+            // Log the deferral for visibility.
+            Timber.i(
+                "Skipping exchange initiation; inbound session active " +
+                    "(idleMs=$idleMs graceMs=$graceMs active=$activeInbound)"
+            )
+            return true
+        }
+        // Log when we override the defer to prevent stuck sessions.
+        Timber.w(
+            "Inbound session idle beyond grace; proceeding with outbound exchange " +
+                "(idleMs=$idleMs graceMs=$graceMs active=$activeInbound)"
+        )
+        return false
     }
 
     private fun setLastExchangeTime() {
