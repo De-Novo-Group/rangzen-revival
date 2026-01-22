@@ -25,5 +25,9 @@
   "telemetryServerUrl": "https://murmur-telemetry.denovogroup.org",
   "telemetryApiToken": "cbe9cc17515a095059e461d685bf9a49f002d7ad2621423ec45e7f11ec053ff6",
   "telemetryBatchSize": 50,
-  "telemetryFlushIntervalMs": 60000
+  "telemetryFlushIntervalMs": 60000,
+  "otaEnabled": true,
+  "otaCheckIntervalMs": 14400000,
+  "otaWifiOnly": true,
+  "otaAutoDownload": true
 }

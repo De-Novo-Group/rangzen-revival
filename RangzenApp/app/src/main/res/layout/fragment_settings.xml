@@ -177,7 +177,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="About Rangzen"
+                    android:text="About Murmur"
                     android:textSize="16sp"
                     android:textColor="@color/text_primary"
                     android:textStyle="bold" />
@@ -186,7 +186,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="Rangzen is a delay-tolerant mesh networking system for anonymous, censorship-resistant communication. Messages propagate via Bluetooth and WiFi Direct without using the internet."
+                    android:text="Murmur is a delay-tolerant mesh networking system for anonymous, censorship-resistant communication. Messages propagate via Bluetooth and WiFi Direct without using the internet."
                     android:textSize="14sp"
                     android:textColor="@color/text_secondary" />
 

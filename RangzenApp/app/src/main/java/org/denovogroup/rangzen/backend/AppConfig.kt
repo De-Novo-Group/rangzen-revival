@@ -72,6 +72,14 @@ object AppConfig {
     private const val KEY_TELEMETRY_FLUSH_INTERVAL_MS = "telemetryFlushIntervalMs"
     // JSON key for telemetry API token.
     private const val KEY_TELEMETRY_API_TOKEN = "telemetryApiToken"
+    // JSON key for OTA enabled.
+    private const val KEY_OTA_ENABLED = "otaEnabled"
+    // JSON key for OTA check interval.
+    private const val KEY_OTA_CHECK_INTERVAL_MS = "otaCheckIntervalMs"
+    // JSON key for OTA WiFi-only mode.
+    private const val KEY_OTA_WIFI_ONLY = "otaWifiOnly"
+    // JSON key for OTA auto-download.
+    private const val KEY_OTA_AUTO_DOWNLOAD = "otaAutoDownload"
 
     // Cached JSON config to avoid repeated disk reads.
     @Volatile
@@ -461,5 +469,38 @@ object AppConfig {
     fun telemetryApiToken(context: Context): String {
         val config = loadConfig(context)
         return config.optString(KEY_TELEMETRY_API_TOKEN, "")
+    }
+
+    /**
+     * Check if OTA updates are enabled.
+     */
+    fun otaEnabled(context: Context): Boolean {
+        val config = loadConfig(context)
+        return config.optBoolean(KEY_OTA_ENABLED, false)
+    }
+
+    /**
+     * Read OTA check interval in milliseconds.
+     * Default: 4 hours.
+     */
+    fun otaCheckIntervalMs(context: Context): Long {
+        val config = loadConfig(context)
+        return config.optLong(KEY_OTA_CHECK_INTERVAL_MS, 4 * 60 * 60 * 1000L)
+    }
+
+    /**
+     * Check if OTA downloads should only occur on WiFi.
+     */
+    fun otaWifiOnly(context: Context): Boolean {
+        val config = loadConfig(context)
+        return config.optBoolean(KEY_OTA_WIFI_ONLY, true)
+    }
+
+    /**
+     * Check if OTA updates should auto-download when available.
+     */
+    fun otaAutoDownload(context: Context): Boolean {
+        val config = loadConfig(context)
+        return config.optBoolean(KEY_OTA_AUTO_DOWNLOAD, true)
     }
 }

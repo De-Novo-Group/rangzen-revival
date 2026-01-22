@@ -9,6 +9,7 @@ import android.os.Build;
 import org.denovogroup.rangzen.BuildConfig;
 import org.denovogroup.rangzen.backend.AppConfig;
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient;
+import org.denovogroup.rangzen.backend.update.UpdateClient;
 import timber.log.Timber;
 
 /**
@@ -38,7 +39,10 @@ public class RangzenApplication extends Application {
         // Initialize telemetry client
         initializeTelemetry();
 
-        Timber.i("Rangzen Application initialized");
+        // Initialize OTA update client
+        initializeUpdateClient();
+
+        Timber.i("Murmur Application initialized");
     }
 
     /**
@@ -65,6 +69,35 @@ public class RangzenApplication extends Application {
         client.setEnabled(qaMode);
 
         Timber.d("Telemetry initialized, QA mode: %s", qaMode);
+    }
+
+    /**
+     * Initializes the OTA update client.
+     * Only starts periodic checks if QA mode is enabled.
+     */
+    private void initializeUpdateClient() {
+        if (!AppConfig.INSTANCE.otaEnabled(this)) {
+            Timber.d("OTA updates disabled in config");
+            return;
+        }
+
+        String serverUrl = AppConfig.INSTANCE.telemetryServerUrl(this);
+        String apiToken = AppConfig.INSTANCE.telemetryApiToken(this);
+
+        if (serverUrl == null || serverUrl.isEmpty() || apiToken == null || apiToken.isEmpty()) {
+            Timber.w("OTA server URL or API token not configured");
+            return;
+        }
+
+        UpdateClient updateClient = UpdateClient.Companion.init(this, serverUrl, apiToken);
+
+        // Check if QA mode is enabled and start periodic checks
+        SharedPreferences prefs = getSharedPreferences("rangzen_prefs", MODE_PRIVATE);
+        boolean qaMode = prefs.getBoolean("qa_mode", false);
+        if (qaMode) {
+            updateClient.startPeriodicChecks();
+            Timber.d("OTA update checks started");
+        }
     }
 
     /**

@@ -4,6 +4,7 @@
 package org.denovogroup.rangzen.backend.telemetry
 
 import com.google.gson.annotations.SerializedName
+import org.denovogroup.rangzen.BuildConfig
 
 /**
  * A telemetry event to be sent to the telemetry server.
@@ -26,7 +27,10 @@ data class TelemetryEvent(
     val transport: String? = null,
 
     @SerializedName("payload")
-    val payload: Map<String, Any>? = null
+    val payload: Map<String, Any>? = null,
+
+    @SerializedName("app_version")
+    val appVersion: String = BuildConfig.VERSION_NAME
 ) {
     companion object {
         // Event types for exchange lifecycle
@@ -42,6 +46,15 @@ data class TelemetryEvent(
         // Event types for transport stats
         const val TYPE_TRANSPORT_BLE = "transport_ble"
         const val TYPE_TRANSPORT_WIFI = "transport_wifi"
+
+        // OTA update event types
+        const val TYPE_OTA_CHECK = "ota_check"
+        const val TYPE_OTA_DOWNLOAD_START = "ota_download_start"
+        const val TYPE_OTA_DOWNLOAD_COMPLETE = "ota_download_complete"
+        const val TYPE_OTA_DOWNLOAD_FAILED = "ota_download_failed"
+        const val TYPE_OTA_INSTALL_START = "ota_install_start"
+        const val TYPE_OTA_INSTALL_SUCCESS = "ota_install_success"
+        const val TYPE_OTA_INSTALL_FAILED = "ota_install_failed"
 
         // Transport identifiers
         const val TRANSPORT_BLE = "ble"

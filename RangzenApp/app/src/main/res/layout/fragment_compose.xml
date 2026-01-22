@@ -115,7 +115,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
-        android:text="Messages will propagate through the mesh network to nearby Rangzen users. The more mutual friends you have with someone, the higher priority your messages receive."
+        android:text="Messages will propagate through the mesh network to nearby Murmur users. The more mutual friends you have with someone, the higher priority your messages receive."
         android:textSize="14sp"
         android:textColor="@color/text_hint"
         android:textAlignment="center"

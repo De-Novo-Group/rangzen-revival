@@ -12,11 +12,17 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.update.UpdateClient
+import org.denovogroup.rangzen.backend.update.UpdateState
 import org.denovogroup.rangzen.databinding.FragmentSettingsBinding
+import timber.log.Timber
 
 /**
  * Fragment for app settings.
@@ -40,6 +46,50 @@ class SettingsFragment : Fragment() {
 
         setupSettings()
         loadStats()
+        checkForPendingUpdate()
+    }
+
+    private fun checkForPendingUpdate() {
+        val updateClient = UpdateClient.getInstance() ?: return
+
+        // Check for already downloaded update
+        val pending = updateClient.checkPendingInstall()
+        if (pending != null) {
+            val (release, apkFile) = pending
+            showUpdateDialog(release.versionName, apkFile, release)
+            return
+        }
+
+        // If QA mode is on, check for new updates
+        val prefs = requireContext().getSharedPreferences("rangzen_prefs", 0)
+        if (prefs.getBoolean("qa_mode", false)) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val update = updateClient.checkForUpdate()
+                // The UpdateClient will auto-download if configured
+                // After download completes, state will be ReadyToInstall
+                if (update != null) {
+                    // Observe state for ReadyToInstall
+                    kotlinx.coroutines.delay(2000) // Give time for download to complete
+                    val state = updateClient.state.value
+                    if (state is UpdateState.ReadyToInstall) {
+                        activity?.runOnUiThread {
+                            showUpdateDialog(state.release.versionName, state.apkFile, state.release)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showUpdateDialog(versionName: String, apkFile: java.io.File, release: org.denovogroup.rangzen.backend.update.ReleaseInfo) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Update Available")
+            .setMessage("Version $versionName is ready to install.\n\nWould you like to install it now?")
+            .setPositiveButton("Install") { _, _ ->
+                UpdateClient.getInstance()?.promptInstall(apkFile, release)
+            }
+            .setNegativeButton("Later", null)
+            .show()
     }
 
     private fun setupSettings() {
@@ -67,6 +117,7 @@ class SettingsFragment : Fragment() {
                 // Disable without confirmation
                 prefs.edit().putBoolean("qa_mode", false).apply()
                 TelemetryClient.getInstance()?.setEnabled(false)
+                UpdateClient.getInstance()?.stopPeriodicChecks()
             }
         }
     }
@@ -81,6 +132,16 @@ class SettingsFragment : Fragment() {
             .setPositiveButton("Enable") { _, _ ->
                 prefs.edit().putBoolean("qa_mode", true).apply()
                 TelemetryClient.getInstance()?.setEnabled(true)
+                // Start OTA update checks and check immediately
+                UpdateClient.getInstance()?.let { client ->
+                    client.startPeriodicChecks()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val update = client.checkForUpdate()
+                        if (update != null) {
+                            Timber.i("Update available: ${update.versionName}")
+                        }
+                    }
+                }
             }
             .setNegativeButton("Cancel") { _, _ ->
                 // Revert the toggle
