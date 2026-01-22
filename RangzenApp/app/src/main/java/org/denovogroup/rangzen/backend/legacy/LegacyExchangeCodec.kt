@@ -116,12 +116,36 @@ object LegacyExchangeCodec {
         return LegacyServerMessage(doubleBlinded, hashedBlinded)
     }
 
-    fun encodeMessage(context: Context, message: RangzenMessage): JSONObject {
+    /**
+     * Encode a message for transmission to a specific peer.
+     *
+     * This matches Casific's approach where trust is recomputed per-peer using the
+     * sigmoid+noise formula based on shared friend count.
+     *
+     * @param context Application context for config values.
+     * @param message The message to encode.
+     * @param sharedFriends Number of friends shared with the exchange peer.
+     * @param myFriends Total number of friends we have.
+     */
+    fun encodeMessage(
+        context: Context,
+        message: RangzenMessage,
+        sharedFriends: Int,
+        myFriends: Int
+    ): JSONObject {
         val includeTrust = AppConfig.useTrust(context)
         val includePseudonym = AppConfig.includePseudonym(context)
         val shareLocation = AppConfig.shareLocation(context)
         val trustNoiseVariance = AppConfig.trustNoiseVariance(context)
-        return message.toLegacyJson(includePseudonym, shareLocation, includeTrust, trustNoiseVariance)
+        // Use the full toLegacyJson signature with per-peer trust recomputation.
+        return message.toLegacyJson(
+            includePseudonym,
+            shareLocation,
+            includeTrust,
+            trustNoiseVariance,
+            sharedFriends,
+            myFriends
+        )
     }
 
     fun decodeMessage(json: JSONObject): RangzenMessage {

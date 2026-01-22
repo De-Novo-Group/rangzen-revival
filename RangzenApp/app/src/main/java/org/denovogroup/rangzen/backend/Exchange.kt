@@ -47,11 +47,6 @@ class Exchange(
     private val peerIdHash: String = "unknown",
     private val transport: String = TelemetryEvent.TRANSPORT_BLE
 ) {
-    companion object {
-        private const val EXCHANGE_TIMEOUT_MS = 60_000L
-        private const val PROTOCOL_VERSION = 2
-    }
-
     private val gson = Gson()
     private val reader = BufferedReader(InputStreamReader(inputStream))
     private val writer = BufferedWriter(OutputStreamWriter(outputStream))
@@ -285,22 +280,53 @@ class Exchange(
 
     /**
      * Calculate trust score from mutual friend count.
-     * 
-     * The trust function uses diminishing returns:
-     * - 0 friends: 0.1 (minimal trust)
-     * - 1 friend: 0.4
-     * - 2 friends: 0.6
-     * - 5 friends: 0.8
-     * - 10+ friends: approaching 1.0
+     *
+     * Uses Casific's sigmoid function: sigmoid(sharedFriends / myFriends, 0.3, 13.0)
+     * plus Gaussian noise for privacy protection.
+     *
+     * Note: For actual exchanges, use LegacyExchangeMath.computeNewPriority_sigmoidFractionOfFriends()
+     * which provides the full Casific-compatible implementation.
      */
     private fun calculateTrustScore(mutualFriends: Int): Double {
-        return when {
-            mutualFriends <= 0 -> 0.1
-            mutualFriends == 1 -> 0.4
-            mutualFriends == 2 -> 0.6
-            mutualFriends <= 5 -> 0.7 + (mutualFriends - 2) * 0.03
-            else -> minOf(0.95, 0.85 + Math.log10(mutualFriends.toDouble()) * 0.05)
+        // Get total friend count for fraction calculation.
+        val myFriends = friendStore.getAllFriendIds().size
+        if (myFriends == 0) {
+            return EPSILON_TRUST
         }
+
+        // Compute fraction of friends.
+        val fraction = mutualFriends / myFriends.toDouble()
+
+        // Sigmoid function matching Casific parameters.
+        var trustMultiplier = 1.0 / (1.0 + Math.pow(Math.E, -SIGMOID_RATE * (fraction - SIGMOID_CUTOFF)))
+
+        // Add Gaussian noise for privacy.
+        trustMultiplier += NOISE_MEAN + trustRandom.nextGaussian() * Math.sqrt(NOISE_VARIANCE)
+
+        // Truncate range to [0, 1].
+        trustMultiplier = trustMultiplier.coerceIn(0.0, 1.0)
+
+        // Special case: no shared friends means minimal trust.
+        if (mutualFriends == 0) {
+            return EPSILON_TRUST
+        }
+
+        return trustMultiplier
+    }
+
+    companion object {
+        private const val EXCHANGE_TIMEOUT_MS = 60_000L
+        private const val PROTOCOL_VERSION = 2
+
+        // Casific trust model constants.
+        private const val EPSILON_TRUST = 0.001
+        private const val NOISE_MEAN = 0.2
+        private const val NOISE_VARIANCE = 0.1
+        private const val SIGMOID_CUTOFF = 0.3
+        private const val SIGMOID_RATE = 13.0
+
+        // Random source for trust noise.
+        private val trustRandom = java.util.Random()
     }
 
     /**

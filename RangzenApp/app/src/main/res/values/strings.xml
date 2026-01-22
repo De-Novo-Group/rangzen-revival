@@ -39,6 +39,14 @@
     <string name="action_add_friend">Add Friend</string>
     <string name="action_show_qr">Show My QR Code</string>
     <string name="action_scan_qr">Scan QR Code</string>
+    <string name="action_import_contacts">Import Contacts</string>
+    
+    <!-- Contact import -->
+    <string name="contacts_imported">Added %1$d new friends from contacts</string>
+    <string name="contacts_already_added">All contacts already added</string>
+    <string name="contacts_no_phone_numbers">No contacts with phone numbers found</string>
+    <string name="permission_contacts_title">Contacts Permission Required</string>
+    <string name="permission_contacts_message">Murmur needs access to your contacts to add friends from your phonebook. Phone numbers are hashed locally and never stored in plain text.</string>
     
     <!-- Status -->
     <string name="status_discovering">Discovering peers…</string>

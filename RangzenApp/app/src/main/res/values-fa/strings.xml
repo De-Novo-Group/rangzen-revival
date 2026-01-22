@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Murmur</string>
+    
+    <!-- Service -->
+    <string name="service_notification_title">مورمور فعال است</string>
+    <string name="service_notification_text">در حال اتصال به دستگاه‌های نزدیک…</string>
+    
+    <!-- Main Activity -->
+    <string name="title_feed">پیام‌ها</string>
+    <string name="title_compose">نوشتن</string>
+    <string name="title_friends">دوستان</string>
+    <string name="title_settings">تنظیمات</string>
+    
+    <!-- Compose -->
+    <string name="hint_compose">چه خبر؟</string>
+    <string name="btn_send">ارسال</string>
+    <string name="char_count">%1$d / ۱۴۰</string>
+    
+    <!-- Settings -->
+    <string name="pref_service_enabled">فعال‌سازی مورمور</string>
+    <string name="pref_service_enabled_summary">اجرای سرویس پس‌زمینه برای تبادل پیام‌ها</string>
+    <string name="pref_qa_mode">حالت آزمایش QA</string>
+    <string name="pref_qa_mode_summary">فعال‌سازی تله‌متری برای آزمایش (از اینترنت برای پیام‌ها استفاده نمی‌کند)</string>
+    
+    <!-- Permissions -->
+    <string name="permission_bluetooth_title">مجوز بلوتوث مورد نیاز است</string>
+    <string name="permission_bluetooth_message">مورمور برای یافتن کاربران نزدیک و تبادل پیام‌ها به بلوتوث نیاز دارد.</string>
+    <string name="permission_location_title">مجوز موقعیت مکانی مورد نیاز است</string>
+    <string name="permission_location_message">مورمور برای استفاده از WiFi Direct جهت تبادل سریع‌تر پیام‌ها به مجوز موقعیت مکانی نیاز دارد. موقعیت شما هرگز ذخیره یا ارسال نمی‌شود.</string>
+    
+    <!-- Empty states -->
+    <string name="empty_feed">هنوز پیامی نیست.\nپیام‌های کاربران نزدیک مورمور اینجا نمایش داده می‌شوند.</string>
+    <string name="empty_friends">هنوز دوستی اضافه نشده.\nکد QR یک دوست را اسکن کنید تا او را اضافه کنید.</string>
+    
+    <!-- Actions -->
+    <string name="action_like">پسندیدن</string>
+    <string name="action_share">اشتراک‌گذاری</string>
+    <string name="action_add_friend">افزودن دوست</string>
+    <string name="action_show_qr">نمایش کد QR من</string>
+    <string name="action_scan_qr">اسکن کد QR</string>
+    
+    <!-- Status -->
+    <string name="status_discovering">در حال یافتن دستگاه‌ها…</string>
+    <string name="status_connecting">در حال اتصال…</string>
+    <string name="status_exchanging">در حال تبادل پیام‌ها…</string>
+    <string name="status_idle">در انتظار دستگاه‌ها</string>
+    <string name="status_peers_found">%1$d دستگاه در نزدیکی</string>
+</resources>

@@ -170,8 +170,17 @@ private class LegacyExchangeSession(
             receivedMessages += incoming.size
         }
 
+        // Track our friend count for per-peer trust recomputation.
+        val myFriends = friendStore.getAllFriendIds().size
+
         val nextOutbound = if (outgoingIndex < outgoingMessages.size) {
-            val messageJson = LegacyExchangeCodec.encodeMessage(context, outgoingMessages[outgoingIndex])
+            // Pass shared friend context for per-peer trust computation.
+            val messageJson = LegacyExchangeCodec.encodeMessage(
+                context,
+                outgoingMessages[outgoingIndex],
+                commonFriends,
+                myFriends
+            )
             outgoingIndex += 1
             listOf(messageJson)
         } else {

@@ -297,8 +297,16 @@ public class RangzenMessage {
         return trustComponent + recencyComponent + likesComponent;
     }
 
+    // Casific trust model constants.
+    private static final double EPSILON_TRUST = 0.001;
+    private static final double NOISE_MEAN = 0.2;
+    private static final double NOISE_VARIANCE = 0.1;
+    private static final double SIGMOID_CUTOFF = 0.3;
+    private static final double SIGMOID_RATE = 13.0;
+
     /**
      * Convert this message to the legacy JSON format used by the original Rangzen protocol.
+     * Uses default settings (no per-peer trust recomputation).
      */
     public JSONObject toLegacyJson() {
         return toLegacyJson(true, true, true, 0.0);
@@ -316,6 +324,30 @@ public class RangzenMessage {
                                    boolean shareLocation,
                                    boolean includeTrust,
                                    double trustNoiseVariance) {
+        // Delegate to the full method with no per-peer context.
+        return toLegacyJson(includePseudonym, shareLocation, includeTrust, trustNoiseVariance, -1, -1);
+    }
+
+    /**
+     * Convert this message to the legacy JSON format with per-peer trust recomputation.
+     *
+     * This matches Casific's MurmurMessage.toJSON(context, sharedFriends, myFriends) signature.
+     * When sharedFriends and myFriends are provided (>= 0), the trust value is recomputed
+     * using the sigmoid+noise formula for this specific peer exchange.
+     *
+     * @param includePseudonym include the pseudonym field when available
+     * @param shareLocation include the location field when available
+     * @param includeTrust include the trust field when enabled
+     * @param trustNoiseVariance variance for Gaussian noise (only used if not recomputing)
+     * @param sharedFriends number of friends shared with the exchange peer (-1 to skip recomputation)
+     * @param myFriends total number of friends we have (-1 to skip recomputation)
+     */
+    public JSONObject toLegacyJson(boolean includePseudonym,
+                                   boolean shareLocation,
+                                   boolean includeTrust,
+                                   double trustNoiseVariance,
+                                   int sharedFriends,
+                                   int myFriends) {
         JSONObject result = new JSONObject();
         try {
             // Required fields.
@@ -343,15 +375,58 @@ public class RangzenMessage {
             if (shareLocation && latLong != null && !latLong.isEmpty()) {
                 result.put(LATLONG_KEY, latLong);
             }
-            // Optional trust with noise.
+            // Optional trust with per-peer recomputation or simple noise.
             if (includeTrust) {
-                double noisyTrust = trustScore + legacyTrustNoise(trustNoiseVariance);
+                double noisyTrust;
+                if (sharedFriends >= 0 && myFriends >= 0) {
+                    // Per-peer trust recomputation using Casific's sigmoid+noise formula.
+                    noisyTrust = computeTrustForPeer(trustScore, sharedFriends, myFriends);
+                } else {
+                    // Simple noise addition when no per-peer context.
+                    noisyTrust = trustScore + legacyTrustNoise(trustNoiseVariance);
+                }
                 result.put(TRUST_KEY, noisyTrust);
             }
         } catch (JSONException e) {
             throw new IllegalStateException("Failed to serialize RangzenMessage to legacy JSON", e);
         }
         return result;
+    }
+
+    /**
+     * Compute trust value for a specific peer using Casific's sigmoid+noise formula.
+     *
+     * This matches MurmurMessage.makeNoise() with USE_SIMPLE_NOISE=false.
+     *
+     * @param priority The base trust/priority score of the message.
+     * @param sharedFriends Number of friends shared with the peer.
+     * @param myFriends Total number of friends we have.
+     * @return The adjusted trust value for this peer.
+     */
+    private static double computeTrustForPeer(double priority, int sharedFriends, int myFriends) {
+        // Guard against division by zero.
+        if (myFriends <= 0) {
+            return EPSILON_TRUST;
+        }
+
+        // Compute fraction of friends.
+        double fraction = (double) sharedFriends / myFriends;
+
+        // Sigmoid function: 1 / (1 + e^(-rate * (input - cutoff)))
+        double trustMultiplier = 1.0 / (1.0 + Math.pow(Math.E, -SIGMOID_RATE * (fraction - SIGMOID_CUTOFF)));
+
+        // Add Gaussian noise for privacy.
+        trustMultiplier += NOISE_MEAN + TRUST_RANDOM.nextGaussian() * Math.sqrt(NOISE_VARIANCE);
+
+        // Truncate range to [0, 1].
+        trustMultiplier = Math.max(0.0, Math.min(1.0, trustMultiplier));
+
+        // Special case: no shared friends means minimal trust.
+        if (sharedFriends == 0) {
+            trustMultiplier = EPSILON_TRUST;
+        }
+
+        return priority * trustMultiplier;
     }
 
     /**
