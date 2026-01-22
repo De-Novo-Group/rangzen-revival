@@ -13,38 +13,14 @@ import org.junit.Test
 /**
  * Tests for E.164 phone number normalization logic.
  *
- * These tests verify that phone numbers are correctly normalized to
- * E.164 format for consistent friend matching across devices.
+ * These tests call the production PhoneUtils.manualNormalizeToE164() directly,
+ * ensuring test fidelity with the actual app behavior.
  */
 class ContactNormalizationTest {
 
-    companion object {
-        // Test helper that mimics the normalization logic from FriendsFragment
-        fun normalizeToE164(phoneNumber: String, defaultCountryCode: String = "1"): String? {
-            // Check for leading + before stripping
-            val hasPlus = phoneNumber.trimStart().startsWith("+")
-            // Remove all non-digit characters
-            val digits = phoneNumber.replace(Regex("[^\\d]"), "")
-            if (digits.isEmpty()) return null
-            
-            return when {
-                // Had a leading + - use digits as country code + number
-                hasPlus -> {
-                    if (digits.length < 10 || digits.length > 15) null
-                    else "+$digits"
-                }
-                // Has country code without +
-                digits.length > 10 -> {
-                    "+$digits"
-                }
-                // Local number - add default country code
-                digits.length == 10 -> {
-                    "+$defaultCountryCode$digits"
-                }
-                // Too short
-                else -> null
-            }
-        }
+    // Use production code directly - no local helpers
+    private fun normalizeToE164(phoneNumber: String, countryCode: String = "US"): String? {
+        return PhoneUtils.manualNormalizeToE164(phoneNumber, countryCode)
     }
 
     // ========================================================================
@@ -141,18 +117,39 @@ class ContactNormalizationTest {
     }
 
     // ========================================================================
-    // Default country code tests
+    // Country-specific normalization tests
     // ========================================================================
 
     @Test
-    fun `local number uses default country code`() {
-        val result = normalizeToE164("5551234567", "44")
-        assertEquals("+445551234567", result)
+    fun `UK local number with country code GB`() {
+        // UK 10-digit local number starting with 0
+        val result = normalizeToE164("07911123456", "GB")
+        assertEquals("+447911123456", result)
     }
 
     @Test
-    fun `e164 format ignores default country code`() {
-        val result = normalizeToE164("+15551234567", "44")
+    fun `Iranian local number with country code IR`() {
+        // Iranian local number
+        val result = normalizeToE164("09123456789", "IR")
+        assertEquals("+989123456789", result)
+    }
+
+    @Test
+    fun `e164 format ignores country code parameter`() {
+        val result = normalizeToE164("+15551234567", "GB")
         assertEquals("+15551234567", result)
+    }
+
+    // ========================================================================
+    // PhoneUtils.getCallingCodeForCountry tests
+    // ========================================================================
+
+    @Test
+    fun `getCallingCodeForCountry returns correct codes`() {
+        assertEquals("1", PhoneUtils.getCallingCodeForCountry("US"))
+        assertEquals("44", PhoneUtils.getCallingCodeForCountry("GB"))
+        assertEquals("98", PhoneUtils.getCallingCodeForCountry("IR"))
+        assertEquals("49", PhoneUtils.getCallingCodeForCountry("DE"))
+        assertNull(PhoneUtils.getCallingCodeForCountry("XX"))
     }
 }

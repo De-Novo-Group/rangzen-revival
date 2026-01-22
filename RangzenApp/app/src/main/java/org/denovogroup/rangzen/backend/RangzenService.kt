@@ -333,16 +333,15 @@ class RangzenService : Service() {
         // Allow when local store version has changed.
         val storeChanged = history.storeVersion != messageStore.getStoreVersion()
         if (storeChanged) return true
-        // Compute backoff delay for the current attempt count.
+        // Use centralized BackoffMath for consistent computation.
         val baseDelay = AppConfig.backoffAttemptMillis(this)
         val maxDelay = AppConfig.backoffMaxMillis(this)
-        val backoffDelay = kotlin.math.min(
-            Math.pow(2.0, history.attempts.toDouble()) * baseDelay,
-            maxDelay.toDouble()
+        return BackoffMath.isReadyForAttempt(
+            history.lastExchangeTime,
+            history.attempts,
+            baseDelay,
+            maxDelay
         )
-        // Allow exchange if sufficient time has passed.
-        val readyAt = history.lastExchangeTime + backoffDelay.toLong()
-        return System.currentTimeMillis() > readyAt
     }
 
     private fun shouldInitiateExchange(peer: DiscoveredPeer): Boolean {

@@ -9,89 +9,94 @@ package org.denovogroup.rangzen.backend
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.math.min
-import kotlin.math.pow
 
 /**
  * Tests for the exponential backoff logic used in peer exchange.
  *
- * The backoff mechanism prevents excessive retries with unresponsive peers
- * while still allowing eventual retry attempts.
+ * These tests call the production BackoffMath directly, ensuring test fidelity
+ * with the actual app behavior. Config values from config.json:
+ * - backoffAttemptMillis: 10000 (10 seconds)
+ * - backoffMaxMillis: 320000 (320 seconds / ~5.3 minutes)
  */
 class ExchangeBackoffTest {
 
     companion object {
-        // Default config values (matching AppConfig defaults)
-        private const val DEFAULT_BASE_DELAY_MS = 1000L  // 1 second
-        private const val DEFAULT_MAX_DELAY_MS = 60000L  // 60 seconds
-        
-        /**
-         * Compute backoff delay for a given attempt count.
-         * This mirrors the logic in RangzenService.shouldAttemptExchange.
-         */
-        fun computeBackoffDelay(attempts: Int, baseDelay: Long = DEFAULT_BASE_DELAY_MS, maxDelay: Long = DEFAULT_MAX_DELAY_MS): Long {
-            return min(
-                (2.0.pow(attempts.toDouble()) * baseDelay).toLong(),
-                maxDelay
-            )
-        }
+        // Config values from config.json - must match actual config!
+        private const val CONFIG_BASE_DELAY_MS = 10_000L  // 10 seconds
+        private const val CONFIG_MAX_DELAY_MS = 320_000L  // 320 seconds
+    }
+
+    // Use production code directly
+    private fun computeBackoffDelay(
+        attempts: Int,
+        baseDelay: Long = CONFIG_BASE_DELAY_MS,
+        maxDelay: Long = CONFIG_MAX_DELAY_MS
+    ): Long {
+        return BackoffMath.computeBackoffDelay(attempts, baseDelay, maxDelay)
     }
 
     // ========================================================================
-    // Basic backoff calculation tests
+    // Basic backoff calculation tests (using config: 10s base, 320s max)
     // ========================================================================
 
     @Test
     fun `zero attempts results in base delay`() {
         val delay = computeBackoffDelay(0)
-        // 2^0 * 1000 = 1000ms
-        assertEquals(1000L, delay)
+        // 2^0 * 10000 = 10000ms (10 seconds)
+        assertEquals(10_000L, delay)
     }
 
     @Test
     fun `one attempt doubles delay`() {
         val delay = computeBackoffDelay(1)
-        // 2^1 * 1000 = 2000ms
-        assertEquals(2000L, delay)
+        // 2^1 * 10000 = 20000ms (20 seconds)
+        assertEquals(20_000L, delay)
     }
 
     @Test
     fun `two attempts quadruples delay`() {
         val delay = computeBackoffDelay(2)
-        // 2^2 * 1000 = 4000ms
-        assertEquals(4000L, delay)
+        // 2^2 * 10000 = 40000ms (40 seconds)
+        assertEquals(40_000L, delay)
     }
 
     @Test
     fun `three attempts octuples delay`() {
         val delay = computeBackoffDelay(3)
-        // 2^3 * 1000 = 8000ms
-        assertEquals(8000L, delay)
+        // 2^3 * 10000 = 80000ms (80 seconds)
+        assertEquals(80_000L, delay)
     }
 
     // ========================================================================
-    // Max delay capping tests
+    // Max delay capping tests (config max: 320 seconds)
     // ========================================================================
 
     @Test
     fun `delay is capped at max`() {
-        // 2^10 * 1000 = 1024000, but max is 60000
+        // 2^10 * 10000 = 10240000, but max is 320000
         val delay = computeBackoffDelay(10)
-        assertEquals(DEFAULT_MAX_DELAY_MS, delay)
+        assertEquals(CONFIG_MAX_DELAY_MS, delay)
     }
 
     @Test
     fun `delay reaches max at six attempts`() {
-        // 2^6 * 1000 = 64000, which exceeds max of 60000
+        // 2^6 * 10000 = 640000, which exceeds max of 320000
         val delay = computeBackoffDelay(6)
-        assertEquals(DEFAULT_MAX_DELAY_MS, delay)
+        assertEquals(CONFIG_MAX_DELAY_MS, delay)
     }
 
     @Test
     fun `five attempts is under max`() {
-        // 2^5 * 1000 = 32000, under max of 60000
+        // 2^5 * 10000 = 320000, exactly at max
         val delay = computeBackoffDelay(5)
-        assertEquals(32000L, delay)
+        assertEquals(320_000L, delay)
+    }
+    
+    @Test
+    fun `four attempts is under max`() {
+        // 2^4 * 10000 = 160000 (160 seconds), under max of 320000
+        val delay = computeBackoffDelay(4)
+        assertEquals(160_000L, delay)
     }
 
     // ========================================================================
@@ -101,7 +106,7 @@ class ExchangeBackoffTest {
     @Test
     fun `backoff grows exponentially`() {
         var previous = 0L
-        for (attempts in 0..5) {
+        for (attempts in 0..4) {  // Up to 4 to stay under max
             val delay = computeBackoffDelay(attempts)
             assertTrue(
                 "Backoff should grow: attempts=$attempts delay=$delay previous=$previous",
@@ -113,7 +118,7 @@ class ExchangeBackoffTest {
 
     @Test
     fun `backoff is exactly 2x previous before max`() {
-        for (attempts in 1..4) {
+        for (attempts in 1..4) {  // Up to 4 to stay under max
             val current = computeBackoffDelay(attempts)
             val previous = computeBackoffDelay(attempts - 1)
             assertEquals(
@@ -125,26 +130,26 @@ class ExchangeBackoffTest {
     }
 
     // ========================================================================
-    // Custom config tests
+    // Custom config tests (verifies BackoffMath works with any values)
     // ========================================================================
 
     @Test
     fun `custom base delay changes scale`() {
-        val delay = computeBackoffDelay(2, baseDelay = 500L)
+        val delay = BackoffMath.computeBackoffDelay(2, 500L, 60_000L)
         // 2^2 * 500 = 2000ms
         assertEquals(2000L, delay)
     }
 
     @Test
     fun `custom max delay caps correctly`() {
-        val delay = computeBackoffDelay(10, maxDelay = 10000L)
-        assertEquals(10000L, delay)
+        val delay = BackoffMath.computeBackoffDelay(10, 1000L, 10_000L)
+        assertEquals(10_000L, delay)
     }
 
     @Test
     fun `very high attempt count stays at max`() {
         val delay = computeBackoffDelay(100)
-        assertEquals(DEFAULT_MAX_DELAY_MS, delay)
+        assertEquals(CONFIG_MAX_DELAY_MS, delay)
     }
 
     // ========================================================================
@@ -152,17 +157,39 @@ class ExchangeBackoffTest {
     // ========================================================================
 
     @Test
-    fun `negative attempts treated as zero`() {
-        // While negative attempts shouldn't happen in practice,
-        // 2^(-1) = 0.5, so result would be 500ms
+    fun `negative attempts returns base delay`() {
+        // BackoffMath handles negative attempts by returning base delay
         val delay = computeBackoffDelay(-1)
-        // This tests the actual math behavior
-        assertTrue("Negative attempts should produce valid delay", delay > 0)
+        assertEquals(CONFIG_BASE_DELAY_MS, delay)
     }
 
     @Test
     fun `base delay of zero results in zero delay`() {
-        val delay = computeBackoffDelay(5, baseDelay = 0L)
+        val delay = BackoffMath.computeBackoffDelay(5, 0L, CONFIG_MAX_DELAY_MS)
         assertEquals(0L, delay)
+    }
+
+    // ========================================================================
+    // isReadyForAttempt tests
+    // ========================================================================
+
+    @Test
+    fun `isReadyForAttempt returns true when enough time passed`() {
+        val lastExchange = System.currentTimeMillis() - 15_000L  // 15 seconds ago
+        val isReady = BackoffMath.isReadyForAttempt(
+            lastExchange, 0, CONFIG_BASE_DELAY_MS, CONFIG_MAX_DELAY_MS
+        )
+        // First attempt needs 10s backoff, 15s has passed
+        assertTrue("Should be ready after 15s for first attempt (10s backoff)", isReady)
+    }
+
+    @Test
+    fun `isReadyForAttempt returns false when not enough time passed`() {
+        val lastExchange = System.currentTimeMillis() - 5_000L  // 5 seconds ago
+        val isReady = BackoffMath.isReadyForAttempt(
+            lastExchange, 0, CONFIG_BASE_DELAY_MS, CONFIG_MAX_DELAY_MS
+        )
+        // First attempt needs 10s backoff, only 5s has passed
+        assertTrue("Should not be ready after 5s for first attempt (10s backoff)", !isReady)
     }
 }

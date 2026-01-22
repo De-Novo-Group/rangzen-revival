@@ -38,6 +38,7 @@ import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.Crypto
 import org.denovogroup.rangzen.backend.Friend
 import org.denovogroup.rangzen.backend.FriendStore
+import org.denovogroup.rangzen.backend.PhoneUtils
 import org.denovogroup.rangzen.databinding.FragmentFriendsBinding
 import java.util.Locale
 
@@ -330,68 +331,10 @@ class FriendsFragment : Fragment() {
 
     /**
      * Manual phone number normalization as fallback.
-     * Strips all non-digit characters and attempts to add country code.
+     * Delegates to PhoneUtils for testable implementation.
      */
     private fun manualNormalizePhoneNumber(rawNumber: String, countryCode: String): String? {
-        // Strip all non-digit characters except leading +
-        val hasPlus = rawNumber.trimStart().startsWith("+")
-        val digitsOnly = rawNumber.replace(Regex("[^0-9]"), "")
-
-        if (digitsOnly.isEmpty()) {
-            return null
-        }
-
-        // If already has country code (starts with +), just clean it up
-        if (hasPlus) {
-            return "+$digitsOnly"
-        }
-
-        // Try to add country code based on number length and format
-        return when (countryCode.uppercase(Locale.US)) {
-            "US", "CA" -> {
-                // North American Numbering Plan
-                when {
-                    digitsOnly.length == 10 -> "+1$digitsOnly"
-                    digitsOnly.length == 11 && digitsOnly.startsWith("1") -> "+$digitsOnly"
-                    else -> "+$digitsOnly" // Best effort
-                }
-            }
-            else -> {
-                // For other countries, try to find the country calling code
-                val callingCode = getCallingCodeForCountry(countryCode)
-                if (callingCode != null && !digitsOnly.startsWith(callingCode)) {
-                    "+$callingCode$digitsOnly"
-                } else {
-                    "+$digitsOnly"
-                }
-            }
-        }
-    }
-
-    /**
-     * Get the calling code for a country ISO code.
-     * Returns common codes; extends as needed.
-     */
-    private fun getCallingCodeForCountry(countryIso: String): String? {
-        return when (countryIso.uppercase(Locale.US)) {
-            "US", "CA" -> "1"
-            "GB" -> "44"
-            "DE" -> "49"
-            "FR" -> "33"
-            "IT" -> "39"
-            "ES" -> "34"
-            "AU" -> "61"
-            "JP" -> "81"
-            "CN" -> "86"
-            "IN" -> "91"
-            "BR" -> "55"
-            "MX" -> "52"
-            "IR" -> "98"  // Iran - relevant for Farsi localization
-            "AF" -> "93"  // Afghanistan
-            "PK" -> "92"  // Pakistan
-            "TR" -> "90"  // Turkey
-            else -> null
-        }
+        return PhoneUtils.manualNormalizeToE164(rawNumber, countryCode)
     }
 
     private fun observeFriends() {
