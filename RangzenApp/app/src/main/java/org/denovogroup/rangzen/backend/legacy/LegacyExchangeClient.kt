@@ -14,9 +14,12 @@ import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.ble.BleScanner
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.denovogroup.rangzen.objects.RangzenMessage
 import org.json.JSONObject
 import timber.log.Timber
+import java.security.MessageDigest
 
 class LegacyExchangeClient(
     private val context: Context,
@@ -25,6 +28,12 @@ class LegacyExchangeClient(
 ) {
 
     suspend fun exchangeWithPeer(bleScanner: BleScanner, peer: DiscoveredPeer): LegacyExchangeResult? {
+        val startTime = System.currentTimeMillis()
+        val peerIdHash = sha256(peer.address)
+
+        // Track exchange start
+        TelemetryClient.getInstance()?.trackExchangeStart(peerIdHash, TelemetryEvent.TRANSPORT_BLE)
+
         return withTimeout(AppConfig.exchangeSessionTimeoutMs(context)) {
             try {
                 // Decide whether to use the trust/PSI pipeline.
@@ -99,6 +108,17 @@ class LegacyExchangeClient(
 
                 mergeIncomingMessages(receivedMessages, commonFriends)
 
+                // Track exchange success
+                val durationMs = System.currentTimeMillis() - startTime
+                TelemetryClient.getInstance()?.trackExchangeSuccess(
+                    peerIdHash = peerIdHash,
+                    transport = TelemetryEvent.TRANSPORT_BLE,
+                    durationMs = durationMs,
+                    messagesSent = outboundMessages.size,
+                    messagesReceived = receivedMessages.size,
+                    mutualFriends = commonFriends
+                )
+
                 LegacyExchangeResult(
                     commonFriends = commonFriends,
                     messagesSent = outboundMessages.size,
@@ -106,9 +126,22 @@ class LegacyExchangeClient(
                 )
             } catch (e: Exception) {
                 Timber.e(e, "Legacy exchange failed with ${peer.address}")
+                // Track exchange failure
+                val durationMs = System.currentTimeMillis() - startTime
+                TelemetryClient.getInstance()?.trackExchangeFailure(
+                    peerIdHash = peerIdHash,
+                    transport = TelemetryEvent.TRANSPORT_BLE,
+                    error = e.message ?: "Unknown error",
+                    durationMs = durationMs
+                )
                 null
             }
         }
+    }
+
+    private fun sha256(input: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
     }
 
     private suspend fun sendFrame(

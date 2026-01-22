@@ -70,6 +70,8 @@ object AppConfig {
     private const val KEY_TELEMETRY_BATCH_SIZE = "telemetryBatchSize"
     // JSON key for telemetry flush interval.
     private const val KEY_TELEMETRY_FLUSH_INTERVAL_MS = "telemetryFlushIntervalMs"
+    // JSON key for telemetry API token.
+    private const val KEY_TELEMETRY_API_TOKEN = "telemetryApiToken"
 
     // Cached JSON config to avoid repeated disk reads.
     @Volatile
@@ -451,5 +453,13 @@ object AppConfig {
     fun telemetryFlushIntervalMs(context: Context): Long {
         val config = loadConfig(context)
         return config.optLong(KEY_TELEMETRY_FLUSH_INTERVAL_MS, 60000L)
+    }
+
+    /**
+     * Read telemetry API token.
+     */
+    fun telemetryApiToken(context: Context): String {
+        val config = loadConfig(context)
+        return config.optString(KEY_TELEMETRY_API_TOKEN, "")
     }
 }

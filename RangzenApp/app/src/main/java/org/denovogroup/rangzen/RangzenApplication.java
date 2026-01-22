@@ -47,13 +47,15 @@ public class RangzenApplication extends Application {
     private void initializeTelemetry() {
         String serverUrl = AppConfig.INSTANCE.telemetryServerUrl(this);
         if (serverUrl == null || serverUrl.isEmpty()) {
-            // Use a placeholder - telemetry won't work without a real server
-            serverUrl = "https://telemetry.example.com";
+            Timber.w("Telemetry server URL not configured, telemetry disabled");
+            return;
         }
 
-        // API token would normally come from secure storage
-        // For now, use empty string - server calls will fail gracefully
-        String apiToken = "";
+        String apiToken = AppConfig.INSTANCE.telemetryApiToken(this);
+        if (apiToken == null || apiToken.isEmpty()) {
+            Timber.w("Telemetry API token not configured, telemetry disabled");
+            return;
+        }
 
         TelemetryClient client = TelemetryClient.Companion.init(this, serverUrl, apiToken);
 
