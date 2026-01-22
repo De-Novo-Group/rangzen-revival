@@ -17,8 +17,10 @@ import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.databinding.FragmentComposeBinding
 import org.denovogroup.rangzen.objects.RangzenMessage
+import java.security.MessageDigest
 
 /**
  * Fragment for composing new messages.
@@ -112,6 +114,11 @@ class ComposeFragment : Fragment() {
         }
 
         if (messageStore.addMessage(message)) {
+            // Track message composition
+            TelemetryClient.getInstance()?.trackMessageComposed(
+                messageIdHash = sha256(message.messageId),
+                textLength = message.text?.length ?: 0
+            )
             Toast.makeText(context, "Message sent to the mesh network", Toast.LENGTH_SHORT).show()
             // Trigger an immediate outbound exchange attempt after local send.
             forceOutboundExchange()
@@ -141,5 +148,11 @@ class ComposeFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    private fun sha256(input: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hashBytes = digest.digest(input.toByteArray())
+        return hashBytes.joinToString("") { "%02x".format(it) }
     }
 }

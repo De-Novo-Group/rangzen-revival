@@ -96,8 +96,19 @@ class LegacyExchangeClient(
 
                 for (i in 0 until rounds) {
                     val outbound = if (i < outboundMessages.size) {
+                        val msg = outboundMessages[i]
+                        // Track message sent
+                        TelemetryClient.getInstance()?.trackMessageSent(
+                            peerIdHash = peerIdHash,
+                            transport = TelemetryEvent.TRANSPORT_BLE,
+                            messageIdHash = sha256(msg.messageId),
+                            hopCount = msg.hopCount,
+                            trustScore = msg.trustScore,
+                            priority = msg.priority,
+                            ageMs = System.currentTimeMillis() - msg.timestamp
+                        )
                         // Pass shared friend context for per-peer trust computation.
-                        listOf(LegacyExchangeCodec.encodeMessage(context, outboundMessages[i], commonFriends, myFriends))
+                        listOf(LegacyExchangeCodec.encodeMessage(context, msg, commonFriends, myFriends))
                     } else {
                         emptyList()
                     }
@@ -105,7 +116,19 @@ class LegacyExchangeClient(
                     val messageResponse = sendFrame(bleScanner, peer, messageRequest) ?: continue
                     val remoteClient = LegacyExchangeCodec.decodeClientMessage(messageResponse)
                     for (json in remoteClient.messages) {
-                        receivedMessages.add(LegacyExchangeCodec.decodeMessage(json))
+                        val msg = LegacyExchangeCodec.decodeMessage(json)
+                        val isNew = !messageStore.hasMessage(msg.messageId)
+                        // Track message received
+                        TelemetryClient.getInstance()?.trackMessageReceived(
+                            peerIdHash = peerIdHash,
+                            transport = TelemetryEvent.TRANSPORT_BLE,
+                            messageIdHash = sha256(msg.messageId),
+                            hopCount = msg.hopCount,
+                            trustScore = msg.trustScore,
+                            priority = msg.priority,
+                            isNew = isNew
+                        )
+                        receivedMessages.add(msg)
                     }
                 }
 

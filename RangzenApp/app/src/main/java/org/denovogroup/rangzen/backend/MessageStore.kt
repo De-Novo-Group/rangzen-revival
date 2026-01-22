@@ -168,6 +168,13 @@ class MessageStore private constructor(context: Context) :
     }
 
     /**
+     * Check if a message exists in the store.
+     */
+    fun hasMessage(messageId: String): Boolean {
+        return getMessage(messageId) != null
+    }
+
+    /**
      * Get a message by its ID.
      */
     fun getMessage(messageId: String): RangzenMessage? {

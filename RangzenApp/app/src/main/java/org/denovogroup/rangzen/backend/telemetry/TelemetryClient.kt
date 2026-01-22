@@ -193,6 +193,93 @@ class TelemetryClient private constructor(
     }
 
     /**
+     * Track a message sent during exchange.
+     * Tracks message propagation details without PII.
+     *
+     * @param peerIdHash Hashed peer identifier
+     * @param transport Transport type (BLE, WiFi, etc.)
+     * @param messageIdHash Hashed message ID (SHA-256 of messageId)
+     * @param hopCount Number of hops this message has traveled
+     * @param trustScore Trust score of the message (0.0-1.0)
+     * @param priority Message priority
+     * @param ageMs Age of message in milliseconds
+     */
+    fun trackMessageSent(
+        peerIdHash: String,
+        transport: String,
+        messageIdHash: String,
+        hopCount: Int,
+        trustScore: Double,
+        priority: Int,
+        ageMs: Long
+    ) {
+        track(
+            TelemetryEvent.TYPE_MESSAGE_SENT,
+            peerIdHash,
+            transport,
+            mapOf(
+                "message_id_hash" to messageIdHash,
+                "hop_count" to hopCount,
+                "trust_score" to trustScore,
+                "priority" to priority,
+                "age_ms" to ageMs
+            )
+        )
+    }
+
+    /**
+     * Track a message received during exchange.
+     *
+     * @param peerIdHash Hashed peer identifier
+     * @param transport Transport type
+     * @param messageIdHash Hashed message ID
+     * @param hopCount Number of hops
+     * @param trustScore Trust score
+     * @param priority Message priority
+     * @param isNew True if this is a new message, false if already known
+     */
+    fun trackMessageReceived(
+        peerIdHash: String,
+        transport: String,
+        messageIdHash: String,
+        hopCount: Int,
+        trustScore: Double,
+        priority: Int,
+        isNew: Boolean
+    ) {
+        track(
+            TelemetryEvent.TYPE_MESSAGE_RECEIVED,
+            peerIdHash,
+            transport,
+            mapOf(
+                "message_id_hash" to messageIdHash,
+                "hop_count" to hopCount,
+                "trust_score" to trustScore,
+                "priority" to priority,
+                "is_new" to isNew
+            )
+        )
+    }
+
+    /**
+     * Track a locally composed message.
+     *
+     * @param messageIdHash Hashed message ID
+     * @param textLength Length of message text
+     */
+    fun trackMessageComposed(messageIdHash: String, textLength: Int) {
+        track(
+            TelemetryEvent.TYPE_MESSAGE_COMPOSED,
+            null,
+            null,
+            mapOf(
+                "message_id_hash" to messageIdHash,
+                "text_length" to textLength
+            )
+        )
+    }
+
+    /**
      * Trigger an immediate flush of queued events.
      */
     fun flush() {

@@ -38,6 +38,11 @@ data class TelemetryEvent(
         const val TYPE_EXCHANGE_SUCCESS = "exchange_success"
         const val TYPE_EXCHANGE_FAILURE = "exchange_failure"
 
+        // Event types for message propagation
+        const val TYPE_MESSAGE_SENT = "message_sent"
+        const val TYPE_MESSAGE_RECEIVED = "message_received"
+        const val TYPE_MESSAGE_COMPOSED = "message_composed"
+
         // Event types for peer discovery
         const val TYPE_PEER_DISCOVERED = "peer_discovered"
         const val TYPE_PEER_CONNECTED = "peer_connected"
