@@ -9,6 +9,7 @@ package org.denovogroup.rangzen.backend.legacy
 import android.content.Context
 import android.util.Base64
 import org.denovogroup.rangzen.backend.AppConfig
+import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.objects.RangzenMessage
 import org.json.JSONArray
 import org.json.JSONObject
@@ -122,6 +123,10 @@ object LegacyExchangeCodec {
      * This matches Casific's approach where trust is recomputed per-peer using the
      * sigmoid+noise formula based on shared friend count.
      *
+     * Security-related settings (useTrust, includePseudonym, shareLocation) come from
+     * SecurityManager's current SecurityProfile (user-configurable).
+     * Technical constants (trustNoiseVariance) come from AppConfig/config.json.
+     *
      * @param context Application context for config values.
      * @param message The message to encode.
      * @param sharedFriends Number of friends shared with the exchange peer.
@@ -133,9 +138,11 @@ object LegacyExchangeCodec {
         sharedFriends: Int,
         myFriends: Int
     ): JSONObject {
-        val includeTrust = AppConfig.useTrust(context)
-        val includePseudonym = AppConfig.includePseudonym(context)
-        val shareLocation = AppConfig.shareLocation(context)
+        // User-configurable settings from SecurityManager (respects current SecurityProfile)
+        val includeTrust = SecurityManager.useTrust(context)
+        val includePseudonym = SecurityManager.includePseudonym(context)
+        val shareLocation = SecurityManager.shareLocation(context)
+        // Technical constant from config.json (Casific VAR = 0.1, fixed)
         val trustNoiseVariance = AppConfig.trustNoiseVariance(context)
         // Use the full toLegacyJson signature with per-peer trust recomputation.
         return message.toLegacyJson(

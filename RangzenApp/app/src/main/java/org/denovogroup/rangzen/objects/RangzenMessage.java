@@ -34,6 +34,9 @@ public class RangzenMessage {
     /** Whether the current user has endorsed this message */
     private boolean liked;
     
+    /** Message priority for ordering (wire format compatibility with Casific) */
+    private int priority;
+    
     /** Anonymous pseudonym of the sender */
     private String pseudonym;
     
@@ -103,6 +106,7 @@ public class RangzenMessage {
         this.read = false;
         this.liked = false;
         this.likes = 0;
+        this.priority = 0; // Casific DEFAULT_PRIORITY = 0
     }
 
     /**
@@ -155,6 +159,14 @@ public class RangzenMessage {
 
     public void setLikes(int likes) {
         this.likes = Math.max(0, likes);
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = Math.max(0, priority);
     }
 
     public boolean isLiked() {
@@ -297,9 +309,10 @@ public class RangzenMessage {
         return trustComponent + recencyComponent + likesComponent;
     }
 
-    // Casific trust model constants.
+    // Casific trust model constants (Person.java simulation).
+    // MEAN = 0.0, VAR = 0.1 per the original Casific implementation.
     private static final double EPSILON_TRUST = 0.001;
-    private static final double NOISE_MEAN = 0.2;
+    private static final double NOISE_MEAN = 0.0;
     private static final double NOISE_VARIANCE = 0.1;
     private static final double SIGMOID_CUTOFF = 0.3;
     private static final double SIGMOID_RATE = 13.0;
@@ -353,7 +366,7 @@ public class RangzenMessage {
             // Required fields.
             result.put(MESSAGE_ID_KEY, messageId);
             result.put(TEXT_KEY, text);
-            result.put(PRIORITY_KEY, likes);
+            result.put(PRIORITY_KEY, priority);  // Wire format: message priority (not likes)
             result.put(HOP_KEY, hopCount + 1);
             result.put(MIN_USERS_P_HOP_KEY, minContactsForHop);
             // Optional parent linkage.
@@ -452,7 +465,7 @@ public class RangzenMessage {
         message.setMessageId(messageId);
         message.setText(text);
         message.setTrustScore(json.optDouble(TRUST_KEY, LEGACY_DEFAULT_TRUST));
-        message.setLikes(json.optInt(PRIORITY_KEY, 0));
+        message.setPriority(json.optInt(PRIORITY_KEY, 0));  // Wire format: message priority
         message.setPseudonym(json.optString(PSEUDONYM_KEY, null));
         message.setLatLong(json.optString(LATLONG_KEY, null));
         message.setExpirationTime(json.optLong(TIMEBOUND_KEY, 0L));

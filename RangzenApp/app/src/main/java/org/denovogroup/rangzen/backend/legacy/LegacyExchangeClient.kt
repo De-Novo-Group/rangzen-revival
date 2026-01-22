@@ -195,8 +195,9 @@ object LegacyExchangeMath {
     // Minimum trust for strangers (no shared friends).
     private const val EPSILON_TRUST = 0.001
 
-    // Gaussian noise parameters from Casific.
-    private const val NOISE_MEAN = 0.2
+    // Gaussian noise parameters from Casific (Person.java simulation).
+    // MEAN = 0.0, VAR = 0.1 per the original Casific implementation.
+    private const val NOISE_MEAN = 0.0
     private const val NOISE_VARIANCE = 0.1
 
     // Sigmoid parameters from Casific.

@@ -38,7 +38,11 @@ import java.security.NoSuchAlgorithmException
  * - Privacy: Friend lists are never revealed
  * - Sybil resistance: More mutual friends = higher trust
  * - Efficiency: High-priority messages sent first
+ *
+ * @deprecated This class is not used. Use [LegacyExchangeClient] and [LegacyExchangeServer] instead
+ * which implement the actual wire-compatible Casific/Murmur protocol.
  */
+@Deprecated("Unused - use LegacyExchangeClient/LegacyExchangeServer instead")
 class Exchange(
     private val inputStream: InputStream,
     private val outputStream: OutputStream,
@@ -318,9 +322,10 @@ class Exchange(
         private const val EXCHANGE_TIMEOUT_MS = 60_000L
         private const val PROTOCOL_VERSION = 2
 
-        // Casific trust model constants.
+        // Casific trust model constants (Person.java simulation).
+        // MEAN = 0.0, VAR = 0.1 per the original Casific implementation.
         private const val EPSILON_TRUST = 0.001
-        private const val NOISE_MEAN = 0.2
+        private const val NOISE_MEAN = 0.0
         private const val NOISE_VARIANCE = 0.1
         private const val SIGMOID_CUTOFF = 0.3
         private const val SIGMOID_RATE = 13.0

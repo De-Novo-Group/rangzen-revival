@@ -361,8 +361,8 @@ class LegacyExchangeMathTest {
 
     @Test
     fun `results cluster around expected mean`() {
-        // With 50% shared friends, sigmoid ≈ 0.93, plus noise mean 0.2, clamped to 1.0
-        // So we expect results to cluster near the upper bound
+        // With 50% shared friends, sigmoid ≈ 0.93, plus noise (mean 0.0, variance 0.1)
+        // So we expect results to cluster around sigmoid value
         var sum = 0.0
         val iterations = 100
 
@@ -375,7 +375,7 @@ class LegacyExchangeMathTest {
         }
 
         val average = sum / iterations
-        // With sigmoid(0.5) ≈ 0.93 and noise mean 0.2, most values should be clamped to 1.0
+        // With sigmoid(0.5) ≈ 0.93 and noise (mean 0.0, var 0.1), values cluster around 0.93
         assertTrue(
             "Average should be high (> 0.8) with 50% shared friends, was $average",
             average > 0.8
