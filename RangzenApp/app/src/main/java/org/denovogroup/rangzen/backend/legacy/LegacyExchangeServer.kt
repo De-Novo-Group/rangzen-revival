@@ -12,9 +12,12 @@ import org.denovogroup.rangzen.backend.AppConfig
 import org.denovogroup.rangzen.backend.Crypto
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.denovogroup.rangzen.objects.RangzenMessage
 import org.json.JSONObject
 import timber.log.Timber
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 class LegacyExchangeServer(
@@ -160,11 +163,24 @@ private class LegacyExchangeSession(
     }
 
     private fun handleMessage(json: JSONObject): JSONObject {
+        val peerIdHash = sha256(address)
         val remote = LegacyExchangeCodec.decodeClientMessage(json)
         if (remote.messages.isNotEmpty()) {
             val incoming = ArrayList<RangzenMessage>()
             for (item in remote.messages) {
-                incoming.add(LegacyExchangeCodec.decodeMessage(item))
+                val msg = LegacyExchangeCodec.decodeMessage(item)
+                val isNew = !messageStore.hasMessage(msg.messageId)
+                // Track message received
+                TelemetryClient.getInstance()?.trackMessageReceived(
+                    peerIdHash = peerIdHash,
+                    transport = TelemetryEvent.TRANSPORT_BLE,
+                    messageIdHash = sha256(msg.messageId),
+                    hopCount = msg.hopCount,
+                    trustScore = msg.trustScore,
+                    priority = msg.priority,
+                    isNew = isNew
+                )
+                incoming.add(msg)
             }
             mergeIncomingMessages(incoming)
             receivedMessages += incoming.size
@@ -174,10 +190,21 @@ private class LegacyExchangeSession(
         val myFriends = friendStore.getAllFriendIds().size
 
         val nextOutbound = if (outgoingIndex < outgoingMessages.size) {
+            val msg = outgoingMessages[outgoingIndex]
+            // Track message sent
+            TelemetryClient.getInstance()?.trackMessageSent(
+                peerIdHash = peerIdHash,
+                transport = TelemetryEvent.TRANSPORT_BLE,
+                messageIdHash = sha256(msg.messageId),
+                hopCount = msg.hopCount,
+                trustScore = msg.trustScore,
+                priority = msg.priority,
+                ageMs = System.currentTimeMillis() - msg.timestamp
+            )
             // Pass shared friend context for per-peer trust computation.
             val messageJson = LegacyExchangeCodec.encodeMessage(
                 context,
-                outgoingMessages[outgoingIndex],
+                msg,
                 commonFriends,
                 myFriends
             )
@@ -192,6 +219,12 @@ private class LegacyExchangeSession(
         }
 
         return LegacyExchangeCodec.encodeClientMessage(nextOutbound, emptyList())
+    }
+
+    private fun sha256(input: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hashBytes = digest.digest(input.toByteArray())
+        return hashBytes.joinToString("") { "%02x".format(it) }
     }
 
     private fun mergeIncomingMessages(messages: List<RangzenMessage>) {
