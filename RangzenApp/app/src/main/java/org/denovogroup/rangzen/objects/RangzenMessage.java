@@ -309,11 +309,11 @@ public class RangzenMessage {
         return trustComponent + recencyComponent + likesComponent;
     }
 
-    // Casific trust model constants (Person.java simulation).
-    // MEAN = 0.0, VAR = 0.1 per the original Casific implementation.
+    // Casific trust model constants (MurmurMessage.java app design).
+    // MEAN = 0.0, VAR = 0.003 per Casific's production app.
     private static final double EPSILON_TRUST = 0.001;
     private static final double NOISE_MEAN = 0.0;
-    private static final double NOISE_VARIANCE = 0.1;
+    private static final double NOISE_VARIANCE = 0.003;
     private static final double SIGMOID_CUTOFF = 0.3;
     private static final double SIGMOID_RATE = 13.0;
 

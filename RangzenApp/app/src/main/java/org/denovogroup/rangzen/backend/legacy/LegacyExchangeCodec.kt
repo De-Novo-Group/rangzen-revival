@@ -8,7 +8,6 @@ package org.denovogroup.rangzen.backend.legacy
 
 import android.content.Context
 import android.util.Base64
-import org.denovogroup.rangzen.backend.AppConfig
 import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.objects.RangzenMessage
 import org.json.JSONArray
@@ -21,6 +20,10 @@ object LegacyExchangeCodec {
 
     private const val LENGTH_PREFIX_BYTES = 4
     private const val MESSAGE_COUNT_KEY = "count"
+    
+    // Trust noise variance hard-locked to Casific's MurmurMessage.java design (VAR = 0.003).
+    // Not configurable - this is a security constant aligned with the original app.
+    private const val TRUST_NOISE_VARIANCE = 0.003
 
     fun encodeLengthValue(message: JSONObject): ByteArray {
         val payload = message.toString().toByteArray()
@@ -125,7 +128,7 @@ object LegacyExchangeCodec {
      *
      * Security-related settings (useTrust, includePseudonym, shareLocation) come from
      * SecurityManager's current SecurityProfile (user-configurable).
-     * Technical constants (trustNoiseVariance) come from AppConfig/config.json.
+     * Technical constants (trustNoiseVariance) are hard-locked to Casific's design (0.003).
      *
      * @param context Application context for config values.
      * @param message The message to encode.
@@ -142,8 +145,9 @@ object LegacyExchangeCodec {
         val includeTrust = SecurityManager.useTrust(context)
         val includePseudonym = SecurityManager.includePseudonym(context)
         val shareLocation = SecurityManager.shareLocation(context)
-        // Technical constant from config.json (Casific VAR = 0.1, fixed)
-        val trustNoiseVariance = AppConfig.trustNoiseVariance(context)
+        // Hard-locked to Casific's MurmurMessage.java value (VAR = 0.003).
+        // This is intentionally not configurable to match Casific's design.
+        val trustNoiseVariance = TRUST_NOISE_VARIANCE
         // Use the full toLegacyJson signature with per-peer trust recomputation.
         return message.toLegacyJson(
             includePseudonym,

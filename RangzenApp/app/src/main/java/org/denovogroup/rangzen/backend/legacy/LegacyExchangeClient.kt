@@ -12,6 +12,7 @@ import org.denovogroup.rangzen.backend.AppConfig
 import org.denovogroup.rangzen.backend.Crypto
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
+import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.backend.ble.BleScanner
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
@@ -36,8 +37,8 @@ class LegacyExchangeClient(
 
         return withTimeout(AppConfig.exchangeSessionTimeoutMs(context)) {
             try {
-                // Decide whether to use the trust/PSI pipeline.
-                val useTrust = AppConfig.useTrust(context)
+                // Decide whether to use the trust/PSI pipeline (from SecurityManager profile).
+                val useTrust = SecurityManager.useTrust(context)
                 val localFriends = friendStore.getAllFriendIds()
                 val clientPSI = Crypto.PrivateSetIntersection(localFriends)
                 val serverPSI = Crypto.PrivateSetIntersection(localFriends)
@@ -73,8 +74,8 @@ class LegacyExchangeClient(
                     0
                 }
 
-                // Enforce minimum shared contacts when trust is enabled.
-                val minSharedContacts = AppConfig.minSharedContactsForExchange(context)
+                // Enforce minimum shared contacts when trust is enabled (from SecurityManager profile).
+                val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)
                 if (useTrust && commonFriends < minSharedContacts) {
                     Timber.w(
                         "Exchange rejected: sharedContacts=$commonFriends " +
@@ -83,7 +84,7 @@ class LegacyExchangeClient(
                     return@withTimeout null
                 }
 
-                val maxMessages = AppConfig.maxMessagesPerExchange(context)
+                val maxMessages = SecurityManager.maxMessagesPerExchange(context)
                 val outboundMessages = messageStore.getMessagesForExchange(commonFriends, maxMessages)
                 val countRequest = LegacyExchangeCodec.encodeExchangeInfo(outboundMessages.size)
                 val countResponse = sendFrame(bleScanner, peer, countRequest) ?: return@withTimeout null
@@ -218,10 +219,10 @@ object LegacyExchangeMath {
     // Minimum trust for strangers (no shared friends).
     private const val EPSILON_TRUST = 0.001
 
-    // Gaussian noise parameters from Casific (Person.java simulation).
-    // MEAN = 0.0, VAR = 0.1 per the original Casific implementation.
+    // Gaussian noise parameters from Casific (MurmurMessage.java app design).
+    // MEAN = 0.0, VAR = 0.003 per Casific's production app.
     private const val NOISE_MEAN = 0.0
-    private const val NOISE_VARIANCE = 0.1
+    private const val NOISE_VARIANCE = 0.003
 
     // Sigmoid parameters from Casific.
     private const val SIGMOID_CUTOFF = 0.3

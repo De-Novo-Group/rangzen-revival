@@ -11,6 +11,7 @@ import android.content.Context
 import org.denovogroup.rangzen.backend.AppConfig
 import org.denovogroup.rangzen.backend.Crypto
 import org.denovogroup.rangzen.backend.FriendStore
+import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
@@ -100,8 +101,8 @@ private class LegacyExchangeSession(
     }
 
     private fun handleClientFriends(json: JSONObject): JSONObject {
-        // Honor trust settings to match legacy behavior.
-        val useTrust = AppConfig.useTrust(context)
+        // Honor trust settings from SecurityManager profile.
+        val useTrust = SecurityManager.useTrust(context)
         val clientMessage = LegacyExchangeCodec.decodeClientMessage(json)
         remoteBlindedFriends = if (useTrust) clientMessage.blindedFriends else emptyList()
 
@@ -121,8 +122,8 @@ private class LegacyExchangeSession(
     private fun handleServerMessage(json: JSONObject): JSONObject {
         val server = serverPSI ?: throw IllegalStateException("Server PSI missing for $address")
         val client = clientPSI ?: throw IllegalStateException("Client PSI missing for $address")
-        // Honor trust settings to match legacy behavior.
-        val useTrust = AppConfig.useTrust(context)
+        // Honor trust settings from SecurityManager profile.
+        val useTrust = SecurityManager.useTrust(context)
         val remoteServer = LegacyExchangeCodec.decodeServerMessage(json)
         val serverReply = server.replyToBlindedItems(ArrayList(remoteBlindedFriends))
         commonFriends = if (useTrust) {
@@ -136,14 +137,14 @@ private class LegacyExchangeSession(
             0
         }
 
-        // Enforce minimum shared contacts when trust is enabled.
-        val minSharedContacts = AppConfig.minSharedContactsForExchange(context)
+        // Enforce minimum shared contacts when trust is enabled (from SecurityManager profile).
+        val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)
         if (useTrust && commonFriends < minSharedContacts) {
             throw IllegalStateException(
                 "Exchange rejected: sharedContacts=$commonFriends minRequired=$minSharedContacts peer=$address"
             )
         }
-        val maxMessages = AppConfig.maxMessagesPerExchange(context)
+        val maxMessages = SecurityManager.maxMessagesPerExchange(context)
         outgoingMessages = messageStore.getMessagesForExchange(commonFriends, maxMessages)
         outgoingIndex = 0
         stage = LegacyExchangeStage.WAIT_CLIENT_MESSAGE_COUNT
@@ -155,7 +156,7 @@ private class LegacyExchangeSession(
 
     private fun handleMessageCount(json: JSONObject): JSONObject {
         val count = LegacyExchangeCodec.decodeExchangeInfo(json)
-        val maxMessages = AppConfig.maxMessagesPerExchange(context)
+        val maxMessages = SecurityManager.maxMessagesPerExchange(context)
         expectedMessages = minOf(count, maxMessages)
         receivedMessages = 0
         stage = LegacyExchangeStage.WAIT_CLIENT_MESSAGES
