@@ -180,7 +180,13 @@ class UpdateClient private constructor(
 
         try {
             val downloadDir = File(context.cacheDir, "updates")
-            downloadDir.mkdirs()
+            if (!downloadDir.exists()) {
+                val created = downloadDir.mkdirs()
+                Timber.d("Created updates directory: $created, path: ${downloadDir.absolutePath}")
+                if (!created && !downloadDir.exists()) {
+                    throw Exception("Failed to create updates directory: ${downloadDir.absolutePath}")
+                }
+            }
 
             val apkFile = File(downloadDir, "update-${release.versionCode}.apk")
             val tempFile = File(downloadDir, "update-${release.versionCode}.apk.tmp")
@@ -213,7 +219,10 @@ class UpdateClient private constructor(
                     HttpURLConnection.HTTP_OK -> {
                         totalBytes = connection.contentLength.toLong()
                         startByte = 0
-                        tempFile.delete()
+                        if (tempFile.exists()) tempFile.delete()
+                        // Ensure file can be created
+                        tempFile.parentFile?.mkdirs()
+                        tempFile.createNewFile()
                     }
                     HttpURLConnection.HTTP_PARTIAL -> {
                         totalBytes = release.sizeBytes
