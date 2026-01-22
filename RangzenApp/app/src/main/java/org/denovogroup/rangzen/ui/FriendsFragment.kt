@@ -278,25 +278,24 @@ class FriendsFragment : Fragment() {
      * E.164 format is "+[country code][number]" with no spaces/dashes.
      * Examples: "+15551234567", "+442071234567"
      * 
+     * Uses Android's PhoneNumberUtils when available, then falls back to
+     * PhoneUtils.normalizePhoneNumber() which is fully testable.
+     * 
      * @param rawNumber The original phone number in any format
      * @param androidNormalized Android's pre-normalized number (may be null)
      * @param context Context for accessing TelephonyManager
-     * @return E.164 formatted number, or best-effort cleanup if normalization fails
+     * @return E.164 formatted number, or null if invalid
      */
     private fun normalizePhoneNumberToE164(
         rawNumber: String,
         androidNormalized: String?,
         context: Context
     ): String? {
-        // If Android already provided a normalized E.164 number, use it
-        if (!androidNormalized.isNullOrEmpty() && androidNormalized.startsWith("+")) {
-            return androidNormalized
-        }
-
         // Get country code from device locale/SIM
         val countryCode = getDeviceCountryCode(context)
 
-        // Try using PhoneNumberUtils.formatNumberToE164 (API 21+)
+        // Try using Android's PhoneNumberUtils.formatNumberToE164 (API 21+)
+        // This is more accurate than manual normalization
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             val formatted = PhoneNumberUtils.formatNumberToE164(rawNumber, countryCode)
             if (!formatted.isNullOrEmpty()) {
@@ -304,8 +303,9 @@ class FriendsFragment : Fragment() {
             }
         }
 
-        // Fallback: manual normalization
-        return manualNormalizePhoneNumber(rawNumber, countryCode)
+        // Fallback: use testable PhoneUtils normalization
+        // This handles androidNormalized and manual fallback
+        return PhoneUtils.normalizePhoneNumber(rawNumber, androidNormalized, countryCode)
     }
 
     /**

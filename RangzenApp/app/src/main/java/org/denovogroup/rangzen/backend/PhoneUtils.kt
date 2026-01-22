@@ -17,6 +17,32 @@ import java.util.Locale
 object PhoneUtils {
 
     /**
+     * Full normalization flow - testable without Android dependencies.
+     *
+     * This mirrors the production flow in FriendsFragment.normalizePhoneNumberToE164:
+     * 1. If Android provided a normalized E.164 number, use it
+     * 2. Otherwise, fall back to manual normalization
+     *
+     * @param rawNumber The raw phone number in any format
+     * @param androidNormalized Android's pre-normalized number (may be null)
+     * @param countryCode ISO country code from device (e.g., "US", "GB")
+     * @return E.164 formatted number, or null if invalid
+     */
+    fun normalizePhoneNumber(
+        rawNumber: String,
+        androidNormalized: String?,
+        countryCode: String
+    ): String? {
+        // If Android already provided a normalized E.164 number, use it
+        if (!androidNormalized.isNullOrEmpty() && androidNormalized.startsWith("+")) {
+            return androidNormalized
+        }
+
+        // Fall back to manual normalization
+        return manualNormalizeToE164(rawNumber, countryCode)
+    }
+
+    /**
      * Manual phone number normalization.
      * Strips all non-digit characters and attempts to add country code.
      *

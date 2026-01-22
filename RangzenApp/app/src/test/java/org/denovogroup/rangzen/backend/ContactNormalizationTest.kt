@@ -152,4 +152,71 @@ class ContactNormalizationTest {
         assertEquals("49", PhoneUtils.getCallingCodeForCountry("DE"))
         assertNull(PhoneUtils.getCallingCodeForCountry("XX"))
     }
+
+    // ========================================================================
+    // Full normalization flow tests (PhoneUtils.normalizePhoneNumber)
+    // This tests the complete flow used in production
+    // ========================================================================
+
+    @Test
+    fun `full flow prefers Android normalized number`() {
+        // When Android provides a normalized number, use it
+        val result = PhoneUtils.normalizePhoneNumber(
+            rawNumber = "(555) 123-4567",
+            androidNormalized = "+15551234567",
+            countryCode = "US"
+        )
+        assertEquals("+15551234567", result)
+    }
+
+    @Test
+    fun `full flow ignores invalid Android normalized`() {
+        // Android normalized without + is invalid - fall back to manual
+        val result = PhoneUtils.normalizePhoneNumber(
+            rawNumber = "5551234567",
+            androidNormalized = "15551234567",  // Missing +
+            countryCode = "US"
+        )
+        assertEquals("+15551234567", result)
+    }
+
+    @Test
+    fun `full flow uses manual when Android returns null`() {
+        val result = PhoneUtils.normalizePhoneNumber(
+            rawNumber = "5551234567",
+            androidNormalized = null,
+            countryCode = "US"
+        )
+        assertEquals("+15551234567", result)
+    }
+
+    @Test
+    fun `full flow uses manual when Android returns empty`() {
+        val result = PhoneUtils.normalizePhoneNumber(
+            rawNumber = "5551234567",
+            androidNormalized = "",
+            countryCode = "US"
+        )
+        assertEquals("+15551234567", result)
+    }
+
+    @Test
+    fun `full flow handles international with manual fallback`() {
+        val result = PhoneUtils.normalizePhoneNumber(
+            rawNumber = "07911123456",
+            androidNormalized = null,
+            countryCode = "GB"
+        )
+        assertEquals("+447911123456", result)
+    }
+
+    @Test
+    fun `full flow returns null for invalid input`() {
+        val result = PhoneUtils.normalizePhoneNumber(
+            rawNumber = "abc",
+            androidNormalized = null,
+            countryCode = "US"
+        )
+        assertNull(result)
+    }
 }

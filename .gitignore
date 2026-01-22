@@ -58,8 +58,11 @@ rangzen_revival_proposal*.docx
 rangzen_revival_proposal*.html
 create_docx*.js
 
-# Legacy repo copy
+# Legacy repo copies (reference only, not for public repo)
 rangzen-production/
+rangzen-murmur/
+Casifiic-rangzen-murmur/
+OLD-rangzen-production-old/
 
 # Office temp files
 .~lock*
