@@ -165,7 +165,17 @@ class FeedFragment : Fragment() {
         binding.swipeRefresh.setOnRefreshListener {
             // Force refresh to pull latest DB state.
             refreshFeedFromDb()
+            // Trigger a soft force exchange (respects active inbound sessions).
+            triggerSoftExchange()
         }
+    }
+
+    private fun triggerSoftExchange() {
+        // Send soft force exchange intent - skips cooldown but respects inbound sessions.
+        val intent = Intent(requireContext(), RangzenService::class.java).apply {
+            action = RangzenService.ACTION_SOFT_FORCE_EXCHANGE
+        }
+        requireContext().startService(intent)
     }
 
     private fun setupFilters() {

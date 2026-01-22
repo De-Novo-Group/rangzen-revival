@@ -42,6 +42,7 @@ class RangzenService : Service() {
         const val ACTION_START = "org.denovogroup.rangzen.action.START"
         const val ACTION_STOP = "org.denovogroup.rangzen.action.STOP"
         const val ACTION_FORCE_EXCHANGE = "org.denovogroup.rangzen.action.FORCE_EXCHANGE"
+        const val ACTION_SOFT_FORCE_EXCHANGE = "org.denovogroup.rangzen.action.SOFT_FORCE_EXCHANGE"
         private const val EXCHANGE_INTERVAL_MS = 15_000L // Exchange every 15 seconds
     }
 
@@ -110,7 +111,8 @@ class RangzenService : Service() {
         when (intent?.action) {
             ACTION_START -> startForegroundService()
             ACTION_STOP -> stopService()
-            ACTION_FORCE_EXCHANGE -> triggerImmediateExchange()
+            ACTION_FORCE_EXCHANGE -> triggerImmediateExchange(respectInbound = false)
+            ACTION_SOFT_FORCE_EXCHANGE -> triggerImmediateExchange(respectInbound = true)
         }
         return START_STICKY
     }
@@ -165,14 +167,17 @@ class RangzenService : Service() {
         }
     }
 
-    private suspend fun performExchangeCycle(forceOutbound: Boolean) {
+    private suspend fun performExchangeCycle(forceOutbound: Boolean, respectInbound: Boolean = true) {
         // Respect cooldown timing unless we are forcing an outbound attempt.
         if (!forceOutbound && !readyToConnect()) {
             return
         }
-        // Avoid initiating while we are serving an inbound exchange unless forced.
-        if (!forceOutbound && shouldDeferForInboundSession()) {
+        // Avoid initiating while we are serving an inbound exchange.
+        // When respectInbound=true (soft force), we still check inbound sessions.
+        // When respectInbound=false (hard force), we skip this check entirely.
+        if (respectInbound && shouldDeferForInboundSession()) {
             // Exit early to avoid BLE contention.
+            Timber.d("Soft force exchange deferred - inbound session active")
             return
         }
         val currentPeers = bleScanner.peers.value
@@ -309,11 +314,12 @@ class RangzenService : Service() {
         prefs.edit().putLong(lastExchangePrefKey, System.currentTimeMillis()).apply()
     }
 
-    private fun triggerImmediateExchange() {
+    private fun triggerImmediateExchange(respectInbound: Boolean) {
         // Launch a one-off exchange attempt without cooldown/backoff gating.
         serviceScope.launch {
             // Run the exchange cycle with force enabled.
-            performExchangeCycle(forceOutbound = true)
+            // When respectInbound=true, we skip cooldown but still defer if inbound is active.
+            performExchangeCycle(forceOutbound = true, respectInbound = respectInbound)
         }
     }
 
