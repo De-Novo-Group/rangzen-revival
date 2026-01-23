@@ -200,6 +200,85 @@ class LegacyExchangeClient(
             }
         }
     }
+    
+    /**
+     * Prepare exchange data as a single byte array for WiFi Direct transport.
+     * This skips the PSI handshake and just packs messages for bulk transfer.
+     * 
+     * Used when WiFi Direct connection is available for faster transfer.
+     * 
+     * @return Serialized exchange data, or null if no messages to send
+     */
+    fun prepareExchangeData(): ByteArray? {
+        val maxMessages = SecurityManager.maxMessagesPerExchange(context)
+        // Use 0 common friends for simplified exchange (no PSI)
+        val messages = messageStore.getMessagesForExchange(0, maxMessages)
+        if (messages.isEmpty()) return null
+        
+        val myFriends = friendStore.getAllFriendIds().size
+        val json = JSONObject().apply {
+            put("protocol", "simplified_v1")
+            put("timestamp", System.currentTimeMillis())
+            put("message_count", messages.size)
+            val msgArray = org.json.JSONArray()
+            for (msg in messages) {
+                // Encode without PSI context (0 common friends)
+                val encoded = LegacyExchangeCodec.encodeMessage(context, msg, 0, myFriends)
+                msgArray.put(encoded)
+            }
+            put("messages", msgArray)
+        }
+        return json.toString().toByteArray(Charsets.UTF_8)
+    }
+    
+    /**
+     * Process response data received via WiFi Direct transport.
+     * Extracts messages and merges them into our local store.
+     * 
+     * @param data Raw response data from the peer
+     * @return Number of new messages received
+     */
+    fun processExchangeResponse(data: ByteArray): Int {
+        return try {
+            val json = JSONObject(String(data, Charsets.UTF_8))
+            val msgArray = json.optJSONArray("messages") ?: return 0
+            
+            var newCount = 0
+            val myFriendsCount = friendStore.getAllFriendIds().size
+            
+            for (i in 0 until msgArray.length()) {
+                val msgJson = msgArray.getJSONObject(i)
+                val msg = LegacyExchangeCodec.decodeMessage(msgJson)
+                
+                val existing = messageStore.getMessage(msg.messageId)
+                if (existing != null) {
+                    // Update trust if new value is higher
+                    val newTrust = LegacyExchangeMath.newPriority(
+                        msg.trustScore,
+                        existing.trustScore,
+                        0, // No PSI context in simplified exchange
+                        myFriendsCount
+                    )
+                    if (newTrust > existing.trustScore) {
+                        messageStore.updateTrustScore(msg.messageId, newTrust)
+                    }
+                } else if (msg.text != null && msg.text.isNotEmpty()) {
+                    messageStore.addMessage(msg)
+                    newCount++
+                }
+            }
+            
+            if (newCount > 0) {
+                // Trigger UI refresh
+                messageStore.refreshMessagesNow()
+            }
+            
+            newCount
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to process WiFi Direct exchange response")
+            0
+        }
+    }
 }
 
 data class LegacyExchangeResult(

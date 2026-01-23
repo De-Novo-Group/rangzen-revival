@@ -64,6 +64,91 @@ class LegacyExchangeServer(
         val now = System.currentTimeMillis()
         sessions.entries.removeIf { now - it.value.lastActivityMs > timeout }
     }
+    
+    /**
+     * Process exchange data received via WiFi Direct transport (simplified protocol).
+     * Extracts messages, merges them into our store, and returns our messages.
+     * 
+     * This is used for WiFi Direct exchanges which skip the PSI handshake
+     * for faster bulk transfer.
+     * 
+     * @param data Raw exchange data from the peer
+     * @return Response data to send back, or null on error
+     */
+    fun processExchangeData(data: ByteArray): ByteArray? {
+        return try {
+            val json = JSONObject(String(data, Charsets.UTF_8))
+            val protocol = json.optString("protocol", "unknown")
+            
+            if (protocol != "simplified_v1") {
+                Timber.w("Unknown WiFi Direct exchange protocol: $protocol")
+                // Still try to process as we may be backwards compatible
+            }
+            
+            // Extract and process incoming messages
+            val msgArray = json.optJSONArray("messages")
+            val receivedCount = if (msgArray != null) {
+                var count = 0
+                val myFriendsCount = friendStore.getAllFriendIds().size
+                
+                for (i in 0 until msgArray.length()) {
+                    val msgJson = msgArray.getJSONObject(i)
+                    val msg = LegacyExchangeCodec.decodeMessage(msgJson)
+                    
+                    val existing = messageStore.getMessage(msg.messageId)
+                    if (existing != null) {
+                        // Update trust if new value is higher
+                        val newTrust = LegacyExchangeMath.newPriority(
+                            msg.trustScore,
+                            existing.trustScore,
+                            0, // No PSI context in simplified exchange
+                            myFriendsCount
+                        )
+                        if (newTrust > existing.trustScore) {
+                            messageStore.updateTrustScore(msg.messageId, newTrust)
+                        }
+                    } else if (msg.text != null && msg.text.isNotEmpty()) {
+                        messageStore.addMessage(msg)
+                        count++
+                    }
+                }
+                count
+            } else {
+                0
+            }
+            
+            Timber.i("WiFi Direct exchange: received $receivedCount new messages")
+            
+            if (receivedCount > 0) {
+                // Trigger UI refresh
+                messageStore.refreshMessagesNow()
+            }
+            
+            // Prepare our messages to send back
+            val maxMessages = SecurityManager.maxMessagesPerExchange(context)
+            val myMessages = messageStore.getMessagesForExchange(0, maxMessages)
+            val myFriends = friendStore.getAllFriendIds().size
+            
+            val response = JSONObject().apply {
+                put("protocol", "simplified_v1")
+                put("timestamp", System.currentTimeMillis())
+                put("message_count", myMessages.size)
+                val responseMsgArray = org.json.JSONArray()
+                for (msg in myMessages) {
+                    val encoded = LegacyExchangeCodec.encodeMessage(context, msg, 0, myFriends)
+                    responseMsgArray.put(encoded)
+                }
+                put("messages", responseMsgArray)
+            }
+            
+            Timber.i("WiFi Direct exchange: sending ${myMessages.size} messages back")
+            response.toString().toByteArray(Charsets.UTF_8)
+            
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to process WiFi Direct exchange data")
+            null
+        }
+    }
 }
 
 private enum class LegacyExchangeStage {

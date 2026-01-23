@@ -25,9 +25,12 @@ import org.denovogroup.rangzen.RangzenApplication
 import org.denovogroup.rangzen.backend.ble.BleAdvertiser
 import org.denovogroup.rangzen.backend.ble.BleScanner
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
+import org.denovogroup.rangzen.backend.discovery.DiscoveredPeerRegistry
+import org.denovogroup.rangzen.backend.discovery.TransportType
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeClient
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeServer
 import org.denovogroup.rangzen.backend.wifi.WifiDirectManager
+import org.denovogroup.rangzen.backend.wifi.WifiDirectTransport
 import org.denovogroup.rangzen.ui.MainActivity
 import timber.log.Timber
 import java.util.*
@@ -52,6 +55,7 @@ class RangzenService : Service() {
     private lateinit var bleScanner: BleScanner
     private lateinit var bleAdvertiser: BleAdvertiser
     private lateinit var wifiDirectManager: WifiDirectManager
+    private val wifiDirectTransport = WifiDirectTransport()
     private lateinit var friendStore: FriendStore
     private lateinit var messageStore: MessageStore
     private lateinit var legacyExchangeClient: LegacyExchangeClient
@@ -59,12 +63,22 @@ class RangzenService : Service() {
     private lateinit var exchangeHistory: ExchangeHistoryTracker
     private var cleanupJob: Job? = null
     private var wifiDirectTaskJob: Job? = null
+    private var registryCleanupJob: Job? = null
 
     // SharedPreferences key for last exchange time.
     private val lastExchangePrefKey = "last_exchange_time"
     private var exchangeJob: Job? = null
+    
+    /**
+     * Centralized peer registry that aggregates discoveries from all transports.
+     * This enables multi-transport discovery + app-layer correlation.
+     */
+    private val peerRegistry = DiscoveredPeerRegistry()
 
     val peers: StateFlow<List<DiscoveredPeer>> get() = bleScanner.peers
+    
+    /** Unified peer list from all transports */
+    val unifiedPeers get() = peerRegistry.peerList
 
     private val _status = MutableStateFlow(ServiceStatus.STOPPED)
     val status: StateFlow<ServiceStatus> = _status.asStateFlow()
@@ -93,10 +107,17 @@ class RangzenService : Service() {
             legacyExchangeServer.handleRequest(device, data)
         }
 
-        // Set up callback for when peers are discovered
+        // Set up callback for when peers are discovered via BLE
         bleScanner.onPeerDiscovered = { peer ->
+            // Report to unified peer registry
+            peerRegistry.reportBlePeer(
+                bleAddress = peer.address,
+                device = peer.device,
+                rssi = peer.rssi,
+                name = peer.name
+            )
             _peerCount.value = bleScanner.peers.value.size
-            Timber.i("Peer discovered: ${peer.address} (RSSI: ${peer.rssi}) - Total peers: ${_peerCount.value}")
+            Timber.i("BLE peer discovered: ${peer.address} (RSSI: ${peer.rssi}) - Total BLE peers: ${_peerCount.value}")
             updateNotification(getString(R.string.status_peers_found, _peerCount.value))
         }
         // Keep peer count in sync when the list changes (including stale removals).
@@ -107,24 +128,52 @@ class RangzenService : Service() {
             updateNotification(getString(R.string.status_peers_found, _peerCount.value))
         }
         
-        // Initialize WiFi Direct Manager for RSVP-by-name peer discovery
-        // Following Casific's approach: WiFi Direct broadcasts our identifier,
-        // and actual message exchange still happens over BLE.
+        // Set up peer registry callbacks
+        peerRegistry.onPeerDiscovered = { unifiedPeer ->
+            val transports = unifiedPeer.transports.keys.joinToString(", ") { it.identifier() }
+            Timber.i("Unified peer discovered: ${unifiedPeer.publicId} via [$transports]")
+        }
+        peerRegistry.onPeerTransportAdded = { peer, transport ->
+            Timber.i("Peer ${peer.publicId} now reachable via ${transport.identifier()}")
+        }
+        
+        // Initialize WiFi Direct Manager for extended discovery range
+        // Multi-transport strategy: WiFi Direct discovery + BLE discovery + LAN discovery (future)
+        // Each transport feeds into the unified peer registry
         wifiDirectManager = WifiDirectManager(this)
         wifiDirectManager.initialize()
         
-        // Set up callback for when Murmur peers are discovered via WiFi Direct
+        // Set up callback for when peers are discovered via WiFi Direct
         wifiDirectManager.onMurmurPeerDiscovered = { wifiPeer ->
-            Timber.i("Murmur peer discovered via WiFi Direct RSVP: ${wifiPeer.deviceId}")
-            // Note: We log WiFi Direct discoveries but actual exchange still happens
-            // when the peer is seen via BLE. WiFi Direct extends discovery range
-            // but doesn't replace BLE for the exchange protocol.
+            // Report to unified peer registry
+            peerRegistry.reportWifiDirectPeer(
+                wifiAddress = wifiPeer.wifiDirectAddress,
+                deviceName = wifiPeer.deviceName,
+                extractedId = wifiPeer.deviceId  // RSVP identifier if available
+            )
+            Timber.i("WiFi Direct peer discovered: ${wifiPeer.deviceName} -> ${wifiPeer.deviceId}")
+        }
+        
+        // Also report raw WiFi Direct peers (even without MURMUR- prefix)
+        // This allows correlation via app-layer handshake later
+        wifiDirectManager.onPeersChanged = { wifiPeers ->
+            wifiPeers.forEach { device ->
+                peerRegistry.reportWifiDirectPeer(
+                    wifiAddress = device.deviceAddress,
+                    deviceName = device.deviceName ?: "Unknown",
+                    extractedId = null  // Will be established via handshake
+                )
+            }
+            Timber.d("WiFi Direct: ${wifiPeers.size} total peers discovered")
         }
         
         // Set our WiFi Direct RSVP name to broadcast our device identifier
         val deviceId = wifiDirectManager.getDeviceIdentifier()
         wifiDirectManager.setRsvpName(deviceId)
         Timber.i("WiFi Direct RSVP initialized with identifier: $deviceId")
+        
+        // Wire up WiFi Direct transport for high-bandwidth exchanges
+        setupWifiDirectTransport(deviceId)
         
         Timber.i("RangzenService created")
     }
@@ -147,6 +196,7 @@ class RangzenService : Service() {
         startBleOperations()
         startExchangeLoop()
         startCleanupLoop()
+        startRegistryCleanupLoop()
         
         Timber.i("RangzenService started")
     }
@@ -217,6 +267,104 @@ class RangzenService : Service() {
                 cleanupMessageStore()
             }
         }
+    }
+    
+    /**
+     * Start periodic cleanup of stale peers in the unified registry.
+     */
+    private fun startRegistryCleanupLoop() {
+        registryCleanupJob?.cancel()
+        registryCleanupJob = serviceScope.launch {
+            while (isActive) {
+                delay(15_000L) // Prune every 15 seconds
+                peerRegistry.pruneStale(DiscoveredPeerRegistry.DEFAULT_STALE_MS)
+            }
+        }
+    }
+    
+    /**
+     * Set up WiFi Direct transport for high-bandwidth message exchange.
+     * 
+     * When WiFi Direct connection is established:
+     * - If we're the group owner, start server socket
+     * - If we're a client, connect to group owner and exchange
+     */
+    private fun setupWifiDirectTransport(localPublicId: String) {
+        // Handle incoming data when we're the server
+        wifiDirectTransport.onDataReceived = { peerPublicId, data ->
+            Timber.i("WiFi Direct transport received ${data.size} bytes from $peerPublicId")
+            // Process the exchange data using the legacy exchange server logic
+            // This maintains compatibility with the existing protocol
+            try {
+                legacyExchangeServer.processExchangeData(data)
+            } catch (e: Exception) {
+                Timber.e(e, "Error processing WiFi Direct exchange data")
+                null
+            }
+        }
+        
+        // When we become group owner, start the transport server
+        wifiDirectManager.onBecameGroupOwner = { groupOwnerAddress ->
+            Timber.i("WiFi Direct: Became group owner at ${groupOwnerAddress.hostAddress}")
+            wifiDirectTransport.startServer(serviceScope, localPublicId)
+        }
+        
+        // When we become a client, we can optionally trigger an exchange
+        // This will be called from the exchange cycle when WiFi Direct is available
+        wifiDirectManager.onBecameClient = { groupOwnerAddress ->
+            Timber.i("WiFi Direct: Became client, group owner at ${groupOwnerAddress.hostAddress}")
+            // The exchange will be triggered by the normal exchange cycle
+            // which will check for available WiFi Direct connection
+        }
+        
+        // When WiFi Direct disconnects, stop the server
+        wifiDirectManager.onConnectionLost = {
+            Timber.i("WiFi Direct: Connection lost, stopping transport server")
+            wifiDirectTransport.stopServer()
+        }
+    }
+    
+    /**
+     * Attempt to exchange data over WiFi Direct if connected.
+     * Falls back to BLE if WiFi Direct is not available.
+     * 
+     * @return true if exchange was attempted over WiFi Direct
+     */
+    private suspend fun attemptWifiDirectExchange(): Boolean {
+        val connectionInfo = wifiDirectManager.connectionInfo.value ?: return false
+        val groupOwnerAddress = connectionInfo.groupOwnerAddress ?: return false
+        
+        // Only attempt if we're the client (not group owner)
+        if (connectionInfo.isGroupOwner) {
+            // Group owner waits for incoming connections
+            return false
+        }
+        
+        val localId = wifiDirectManager.getDeviceIdentifier()
+        
+        // Prepare exchange data using the legacy client
+        val exchangeData = legacyExchangeClient.prepareExchangeData()
+        if (exchangeData == null) {
+            Timber.w("WiFi Direct exchange: No data to send")
+            return false
+        }
+        
+        // Attempt the exchange
+        val result = wifiDirectTransport.connectAndExchange(
+            groupOwnerAddress = groupOwnerAddress,
+            localPublicId = localId,
+            data = exchangeData
+        )
+        
+        if (result != null) {
+            Timber.i("WiFi Direct exchange successful with ${result.peerPublicId}")
+            // Process the response
+            legacyExchangeClient.processExchangeResponse(result.responseData)
+            return true
+        }
+        
+        Timber.w("WiFi Direct exchange failed, will fall back to BLE")
+        return false
     }
 
     private suspend fun performExchangeCycle(forceOutbound: Boolean, respectInbound: Boolean = true) {
@@ -509,8 +657,10 @@ class RangzenService : Service() {
         exchangeJob?.cancel()
         cleanupJob?.cancel()
         wifiDirectTaskJob?.cancel()
+        registryCleanupJob?.cancel()
         stopBleOperations()
         wifiDirectManager.cleanup()
+        peerRegistry.clear()
         _status.value = ServiceStatus.STOPPED
     }
 }

@@ -115,6 +115,12 @@ class WifiDirectManager(private val context: Context) {
     
     /** Callback when a Murmur peer is discovered via WiFi Direct */
     var onMurmurPeerDiscovered: ((WifiDirectPeer) -> Unit)? = null
+    
+    /** Callback when we become connected as group owner (should start server) */
+    var onBecameGroupOwner: ((groupOwnerAddress: java.net.InetAddress) -> Unit)? = null
+    
+    /** Callback when we become connected as client (should connect to group owner) */
+    var onBecameClient: ((groupOwnerAddress: java.net.InetAddress) -> Unit)? = null
 
     /**
      * Connection states
@@ -421,9 +427,21 @@ class WifiDirectManager(private val context: Context) {
             wifiP2pManager?.requestConnectionInfo(channel) { info ->
                 _connectionInfo.value = info
                 _connectionState.value = ConnectionState.CONNECTED
-                Timber.i("WiFi Direct connected: ${info.groupOwnerAddress}")
+                Timber.i("WiFi Direct connected: ${info.groupOwnerAddress}, isGroupOwner=${info.isGroupOwner}")
                 trackTelemetry("wifi_direct_connected", "is_group_owner" to info.isGroupOwner.toString())
                 onConnectionEstablished?.invoke(info)
+                
+                // Notify transport layer about connection state
+                val goAddress = info.groupOwnerAddress
+                if (goAddress != null) {
+                    if (info.isGroupOwner) {
+                        // We're the group owner - start server socket
+                        onBecameGroupOwner?.invoke(goAddress)
+                    } else {
+                        // We're a client - connect to group owner
+                        onBecameClient?.invoke(goAddress)
+                    }
+                }
             }
         } else {
             _connectionInfo.value = null
