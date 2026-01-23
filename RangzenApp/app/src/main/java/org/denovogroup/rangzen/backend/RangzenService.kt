@@ -31,6 +31,9 @@ import org.denovogroup.rangzen.backend.legacy.LegacyExchangeClient
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeServer
 import org.denovogroup.rangzen.backend.lan.LanDiscoveryManager
 import org.denovogroup.rangzen.backend.lan.LanTransport
+import org.denovogroup.rangzen.backend.lan.NsdDiscoveryManager
+import org.denovogroup.rangzen.backend.telemetry.LocationHelper
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.backend.wifi.WifiDirectManager
 import org.denovogroup.rangzen.backend.wifi.WifiDirectTransport
 import org.denovogroup.rangzen.ui.MainActivity
@@ -59,16 +62,19 @@ class RangzenService : Service() {
     private lateinit var wifiDirectManager: WifiDirectManager
     private val wifiDirectTransport = WifiDirectTransport()
     private lateinit var lanDiscoveryManager: LanDiscoveryManager
+    private lateinit var nsdDiscoveryManager: NsdDiscoveryManager
     private val lanTransport = LanTransport()
     private lateinit var friendStore: FriendStore
     private lateinit var messageStore: MessageStore
     private lateinit var legacyExchangeClient: LegacyExchangeClient
     private lateinit var legacyExchangeServer: LegacyExchangeServer
     private lateinit var exchangeHistory: ExchangeHistoryTracker
+    private lateinit var locationHelper: LocationHelper
     private var cleanupJob: Job? = null
     private var wifiDirectTaskJob: Job? = null
     private var wifiDirectAutoConnectJob: Job? = null
     private var lanDiscoveryJob: Job? = null
+    private var parallelExchangeJob: Job? = null
     private var registryCleanupJob: Job? = null
 
     // SharedPreferences key for last exchange time.
@@ -107,6 +113,10 @@ class RangzenService : Service() {
         legacyExchangeClient = LegacyExchangeClient(this, friendStore, messageStore)
         legacyExchangeServer = LegacyExchangeServer(this, friendStore, messageStore)
         exchangeHistory = ExchangeHistoryTracker.getInstance(this)
+        locationHelper = LocationHelper(this)
+        
+        // Check Location Services status - critical for WiFi Direct
+        checkLocationServicesStatus()
 
         bleAdvertiser.onDataReceived = { device, data ->
             Timber.i("Received legacy exchange request from ${device.address} (${data.size} bytes)")
@@ -183,10 +193,17 @@ class RangzenService : Service() {
         
         // Initialize LAN discovery for same-network peer finding
         // Works on shared WiFi (home, coffee shop, hotspot) even without Internet
+        // Uses both UDP broadcast AND NSD/mDNS for maximum compatibility
         lanDiscoveryManager = LanDiscoveryManager(this)
         lanDiscoveryManager.initialize(deviceId)
         lanTransport.initialize(deviceId)
         setupLanDiscovery()
+        
+        // Initialize NSD (Network Service Discovery) for mDNS-based discovery
+        // More reliable than UDP broadcast on many networks
+        nsdDiscoveryManager = NsdDiscoveryManager(this)
+        nsdDiscoveryManager.initialize(deviceId)
+        setupNsdDiscovery()
         
         Timber.i("RangzenService created")
     }
@@ -236,10 +253,12 @@ class RangzenService : Service() {
         }
         
         // Start LAN discovery for same-network peers (coffee shop, home WiFi, hotspot)
+        // Uses both UDP broadcast AND NSD/mDNS for maximum compatibility
         lanDiscoveryManager.startDiscovery()
+        nsdDiscoveryManager.start()
         lanTransport.startServer(this, messageStore, friendStore)
-        startLanExchangeLoop()
-        Timber.i("LAN discovery enabled")
+        startParallelExchangeLoop()  // Changed from sequential to parallel
+        Timber.i("LAN + NSD discovery enabled")
         
         _status.value = ServiceStatus.DISCOVERING
         updateNotification(getString(R.string.status_discovering))
@@ -256,11 +275,14 @@ class RangzenService : Service() {
         wifiDirectAutoConnectJob?.cancel()
         wifiDirectAutoConnectJob = null
         
-        // Stop LAN discovery
+        // Stop LAN discovery and NSD
         lanDiscoveryManager.stopDiscovery()
+        nsdDiscoveryManager.stop()
         lanTransport.stopServer()
         lanDiscoveryJob?.cancel()
         lanDiscoveryJob = null
+        parallelExchangeJob?.cancel()
+        parallelExchangeJob = null
     }
     
     /**
@@ -335,19 +357,135 @@ class RangzenService : Service() {
      * Start exchange loop for LAN peers.
      * When LAN peers are discovered, periodically attempt to exchange messages.
      */
-    private fun startLanExchangeLoop() {
-        lanDiscoveryJob?.cancel()
-        lanDiscoveryJob = serviceScope.launch {
+    /**
+     * Start the parallel exchange loop.
+     * 
+     * This is the key optimization: opportunistic encounters are our most
+     * constrained resource. When we find peers, we use ALL available transports
+     * simultaneously to maximize message exchange in the limited time available.
+     * 
+     * - BLE exchanges run independently
+     * - LAN/NSD exchanges run in parallel with BLE
+     * - Different peers can be exchanged with concurrently across transports
+     */
+    private fun startParallelExchangeLoop() {
+        parallelExchangeJob?.cancel()
+        parallelExchangeJob = serviceScope.launch {
             while (isActive) {
-                delay(20_000L) // Check for LAN exchange opportunities every 20 seconds
-                attemptLanExchanges()
+                delay(20_000L) // Check for exchange opportunities every 20 seconds
+                attemptParallelExchanges()
             }
         }
     }
     
     /**
-     * Attempt to exchange messages with discovered LAN peers.
+     * Attempt exchanges with all discovered peers across all transports IN PARALLEL.
+     * 
+     * Key principle: Time is precious. People passing on the street may only
+     * be in range for seconds. We must do all we can in that brief window.
      */
+    private suspend fun attemptParallelExchanges() {
+        // Collect peers from all transports
+        val lanPeers = lanDiscoveryManager.getDiscoveredPeers()
+        val nsdPeers = nsdDiscoveryManager.getDiscoveredPeers()
+        
+        // Combine LAN and NSD peers (deduplicate by device ID)
+        val networkPeers = (lanPeers.map { it.deviceId to it } + 
+                          nsdPeers.map { it.deviceId to null })
+                          .groupBy { it.first }
+                          .mapValues { it.value.firstOrNull()?.second }
+                          .filterValues { it != null }
+                          .mapValues { it.value!! }
+        
+        val totalPeers = networkPeers.size
+        
+        if (totalPeers == 0) {
+            return
+        }
+        
+        Timber.i("PARALLEL EXCHANGE: Found $totalPeers network peers, starting concurrent exchanges...")
+        
+        // Get location once for all exchanges (QA telemetry)
+        val location = getLocationForTelemetry()
+        
+        // Launch all LAN exchanges in parallel
+        val lanJobs = mutableListOf<Job>()
+        for ((deviceId, lanPeer) in networkPeers) {
+            if (!lanTransport.isExchangeInProgress()) {
+                val job = serviceScope.launch {
+                    val startTime = System.currentTimeMillis()
+                    try {
+                        val result = lanTransport.exchangeWithPeer(
+                            peer = lanPeer,
+                            context = this@RangzenService,
+                            messageStore = messageStore,
+                            friendStore = friendStore
+                        )
+                        
+                        val durationMs = System.currentTimeMillis() - startTime
+                        
+                        // Track exchange with location for QA
+                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
+                            success = result.success,
+                            peerIdHash = deviceId.hashCode().toString(),
+                            transport = "lan",
+                            location = location,
+                            durationMs = durationMs,
+                            messagesSent = result.messagesSent,
+                            messagesReceived = result.messagesReceived
+                        )
+                        
+                        if (result.success) {
+                            Timber.i("PARALLEL: LAN exchange complete with ${deviceId.take(8)}...: " +
+                                "sent=${result.messagesSent}, received=${result.messagesReceived}")
+                            
+                            if (result.messagesReceived > 0) {
+                                messageStore.refreshMessagesNow()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        val durationMs = System.currentTimeMillis() - startTime
+                        
+                        // Track failure with location for QA
+                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
+                            success = false,
+                            peerIdHash = deviceId.hashCode().toString(),
+                            transport = "lan",
+                            location = location,
+                            durationMs = durationMs,
+                            messagesSent = 0,
+                            messagesReceived = 0,
+                            error = e.message
+                        )
+                        
+                        Timber.e(e, "PARALLEL: LAN exchange failed with ${deviceId.take(8)}...")
+                    }
+                }
+                lanJobs.add(job)
+            }
+        }
+        
+        // Note: BLE exchanges are handled by the separate exchange loop (performExchangeCycle)
+        // which runs independently and concurrently with this LAN exchange loop.
+        // This means BLE and LAN exchanges happen in TRUE parallel.
+        
+        // Wait for all LAN exchanges to complete (or timeout)
+        try {
+            withTimeout(30_000L) {
+                lanJobs.forEach { it.join() }
+            }
+        } catch (e: TimeoutCancellationException) {
+            Timber.w("PARALLEL: Some LAN exchanges timed out")
+        }
+        
+        Timber.d("PARALLEL EXCHANGE: Completed cycle for $totalPeers network peers")
+    }
+    
+    /**
+     * Attempt to exchange messages with discovered LAN peers.
+     * @deprecated Use attemptParallelExchanges instead
+     */
+    @Deprecated("Use attemptParallelExchanges for concurrent multi-transport exchanges")
     private suspend fun attemptLanExchanges() {
         val lanPeers = lanDiscoveryManager.getDiscoveredPeers()
         if (lanPeers.isEmpty()) {
@@ -404,6 +542,27 @@ class RangzenService : Service() {
             if (success) {
                 Timber.i("LAN exchange callback: sent=$sent, received=$received")
             }
+        }
+    }
+    
+    /**
+     * Set up NSD (mDNS) discovery callbacks to feed into the unified peer registry.
+     * NSD is more reliable than UDP broadcast on many networks.
+     */
+    private fun setupNsdDiscovery() {
+        nsdDiscoveryManager.onPeerDiscovered = { nsdPeer ->
+            // Report to unified peer registry
+            // NSD peers have same info as LAN peers since they use same port
+            peerRegistry.reportLanPeer(
+                ipAddress = nsdPeer.host,
+                port = nsdPeer.port,
+                publicId = nsdPeer.deviceId
+            )
+            Timber.i("NSD peer discovered: ${nsdPeer.deviceId.take(8)}... at ${nsdPeer.host}:${nsdPeer.port}")
+        }
+        
+        nsdDiscoveryManager.onPeerLost = { nsdPeer ->
+            Timber.i("NSD peer lost: ${nsdPeer.deviceId.take(8)}...")
         }
     }
     
@@ -783,6 +942,51 @@ class RangzenService : Service() {
         )
     }
 
+    /**
+     * Check if Location Services are enabled.
+     * WiFi Direct discovery REQUIRES Location Services to be ON.
+     * Without it, peer discovery silently fails.
+     * 
+     * This is called on service start and logs warnings/telemetry if disabled.
+     */
+    private fun checkLocationServicesStatus() {
+        val isEnabled = locationHelper.isLocationServicesEnabled()
+        val hasPermission = locationHelper.hasLocationPermission()
+        
+        Timber.i("Location Services check: enabled=$isEnabled, permission=$hasPermission")
+        
+        if (!isEnabled) {
+            Timber.w("LOCATION SERVICES DISABLED - WiFi Direct discovery will NOT work!")
+            Timber.w("User must enable Location Services in system settings for peer discovery")
+            
+            // Track this for telemetry
+            TelemetryClient.getInstance()?.track(
+                eventType = "location_services_disabled",
+                payload = mapOf(
+                    "has_permission" to hasPermission,
+                    "impact" to "wifi_direct_discovery_blocked"
+                )
+            )
+        }
+        
+        if (!hasPermission) {
+            Timber.w("Location permission not granted - some discovery features may be limited")
+        }
+    }
+    
+    /**
+     * Get current location for telemetry (fire-and-forget, async).
+     * Returns location data for QA tracking of connections.
+     */
+    private suspend fun getLocationForTelemetry(): LocationHelper.LocationData? {
+        return try {
+            locationHelper.getCurrentLocation()
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to get location for telemetry")
+            null
+        }
+    }
+    
     private fun updateNotification(statusText: String) {
         val notification = createNotification(statusText)
         val notificationManager = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
@@ -817,10 +1021,12 @@ class RangzenService : Service() {
         wifiDirectTaskJob?.cancel()
         wifiDirectAutoConnectJob?.cancel()
         lanDiscoveryJob?.cancel()
+        parallelExchangeJob?.cancel()
         registryCleanupJob?.cancel()
         stopBleOperations()
         wifiDirectManager.cleanup()
         lanDiscoveryManager.cleanup()
+        nsdDiscoveryManager.cleanup()
         lanTransport.cleanup()
         peerRegistry.clear()
         _status.value = ServiceStatus.STOPPED

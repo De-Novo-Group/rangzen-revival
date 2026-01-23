@@ -193,6 +193,73 @@ class TelemetryClient private constructor(
     }
 
     /**
+     * Track a connection event with location data for QA.
+     * 
+     * This is used to understand the physical context of exchanges:
+     * - Indoor vs outdoor connectivity
+     * - Urban vs rural propagation
+     * - Geographic distribution of network
+     * 
+     * @param eventType Type of connection event (start, success, failure)
+     * @param peerIdHash Hashed peer identifier
+     * @param transport Transport type (BLE, WiFi, LAN)
+     * @param location Current device location (for QA)
+     * @param additionalData Any additional event-specific data
+     */
+    fun trackConnectionWithLocation(
+        eventType: String,
+        peerIdHash: String?,
+        transport: String?,
+        location: LocationHelper.LocationData?,
+        additionalData: Map<String, Any>? = null
+    ) {
+        val payload = mutableMapOf<String, Any>()
+        
+        // Add location data if available
+        location?.let { loc ->
+            payload.putAll(loc.toTelemetryMap())
+        }
+        
+        // Add any additional data
+        additionalData?.let { payload.putAll(it) }
+        
+        track(eventType, peerIdHash, transport, payload.ifEmpty { null })
+    }
+    
+    /**
+     * Track an exchange with full details including location (for QA).
+     */
+    fun trackExchangeWithLocation(
+        success: Boolean,
+        peerIdHash: String,
+        transport: String,
+        location: LocationHelper.LocationData?,
+        durationMs: Long,
+        messagesSent: Int,
+        messagesReceived: Int,
+        mutualFriends: Int = 0,
+        error: String? = null
+    ) {
+        val payload = mutableMapOf<String, Any>(
+            "duration_ms" to durationMs,
+            "messages_sent" to messagesSent,
+            "messages_received" to messagesReceived,
+            "mutual_friends" to mutualFriends,
+            "success" to success
+        )
+        
+        error?.let { payload["error"] = it.take(200) }
+        location?.let { payload.putAll(it.toTelemetryMap()) }
+        
+        track(
+            if (success) TelemetryEvent.TYPE_EXCHANGE_SUCCESS else TelemetryEvent.TYPE_EXCHANGE_FAILURE,
+            peerIdHash,
+            transport,
+            payload
+        )
+    }
+    
+    /**
      * Track a message sent during exchange.
      * Tracks message propagation details without PII.
      *
