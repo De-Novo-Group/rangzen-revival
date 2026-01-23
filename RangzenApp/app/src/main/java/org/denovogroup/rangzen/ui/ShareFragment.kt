@@ -353,36 +353,9 @@ class ShareFragment : Fragment() {
     }
     
     private suspend fun connectAndDownload(code: String) {
-        val context = requireContext()
-        
-        // We need to discover the sender's IP
-        // For now, prompt user for IP or try common addresses
-        // In production, we would use mDNS/NSD or WiFi Direct discovery
-        
-        binding.textReceiverStatus.text = "Scanning network..."
-        
-        // Try common gateway addresses on the local network
-        val possibleServers = discoverServers(code)
-        
-        if (possibleServers.isEmpty()) {
-            // Fall back to manual IP entry
-            withContext(Dispatchers.Main) {
-                promptForServerAddress(code)
-            }
-            return
-        }
-        
-        // Try the first working server
-        for ((url, info) in possibleServers) {
-            binding.textReceiverStatus.text = "Connecting to sender..."
-            
-            val file = httpClient?.downloadApk(url, code, info)
-            if (file != null) {
-                return  // Success handled in callback
-            }
-        }
-        
-        // All servers failed
+        // Prompt user for sender's address immediately
+        // The address is shown on sender's screen (e.g., http://192.168.219.212:55632)
+        // Auto-discovery is unreliable, so we use manual entry for reliability
         withContext(Dispatchers.Main) {
             promptForServerAddress(code)
         }
@@ -390,7 +363,9 @@ class ShareFragment : Fragment() {
     
     /**
      * Discover servers on the local network.
-     * Scans common port range for HTTP servers with valid APK info.
+     * 
+     * Scans the local subnet for HTTP servers with valid APK info.
+     * Uses a broader scan to find servers on any IP in the local network.
      */
     private suspend fun discoverServers(code: String): List<Pair<String, ApkInfo>> {
         val context = requireContext()
@@ -404,33 +379,70 @@ class ShareFragment : Fragment() {
         }
         
         val prefix = localIp.substringBeforeLast(".")
+        val localLastOctet = localIp.substringAfterLast(".").toIntOrNull() ?: 0
         
-        // Scan network (this is a simplified approach)
-        // In production, use mDNS/NSD discovery
+        Timber.d("$TAG: Scanning network $prefix.* for sender (we are $localIp)")
+        
         withContext(Dispatchers.IO) {
             val client = HttpDistributionClient(context)
             
-            // Try a few common addresses (gateway, .1-.10)
-            val addressesToTry = listOf(
-                "$prefix.1", "$prefix.2", "$prefix.3", "$prefix.4", "$prefix.5",
-                "$prefix.100", "$prefix.101", "$prefix.102"
-            )
+            // Scan the entire local subnet (1-254), but prioritize:
+            // 1. Addresses close to our own IP (likely same router assignment range)
+            // 2. Common DHCP ranges (.100-.200, .2-.50)
+            val addressesToTry = mutableListOf<String>()
             
-            val ports = listOf(49152, 49153, 49154, 49155, 49200, 50000, 55000, 60000)
+            // First, try addresses near our own IP (±20 range)
+            for (offset in -20..20) {
+                val octet = localLastOctet + offset
+                if (octet in 1..254 && octet != localLastOctet) {
+                    addressesToTry.add("$prefix.$octet")
+                }
+            }
             
-            for (address in addressesToTry) {
-                for (port in ports) {
-                    val url = "http://$address:$port"
-                    try {
-                        val info = client.fetchApkInfo(url, code)
-                        if (info != null) {
-                            Timber.i("$TAG: Found server at $url")
-                            results.add(url to info)
-                            return@withContext  // Found one, stop scanning
+            // Then add common DHCP ranges
+            for (octet in listOf(1, 2, 100, 101, 102, 150, 200, 201)) {
+                val addr = "$prefix.$octet"
+                if (addr !in addressesToTry) {
+                    addressesToTry.add(addr)
+                }
+            }
+            
+            // High ephemeral ports where our server runs (49152-65535)
+            // Try common and spread-out ports
+            val ports = (49152..65535 step 100).toList() + 
+                        listOf(49152, 50000, 55000, 60000, 61958, 62000, 63000, 64000, 65000)
+            
+            Timber.d("$TAG: Scanning ${addressesToTry.size} addresses, ${ports.size} ports")
+            
+            // Scan with parallelism for speed (but limited to avoid flooding)
+            val jobs = mutableListOf<kotlinx.coroutines.Deferred<Pair<String, ApkInfo>?>>()
+            
+            for (address in addressesToTry.take(50)) {  // Limit to 50 addresses
+                for (port in ports.take(20)) {  // Limit to 20 ports
+                    jobs.add(async {
+                        val url = "http://$address:$port"
+                        try {
+                            val info = client.fetchApkInfo(url, code)
+                            if (info != null) {
+                                Timber.i("$TAG: Found server at $url")
+                                return@async url to info
+                            }
+                        } catch (e: Exception) {
+                            // Ignore - connection failed
                         }
-                    } catch (e: Exception) {
-                        // Ignore connection failures
-                    }
+                        null
+                    })
+                }
+            }
+            
+            // Wait for results, return first success
+            for (job in jobs) {
+                val result = job.await()
+                if (result != null) {
+                    results.add(result)
+                    // Cancel remaining jobs
+                    jobs.forEach { it.cancel() }
+                    return@withContext
                 }
             }
         }
@@ -440,19 +452,33 @@ class ShareFragment : Fragment() {
     
     private fun promptForServerAddress(code: String) {
         // Show dialog to enter server IP manually
+        // The URL is shown on sender's screen like: http://192.168.1.5:54321
         val editText = android.widget.EditText(requireContext()).apply {
-            hint = "192.168.1.xxx:port"
+            hint = "192.168.x.x:port"
             inputType = android.text.InputType.TYPE_CLASS_TEXT
+            // Pre-fill with network prefix if available
+            getLocalIpAddress()?.let { ip ->
+                val prefix = ip.substringBeforeLast(".")
+                setText("$prefix.")
+                setSelection(text.length)
+            }
         }
         
         AlertDialog.Builder(requireContext())
-            .setTitle("Enter Sender Address")
-            .setMessage("Could not find sender automatically. Enter their IP address and port (shown on their screen).")
+            .setTitle("Enter Sender's Address")
+            .setMessage("Look at the sender's screen for the address.\n\nIt looks like: http://192.168.x.x:12345\n\nEnter the IP and port below:")
             .setView(editText)
             .setPositiveButton("Connect") { _, _ ->
                 val address = editText.text.toString().trim()
                 if (address.isNotEmpty()) {
-                    val url = if (address.startsWith("http://")) address else "http://$address"
+                    // Remove http:// prefix if user copied it
+                    val cleanAddress = address
+                        .removePrefix("http://")
+                        .removePrefix("https://")
+                    val url = "http://$cleanAddress"
+                    
+                    binding.textReceiverStatus.text = "Connecting to $cleanAddress..."
+                    
                     scope.launch {
                         downloadFromServer(url, code)
                     }
@@ -461,37 +487,61 @@ class ShareFragment : Fragment() {
             .setNegativeButton("Cancel") { _, _ ->
                 cancelReceiving()
             }
+            .setCancelable(false)
             .show()
     }
     
     private suspend fun downloadFromServer(url: String, code: String) {
         val context = requireContext()
         
-        binding.textReceiverStatus.text = "Connecting to $url..."
+        Timber.i("$TAG: Attempting download from $url with code ${code.take(3)}***")
         
-        // Fetch APK info
+        withContext(Dispatchers.Main) {
+            binding.layoutCodeEntry.visibility = View.GONE
+            binding.layoutDownload.visibility = View.VISIBLE
+            binding.textReceiverStatus.text = "Connecting..."
+            binding.progressReceiver.progress = 0
+        }
+        
+        // Fetch APK info first
+        Timber.d("$TAG: Fetching APK info from $url")
         val info = httpClient?.fetchApkInfo(url, code)
+        
         if (info == null) {
+            Timber.e("$TAG: Failed to fetch APK info from $url")
             withContext(Dispatchers.Main) {
-                showError("Could not connect to sender. Check the address and code.")
+                showError("Could not connect to sender.\n\nCheck:\n• Both devices on same network\n• Address matches sender's screen\n• Sender is still active")
             }
             return
         }
         
-        // Verify signature matches
+        Timber.i("$TAG: Got APK info: v${info.versionName}, ${info.sizeBytes} bytes")
+        
+        // Verify signature matches our app
         val currentFingerprint = ApkExporter.getSignatureFingerprint(context)
         if (info.signatureFingerprint != currentFingerprint) {
+            Timber.e("$TAG: Signature mismatch! Expected: $currentFingerprint, got: ${info.signatureFingerprint}")
             withContext(Dispatchers.Main) {
                 showError("Security error: App signature mismatch")
             }
             return
         }
         
-        binding.textReceiverStatus.text = "Downloading..."
+        Timber.d("$TAG: Signature verified, starting download")
         
-        // Download
-        httpClient?.downloadApk(url, code, info)
-        // Result handled in callback
+        withContext(Dispatchers.Main) {
+            binding.textReceiverStatus.text = "Downloading..."
+        }
+        
+        // Download APK
+        val result = httpClient?.downloadApk(url, code, info)
+        
+        if (result == null) {
+            Timber.e("$TAG: Download returned null")
+            // Error already handled by callback
+        } else {
+            Timber.i("$TAG: Download completed: ${result.absolutePath}")
+        }
     }
     
     private fun cancelReceiving() {
