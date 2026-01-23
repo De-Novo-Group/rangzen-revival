@@ -60,9 +60,16 @@ create_docx*.js
 
 # Legacy repo copies (reference only, not for public repo)
 rangzen-production/
+rangzen-murmur
 rangzen-murmur/
 Casifiic-rangzen-murmur/
 OLD-rangzen-production-old/
+
+# Archive folder (internal docs, proposals, etc.)
+archive/
+
+# OTA APK storage (local builds)
+ota-apks/
 
 # Office temp files
 .~lock*
