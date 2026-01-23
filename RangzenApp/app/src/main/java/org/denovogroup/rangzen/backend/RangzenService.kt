@@ -27,6 +27,7 @@ import org.denovogroup.rangzen.backend.ble.BleScanner
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeClient
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeServer
+import org.denovogroup.rangzen.backend.wifi.WifiDirectManager
 import org.denovogroup.rangzen.ui.MainActivity
 import timber.log.Timber
 import java.util.*
@@ -50,12 +51,14 @@ class RangzenService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private lateinit var bleScanner: BleScanner
     private lateinit var bleAdvertiser: BleAdvertiser
+    private lateinit var wifiDirectManager: WifiDirectManager
     private lateinit var friendStore: FriendStore
     private lateinit var messageStore: MessageStore
     private lateinit var legacyExchangeClient: LegacyExchangeClient
     private lateinit var legacyExchangeServer: LegacyExchangeServer
     private lateinit var exchangeHistory: ExchangeHistoryTracker
     private var cleanupJob: Job? = null
+    private var wifiDirectTaskJob: Job? = null
 
     // SharedPreferences key for last exchange time.
     private val lastExchangePrefKey = "last_exchange_time"
@@ -104,6 +107,25 @@ class RangzenService : Service() {
             updateNotification(getString(R.string.status_peers_found, _peerCount.value))
         }
         
+        // Initialize WiFi Direct Manager for RSVP-by-name peer discovery
+        // Following Casific's approach: WiFi Direct broadcasts our identifier,
+        // and actual message exchange still happens over BLE.
+        wifiDirectManager = WifiDirectManager(this)
+        wifiDirectManager.initialize()
+        
+        // Set up callback for when Murmur peers are discovered via WiFi Direct
+        wifiDirectManager.onMurmurPeerDiscovered = { wifiPeer ->
+            Timber.i("Murmur peer discovered via WiFi Direct RSVP: ${wifiPeer.deviceId}")
+            // Note: We log WiFi Direct discoveries but actual exchange still happens
+            // when the peer is seen via BLE. WiFi Direct extends discovery range
+            // but doesn't replace BLE for the exchange protocol.
+        }
+        
+        // Set our WiFi Direct RSVP name to broadcast our device identifier
+        val deviceId = wifiDirectManager.getDeviceIdentifier()
+        wifiDirectManager.setRsvpName(deviceId)
+        Timber.i("WiFi Direct RSVP initialized with identifier: $deviceId")
+        
         Timber.i("RangzenService created")
     }
 
@@ -138,6 +160,17 @@ class RangzenService : Service() {
     private fun startBleOperations() {
         bleAdvertiser.startAdvertising()
         bleScanner.startScanning()
+        
+        // Start WiFi Direct discovery alongside BLE
+        // This extends our discovery range (WiFi Direct can see peers further away)
+        if (wifiDirectManager.hasPermissions()) {
+            wifiDirectManager.setSeekingDesired(true)
+            startWifiDirectTaskLoop()
+            Timber.i("WiFi Direct discovery enabled")
+        } else {
+            Timber.w("WiFi Direct permissions not granted, skipping WiFi Direct discovery")
+        }
+        
         _status.value = ServiceStatus.DISCOVERING
         updateNotification(getString(R.string.status_discovering))
     }
@@ -145,6 +178,25 @@ class RangzenService : Service() {
     private fun stopBleOperations() {
         bleAdvertiser.stopAdvertising()
         bleScanner.stopScanning()
+        
+        // Stop WiFi Direct discovery
+        wifiDirectManager.setSeekingDesired(false)
+        wifiDirectTaskJob?.cancel()
+        wifiDirectTaskJob = null
+    }
+    
+    /**
+     * Start the WiFi Direct task loop that maintains discovery state.
+     * Following Casific's pattern of periodic tasks() calls.
+     */
+    private fun startWifiDirectTaskLoop() {
+        wifiDirectTaskJob?.cancel()
+        wifiDirectTaskJob = serviceScope.launch {
+            while (isActive) {
+                delay(60_000L) // Run WiFi Direct tasks every minute
+                wifiDirectManager.tasks()
+            }
+        }
     }
     
     private fun startExchangeLoop() {
@@ -456,7 +508,9 @@ class RangzenService : Service() {
     private fun stopAllOperations() {
         exchangeJob?.cancel()
         cleanupJob?.cancel()
+        wifiDirectTaskJob?.cancel()
         stopBleOperations()
+        wifiDirectManager.cleanup()
         _status.value = ServiceStatus.STOPPED
     }
 }
