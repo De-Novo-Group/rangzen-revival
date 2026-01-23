@@ -29,6 +29,8 @@ import org.denovogroup.rangzen.backend.discovery.DiscoveredPeerRegistry
 import org.denovogroup.rangzen.backend.discovery.TransportType
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeClient
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeServer
+import org.denovogroup.rangzen.backend.lan.LanDiscoveryManager
+import org.denovogroup.rangzen.backend.lan.LanTransport
 import org.denovogroup.rangzen.backend.wifi.WifiDirectManager
 import org.denovogroup.rangzen.backend.wifi.WifiDirectTransport
 import org.denovogroup.rangzen.ui.MainActivity
@@ -56,6 +58,8 @@ class RangzenService : Service() {
     private lateinit var bleAdvertiser: BleAdvertiser
     private lateinit var wifiDirectManager: WifiDirectManager
     private val wifiDirectTransport = WifiDirectTransport()
+    private lateinit var lanDiscoveryManager: LanDiscoveryManager
+    private val lanTransport = LanTransport()
     private lateinit var friendStore: FriendStore
     private lateinit var messageStore: MessageStore
     private lateinit var legacyExchangeClient: LegacyExchangeClient
@@ -63,6 +67,8 @@ class RangzenService : Service() {
     private lateinit var exchangeHistory: ExchangeHistoryTracker
     private var cleanupJob: Job? = null
     private var wifiDirectTaskJob: Job? = null
+    private var wifiDirectAutoConnectJob: Job? = null
+    private var lanDiscoveryJob: Job? = null
     private var registryCleanupJob: Job? = null
 
     // SharedPreferences key for last exchange time.
@@ -175,6 +181,13 @@ class RangzenService : Service() {
         // Wire up WiFi Direct transport for high-bandwidth exchanges
         setupWifiDirectTransport(deviceId)
         
+        // Initialize LAN discovery for same-network peer finding
+        // Works on shared WiFi (home, coffee shop, hotspot) even without Internet
+        lanDiscoveryManager = LanDiscoveryManager(this)
+        lanDiscoveryManager.initialize(deviceId)
+        lanTransport.initialize(deviceId)
+        setupLanDiscovery()
+        
         Timber.i("RangzenService created")
     }
 
@@ -216,10 +229,17 @@ class RangzenService : Service() {
         if (wifiDirectManager.hasPermissions()) {
             wifiDirectManager.setSeekingDesired(true)
             startWifiDirectTaskLoop()
+            startWifiDirectAutoConnectLoop()
             Timber.i("WiFi Direct discovery enabled")
         } else {
             Timber.w("WiFi Direct permissions not granted, skipping WiFi Direct discovery")
         }
+        
+        // Start LAN discovery for same-network peers (coffee shop, home WiFi, hotspot)
+        lanDiscoveryManager.startDiscovery()
+        lanTransport.startServer(this, messageStore, friendStore)
+        startLanExchangeLoop()
+        Timber.i("LAN discovery enabled")
         
         _status.value = ServiceStatus.DISCOVERING
         updateNotification(getString(R.string.status_discovering))
@@ -233,6 +253,14 @@ class RangzenService : Service() {
         wifiDirectManager.setSeekingDesired(false)
         wifiDirectTaskJob?.cancel()
         wifiDirectTaskJob = null
+        wifiDirectAutoConnectJob?.cancel()
+        wifiDirectAutoConnectJob = null
+        
+        // Stop LAN discovery
+        lanDiscoveryManager.stopDiscovery()
+        lanTransport.stopServer()
+        lanDiscoveryJob?.cancel()
+        lanDiscoveryJob = null
     }
     
     /**
@@ -245,6 +273,136 @@ class RangzenService : Service() {
             while (isActive) {
                 delay(60_000L) // Run WiFi Direct tasks every minute
                 wifiDirectManager.tasks()
+            }
+        }
+    }
+    
+    /**
+     * Start auto-connection loop for WiFi Direct peers.
+     * When we discover WiFi Direct peers, automatically attempt to connect
+     * and exchange messages over the high-bandwidth socket transport.
+     */
+    private fun startWifiDirectAutoConnectLoop() {
+        wifiDirectAutoConnectJob?.cancel()
+        wifiDirectAutoConnectJob = serviceScope.launch {
+            while (isActive) {
+                delay(30_000L) // Check for WiFi Direct connection opportunities every 30 seconds
+                attemptWifiDirectAutoConnect()
+            }
+        }
+    }
+    
+    /**
+     * Attempt to auto-connect to a discovered WiFi Direct peer.
+     * This enables opportunistic high-bandwidth exchanges.
+     */
+    private suspend fun attemptWifiDirectAutoConnect() {
+        // Only attempt if not already connected
+        if (wifiDirectManager.connectionState.value == WifiDirectManager.ConnectionState.CONNECTED) {
+            // Already connected, let the transport handle exchange
+            return
+        }
+        
+        // Only attempt if not currently connecting
+        if (wifiDirectManager.connectionState.value == WifiDirectManager.ConnectionState.CONNECTING) {
+            return
+        }
+        
+        // Get discovered WiFi Direct peers
+        val wifiPeers = wifiDirectManager.peers.value
+        if (wifiPeers.isEmpty()) {
+            return
+        }
+        
+        // Pick a random peer to connect to
+        val targetPeer = wifiPeers.random()
+        
+        Timber.i("Auto-connecting to WiFi Direct peer: ${targetPeer.deviceAddress}")
+        
+        try {
+            val connected = wifiDirectManager.connect(targetPeer.deviceAddress)
+            if (connected) {
+                Timber.i("WiFi Direct auto-connect initiated to ${targetPeer.deviceAddress}")
+            } else {
+                Timber.w("WiFi Direct auto-connect failed to ${targetPeer.deviceAddress}")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error during WiFi Direct auto-connect")
+        }
+    }
+    
+    /**
+     * Start exchange loop for LAN peers.
+     * When LAN peers are discovered, periodically attempt to exchange messages.
+     */
+    private fun startLanExchangeLoop() {
+        lanDiscoveryJob?.cancel()
+        lanDiscoveryJob = serviceScope.launch {
+            while (isActive) {
+                delay(20_000L) // Check for LAN exchange opportunities every 20 seconds
+                attemptLanExchanges()
+            }
+        }
+    }
+    
+    /**
+     * Attempt to exchange messages with discovered LAN peers.
+     */
+    private suspend fun attemptLanExchanges() {
+        val lanPeers = lanDiscoveryManager.getDiscoveredPeers()
+        if (lanPeers.isEmpty()) {
+            return
+        }
+        
+        Timber.d("Found ${lanPeers.size} LAN peers, attempting exchanges...")
+        
+        for (peer in lanPeers) {
+            if (!lanTransport.isExchangeInProgress()) {
+                try {
+                    val result = lanTransport.exchangeWithPeer(
+                        peer = peer,
+                        context = this@RangzenService,
+                        messageStore = messageStore,
+                        friendStore = friendStore
+                    )
+                    
+                    if (result.success) {
+                        Timber.i("LAN exchange complete with ${peer.deviceId.take(8)}...: " +
+                            "sent=${result.messagesSent}, received=${result.messagesReceived}")
+                        
+                        // Refresh feed if we received messages
+                        if (result.messagesReceived > 0) {
+                            messageStore.refreshMessagesNow()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "LAN exchange failed with ${peer.ipAddress.hostAddress}")
+                }
+            }
+        }
+    }
+    
+    /**
+     * Set up LAN discovery callbacks to feed into the unified peer registry.
+     */
+    private fun setupLanDiscovery() {
+        lanDiscoveryManager.onPeerDiscovered = { lanPeer ->
+            // Report to unified peer registry
+            peerRegistry.reportLanPeer(
+                ipAddress = lanPeer.ipAddress.hostAddress ?: "unknown",
+                port = lanPeer.port,
+                publicId = lanPeer.deviceId  // LAN discovery includes device ID
+            )
+            Timber.i("LAN peer discovered: ${lanPeer.deviceId.take(8)}... at ${lanPeer.ipAddress.hostAddress}")
+        }
+        
+        lanDiscoveryManager.onPeerLost = { lanPeer ->
+            Timber.i("LAN peer lost: ${lanPeer.deviceId.take(8)}...")
+        }
+        
+        lanTransport.onExchangeComplete = { success, sent, received ->
+            if (success) {
+                Timber.i("LAN exchange callback: sent=$sent, received=$received")
             }
         }
     }
@@ -657,9 +815,13 @@ class RangzenService : Service() {
         exchangeJob?.cancel()
         cleanupJob?.cancel()
         wifiDirectTaskJob?.cancel()
+        wifiDirectAutoConnectJob?.cancel()
+        lanDiscoveryJob?.cancel()
         registryCleanupJob?.cancel()
         stopBleOperations()
         wifiDirectManager.cleanup()
+        lanDiscoveryManager.cleanup()
+        lanTransport.cleanup()
         peerRegistry.clear()
         _status.value = ServiceStatus.STOPPED
     }
