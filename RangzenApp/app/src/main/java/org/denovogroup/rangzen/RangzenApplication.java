@@ -8,6 +8,8 @@ import android.os.Build;
 
 import org.denovogroup.rangzen.BuildConfig;
 import org.denovogroup.rangzen.backend.AppConfig;
+import org.denovogroup.rangzen.backend.distribution.ShareModeManager;
+import org.denovogroup.rangzen.backend.distribution.WifiDirectGroupCleanup;
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient;
 import org.denovogroup.rangzen.backend.update.UpdateClient;
 import timber.log.Timber;
@@ -42,7 +44,28 @@ public class RangzenApplication extends Application {
         // Initialize OTA update client
         initializeUpdateClient();
 
+        // Clean up any stale distribution state from previous sessions
+        // This ensures no WiFi Direct groups persist and ShareMode starts clean
+        cleanupDistributionState();
+
         Timber.i("Murmur Application initialized");
+    }
+
+    /**
+     * Cleans up any stale distribution state from previous app sessions.
+     * 
+     * This ensures:
+     * 1. No WiFi Direct groups persist (privacy: prevents "who shared with whom" tracking)
+     * 2. ShareModeManager starts in clean IDLE state
+     */
+    private void cleanupDistributionState() {
+        // Reset ShareModeManager to clean state
+        ShareModeManager.INSTANCE.cleanupOnStartup();
+        
+        // Remove any persistent WiFi Direct groups
+        WifiDirectGroupCleanup.INSTANCE.cleanupOnStartup(this);
+        
+        Timber.d("Distribution state cleaned up");
     }
 
     /**
