@@ -48,6 +48,52 @@ class SettingsFragment : Fragment() {
         loadStats()
         checkForPendingUpdate()
         setupShareApp()
+        setupHelp()
+    }
+
+    private fun setupHelp() {
+        // Help & FAQ row - shows help dialog
+        binding.rowHelp.setOnClickListener {
+            showHelpDialog()
+        }
+    }
+
+    private fun showHelpDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Help & FAQ")
+            .setMessage(
+                "HOW MURMUR WORKS\n\n" +
+                "Messages spread between nearby phones via Bluetooth and WiFi Direct. " +
+                "No internet is needed. When you compose a message, it's stored on your phone " +
+                "and shared with nearby Murmur users, who share it with others.\n\n" +
+                
+                "COMMON QUESTIONS\n\n" +
+                "Q: Is it anonymous?\n" +
+                "A: Yes. You can use any name (or none) and change it per message. " +
+                "The app doesn't collect your real identity.\n\n" +
+                
+                "Q: How far do messages spread?\n" +
+                "A: Messages hop from phone to phone. Popular messages (more \"likes\") " +
+                "spread further. Each exchange shares up to 50 messages.\n\n" +
+                
+                "Q: What does the heart/like do?\n" +
+                "A: Liking a message increases its priority. Liked messages spread " +
+                "further and faster through the network.\n\n" +
+                
+                "Q: Can I delete a sent message?\n" +
+                "A: No. Once sent, messages propagate independently. This is by design " +
+                "for censorship resistance.\n\n" +
+                
+                "Q: What is QA mode?\n" +
+                "A: For testers only. Sends diagnostic data to developers via internet. " +
+                "Do NOT enable in high-risk environments.\n\n" +
+                
+                "Q: How do I add friends?\n" +
+                "A: Scan their QR code from the Friends tab, or import from contacts. " +
+                "Friends' messages have higher trust."
+            )
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun setupShareApp() {
@@ -139,15 +185,20 @@ class SettingsFragment : Fragment() {
             .setTitle("Enable QA Testing Mode")
             .setMessage(
                 "QA mode sends diagnostic data to De Novo Group's server via internet (WiFi or cellular).\n\n" +
-                "What's sent:\n" +
+                "What IS sent:\n" +
                 "• Device model & app version\n" +
+                "• A hashed device ID (to track same device over time)\n" +
                 "• Exchange statistics (peer counts, success rates)\n" +
-                "• Error logs for debugging\n\n" +
-                "NOT sent:\n" +
-                "• Your messages\n" +
-                "• Friend list\n" +
-                "• Location (unless location is enabled separately)\n\n" +
-                "This mode also enables automatic app updates via internet."
+                "• Error logs for debugging\n" +
+                "• Location of exchanges (if location permission granted)\n" +
+                "• Your IP address (visible to our server)\n\n" +
+                "What is NOT sent:\n" +
+                "• Your messages or their content\n" +
+                "• Your friend list\n" +
+                "• Your pseudonym\n" +
+                "• Phone number or real identity\n\n" +
+                "This mode also enables automatic app updates via internet.\n\n" +
+                "⚠️ Do NOT enable in high-risk environments (Iran, etc.)"
             )
             .setPositiveButton("Enable") { _, _ ->
                 prefs.edit().putBoolean("qa_mode", true).apply()

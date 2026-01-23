@@ -19,6 +19,9 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import org.denovogroup.rangzen.R
@@ -73,6 +76,18 @@ class MainActivity : AppCompatActivity() {
         
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Handle window insets for Android 15+ edge-to-edge
+        // This ensures content doesn't overlap with system bars
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            // Apply padding to keep content visible below status bar
+            view.updatePadding(
+                top = insets.top,
+                bottom = 0  // Bottom nav handles its own insets
+            )
+            windowInsets
+        }
 
         // Initialize stores
         MessageStore.getInstance(this)
