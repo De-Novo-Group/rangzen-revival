@@ -19,8 +19,12 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import android.graphics.Color
+import android.view.View
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -77,16 +81,19 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Handle window insets for Android 15+ edge-to-edge
-        // This ensures content doesn't overlap with system bars
+        // Handle edge-to-edge display properly on all Android versions
+        // On Android 15+, edge-to-edge is enforced, so we need to handle insets
+        
+        // Make status bar icons DARK (visible on light background)
+        val windowInsetsController = WindowInsetsControllerCompat(window, binding.root)
+        windowInsetsController.isAppearanceLightStatusBars = true  // Dark icons on light background
+        windowInsetsController.isAppearanceLightNavigationBars = true  // Dark icons on nav bar
+        
+        // Apply window insets padding to prevent content overlap with status bar
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            // Apply padding to keep content visible below status bar
-            view.updatePadding(
-                top = insets.top,
-                bottom = 0  // Bottom nav handles its own insets
-            )
-            windowInsets
+            view.updatePadding(top = insets.top)
+            windowInsets  // Don't consume - let children also receive insets
         }
 
         // Initialize stores

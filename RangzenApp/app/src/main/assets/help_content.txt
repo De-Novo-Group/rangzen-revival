@@ -1,0 +1,46 @@
+=== WELCOME TO MURMUR ===
+
+Murmur is a mesh messaging app designed for situations where the internet is blocked or unavailable. Messages spread directly from phone to phone using Bluetooth and Wi-Fi.
+
+=== HOW IT WORKS ===
+
+1. WRITE: You compose a short message (140 chars).
+2. WALK: You move around your city or village.
+3. SPREAD: When your phone comes near another Murmur user (10-100 meters), they automatically exchange messages in the background.
+4. REPEAT: That person walks away and shares your message with others they meet.
+
+No internet or cellular data is required for messaging.
+
+=== PRIVACY & SAFETY ===
+
+* ANONYMITY: You choose a pseudonym (fake name) or stay anonymous. We do not link messages to your phone number or real identity.
+* NO CENTRAL SERVER: There is no government server to hack or monitor. Messages live only on user devices.
+* ENCRYPTION: Messages are signed, but currently public to the mesh (like a public Twitter feed).
+* PHYSICAL ACCESS: If someone takes your unlocked phone, they can see your messages. Use Android's screen lock!
+
+=== FEATURES ===
+
+* FEED: Messages from nearby users.
+* TRUST: Green/Yellow/Red bars show how "trusted" a message is based on your friends.
+* LIKES (HEART): Tapping the heart saves a message to your "Liked" list and marks it as important to you. Note: This is currently a LOCAL action and does not broadcast to others.
+* FRIENDS: Scan QR codes to trust people. Messages from friends (and friends-of-friends) are prioritized.
+* IMPORT CONTACTS: Checks your phone contacts against other Murmur users. This is done privately using "hashing" - your contact list is NEVER uploaded or shared.
+
+=== TROUBLESHOOTING ===
+
+* "NO PEERS NEARBY":
+  - Ensure Bluetooth and Wi-Fi are ON.
+  - Ensure Location Permission is GRANTED (Android requires this to find nearby devices).
+  - Check that "Enable Murmur" is ON in Settings.
+
+* MESSAGES NOT SENDING:
+  - Be patient! This is "delay-tolerant" networking. It relies on physical movement of people. It might take hours for a message to cross a city.
+
+* BATTERY:
+  - Murmur runs in the background. Expect 5-10% daily battery usage.
+
+=== ABOUT ===
+
+Originally "Rangzen" by De Novo Group.
+Revived in 2026 for internet-restricted regions.
+Open Source and free forever.

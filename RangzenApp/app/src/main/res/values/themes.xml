@@ -11,8 +11,13 @@
         <item name="colorSecondaryVariant">@color/secondary_dark</item>
         <item name="colorOnSecondary">@color/white</item>
         
-        <!-- Status bar color -->
+        <!-- Status bar: dark background with light icons -->
         <item name="android:statusBarColor">@color/primary_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+        
+        <!-- Navigation bar -->
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightNavigationBar">true</item>
         
         <!-- Background colors -->
         <item name="android:colorBackground">@color/background</item>

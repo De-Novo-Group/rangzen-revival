@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.fragment.app.Fragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,8 @@ import org.denovogroup.rangzen.backend.update.UpdateClient
 import org.denovogroup.rangzen.backend.update.UpdateState
 import org.denovogroup.rangzen.databinding.FragmentSettingsBinding
 import timber.log.Timber
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 /**
  * Fragment for app settings.
@@ -59,39 +62,29 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showHelpDialog() {
+        // Load help content from assets
+        val helpText = try {
+            requireContext().assets.open("help_content.txt").use { inputStream ->
+                BufferedReader(InputStreamReader(inputStream)).readText()
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to load help content")
+            "Help content not available."
+        }
+
+        // Create a scrollable TextView for the dialog
+        val scrollView = android.widget.ScrollView(requireContext())
+        val textView = TextView(requireContext()).apply {
+            text = helpText
+            setPadding(50, 40, 50, 40)
+            setTextIsSelectable(true)
+            textSize = 14f
+        }
+        scrollView.addView(textView)
+
         AlertDialog.Builder(requireContext())
             .setTitle("Help & FAQ")
-            .setMessage(
-                "HOW MURMUR WORKS\n\n" +
-                "Messages spread between nearby phones via Bluetooth and WiFi Direct. " +
-                "No internet is needed. When you compose a message, it's stored on your phone " +
-                "and shared with nearby Murmur users, who share it with others.\n\n" +
-                
-                "COMMON QUESTIONS\n\n" +
-                "Q: Is it anonymous?\n" +
-                "A: Yes. You can use any name (or none) and change it per message. " +
-                "The app doesn't collect your real identity.\n\n" +
-                
-                "Q: How far do messages spread?\n" +
-                "A: Messages hop from phone to phone. Popular messages (more \"likes\") " +
-                "spread further. Each exchange shares up to 50 messages.\n\n" +
-                
-                "Q: What does the heart/like do?\n" +
-                "A: Liking a message increases its priority. Liked messages spread " +
-                "further and faster through the network.\n\n" +
-                
-                "Q: Can I delete a sent message?\n" +
-                "A: No. Once sent, messages propagate independently. This is by design " +
-                "for censorship resistance.\n\n" +
-                
-                "Q: What is QA mode?\n" +
-                "A: For testers only. Sends diagnostic data to developers via internet. " +
-                "Do NOT enable in high-risk environments.\n\n" +
-                
-                "Q: How do I add friends?\n" +
-                "A: Scan their QR code from the Friends tab, or import from contacts. " +
-                "Friends' messages have higher trust."
-            )
+            .setView(scrollView)
             .setPositiveButton("OK", null)
             .show()
     }
