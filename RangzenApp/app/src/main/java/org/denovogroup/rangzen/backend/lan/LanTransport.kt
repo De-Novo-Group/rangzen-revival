@@ -4,19 +4,26 @@
  *
  * LAN Transport for high-bandwidth message exchange over TCP sockets.
  * 
- * When devices discover each other via LAN (UDP broadcast), they can
- * use this TCP transport for fast bulk message exchange.
+ * IMPORTANT: This transport preserves the PSI (Private Set Intersection)
+ * trust model. People's safety depends on the trust system - we CANNOT
+ * bypass it even for speed.
  * 
- * Protocol:
+ * Protocol (with PSI):
  * 1. Client connects to peer's TCP port
- * 2. Send handshake with device ID and nonce
- * 3. Exchange messages in both directions
- * 4. Close connection
+ * 2. Exchange blinded friend sets (PSI round 1)
+ * 3. Exchange double-blinded sets (PSI round 2)
+ * 4. Compute common friends count
+ * 5. Exchange messages with trust scores based on common friends
+ * 6. Close connection
+ * 
+ * All frames are length-prefixed to prevent unbounded reads:
+ * [4 bytes: length][payload]
  */
 package org.denovogroup.rangzen.backend.lan
 
 import android.content.Context
 import kotlinx.coroutines.*
+import org.denovogroup.rangzen.backend.Crypto
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.SecurityManager
@@ -24,20 +31,20 @@ import org.denovogroup.rangzen.backend.legacy.LegacyExchangeCodec
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeMath
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.objects.RangzenMessage
+import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
 import java.io.*
 import java.net.*
+import java.nio.ByteBuffer
 import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * LAN Transport for TCP-based message exchange.
+ * LAN Transport for TCP-based message exchange WITH PSI trust model.
  * 
- * Provides:
- * - Server socket for accepting incoming connections
- * - Client connection for initiating exchanges with discovered peers
- * - Simplified exchange protocol (no PSI) for fast bulk transfer
+ * Safety is paramount - the trust model protects users from malicious content.
+ * This transport implements the full PSI handshake even though it adds latency.
  */
 class LanTransport {
     
@@ -46,10 +53,22 @@ class LanTransport {
         const val EXCHANGE_PORT = 41235
         
         // Protocol constants
-        const val PROTOCOL_VERSION = 1
+        const val PROTOCOL_VERSION = 2  // Version 2 = with PSI
         const val HANDSHAKE_TIMEOUT_MS = 5_000
-        const val EXCHANGE_TIMEOUT_MS = 30_000
-        const val MAX_MESSAGE_SIZE = 1024 * 1024  // 1 MB max per exchange
+        const val EXCHANGE_TIMEOUT_MS = 60_000  // Longer timeout for PSI + messages
+        
+        // Security: Maximum frame size to prevent memory exhaustion
+        // 1 MB should be plenty for friend sets and message batches
+        const val MAX_FRAME_SIZE = 1024 * 1024
+        
+        // Frame type identifiers
+        const val FRAME_HANDSHAKE = 1
+        const val FRAME_CLIENT_FRIENDS = 2
+        const val FRAME_SERVER_FRIENDS = 3
+        const val FRAME_SERVER_REPLY = 4
+        const val FRAME_CLIENT_REPLY = 5
+        const val FRAME_MESSAGES = 6
+        const val FRAME_DONE = 7
     }
     
     /** Server socket for incoming connections */
@@ -64,7 +83,7 @@ class LanTransport {
     /** Coroutine scope for server operations */
     private var serverScope: CoroutineScope? = null
     
-    /** Our device identifier */
+    /** Our device identifier (privacy-preserving, derived from crypto key) */
     private var localDeviceId: String = ""
     
     /** Callback when exchange completes */
@@ -75,7 +94,7 @@ class LanTransport {
      */
     fun initialize(deviceId: String) {
         this.localDeviceId = deviceId
-        Timber.i("LAN Transport initialized")
+        Timber.i("LAN Transport initialized (PSI-enabled, v$PROTOCOL_VERSION)")
     }
     
     /**
@@ -98,8 +117,8 @@ class LanTransport {
             runServer(context, messageStore, friendStore)
         }
         
-        Timber.i("LAN Transport server started on port $EXCHANGE_PORT")
-        trackTelemetry("server_started", "port" to EXCHANGE_PORT.toString())
+        Timber.i("LAN Transport server started on port $EXCHANGE_PORT (PSI-enabled)")
+        trackTelemetry("server_started", "port" to EXCHANGE_PORT.toString(), "psi" to "true")
     }
     
     /**
@@ -154,7 +173,7 @@ class LanTransport {
     }
     
     /**
-     * Handle an incoming client connection.
+     * Handle an incoming client connection with full PSI.
      */
     private suspend fun handleClientConnection(
         socket: Socket,
@@ -164,63 +183,131 @@ class LanTransport {
     ) {
         val clientAddress = socket.remoteSocketAddress.toString()
         Timber.i("LAN client connected from $clientAddress")
+        val startTime = System.currentTimeMillis()
         
         try {
             socket.soTimeout = EXCHANGE_TIMEOUT_MS
             
-            val input = BufferedReader(InputStreamReader(socket.getInputStream()))
-            val output = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
+            val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
+            val output = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
             
-            // Read handshake
-            val handshakeJson = input.readLine() ?: throw IOException("No handshake received")
-            val handshake = JSONObject(handshakeJson)
-            
+            // Step 1: Read client handshake
+            val handshakeFrame = readFrame(input)
+            val handshake = JSONObject(String(handshakeFrame, Charsets.UTF_8))
             val peerDeviceId = handshake.optString("device_id")
             val peerNonce = handshake.optString("nonce")
+            val peerVersion = handshake.optInt("version", 1)
             
             if (peerDeviceId.isBlank()) {
                 throw IOException("Invalid handshake: missing device_id")
             }
             
-            Timber.d("LAN handshake from peer: ${peerDeviceId.take(8)}...")
+            Timber.d("LAN handshake from peer: ${peerDeviceId.take(8)}... (v$peerVersion)")
             
-            // Send our handshake response
+            // Step 2: Send our handshake response
             val responseHandshake = JSONObject().apply {
                 put("device_id", localDeviceId)
-                put("nonce", peerNonce)  // Echo back their nonce
+                put("nonce", peerNonce)
                 put("version", PROTOCOL_VERSION)
             }
-            output.write(responseHandshake.toString())
-            output.newLine()
-            output.flush()
+            writeFrame(output, responseHandshake.toString().toByteArray(Charsets.UTF_8))
             
-            // Read their messages
-            val incomingData = input.readLine() ?: ""
-            val receivedMessages = if (incomingData.isNotBlank()) {
-                processIncomingMessages(incomingData, messageStore, friendStore)
+            // Step 3: PSI - Read client's blinded friends
+            val clientFriendsFrame = readFrame(input)
+            val clientFriendsJson = JSONObject(String(clientFriendsFrame, Charsets.UTF_8))
+            val useTrust = SecurityManager.useTrust(context)
+            
+            val remoteBlindedFriends = if (useTrust) {
+                decodeBlindedFriends(clientFriendsJson.optJSONArray("blinded_friends"))
             } else {
                 emptyList()
             }
             
-            // Send our messages
-            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore)
-            if (outgoingData != null) {
-                output.write(outgoingData)
-            }
-            output.newLine()
-            output.flush()
+            // Step 4: Create our PSI objects and send our blinded friends
+            val localFriends = friendStore.getAllFriendIds()
+            val clientPSI = Crypto.PrivateSetIntersection(localFriends)
+            val serverPSI = Crypto.PrivateSetIntersection(localFriends)
             
-            Timber.i("LAN exchange complete: sent=${outgoingData?.length ?: 0} bytes, received ${receivedMessages.size} messages")
+            val ourBlindedFriends = if (useTrust) {
+                clientPSI.encodeBlindedItems()
+            } else {
+                emptyList()
+            }
+            
+            val serverFriendsJson = JSONObject().apply {
+                put("blinded_friends", encodeBlindedFriends(ourBlindedFriends))
+            }
+            writeFrame(output, serverFriendsJson.toString().toByteArray(Charsets.UTF_8))
+            
+            // Step 5: Compute and send server reply (double-blinded + hashed)
+            val serverReply = serverPSI.replyToBlindedItems(ArrayList(remoteBlindedFriends))
+            val serverReplyJson = JSONObject().apply {
+                put("double_blinded", encodeBlindedFriends(serverReply.doubleBlindedItems))
+                put("hashed_blinded", encodeBlindedFriends(serverReply.hashedBlindedItems))
+            }
+            writeFrame(output, serverReplyJson.toString().toByteArray(Charsets.UTF_8))
+            
+            // Step 6: Read client's reply
+            val clientReplyFrame = readFrame(input)
+            val clientReplyJson = JSONObject(String(clientReplyFrame, Charsets.UTF_8))
+            val remoteDoubleBlinded = decodeBlindedFriends(clientReplyJson.optJSONArray("double_blinded"))
+            val remoteHashedBlinded = decodeBlindedFriends(clientReplyJson.optJSONArray("hashed_blinded"))
+            
+            // Step 7: Compute common friends
+            val commonFriends = if (useTrust) {
+                clientPSI.getCardinality(
+                    Crypto.PrivateSetIntersection.ServerReplyTuple(
+                        ArrayList(remoteDoubleBlinded),
+                        ArrayList(remoteHashedBlinded)
+                    )
+                )
+            } else {
+                0
+            }
+            
+            Timber.d("LAN PSI complete: $commonFriends common friends with ${peerDeviceId.take(8)}...")
+            
+            // Step 8: Check minimum shared contacts
+            val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)
+            if (useTrust && commonFriends < minSharedContacts) {
+                Timber.w("LAN exchange rejected: sharedContacts=$commonFriends minRequired=$minSharedContacts")
+                writeFrame(output, JSONObject().apply {
+                    put("error", "insufficient_trust")
+                    put("common_friends", commonFriends)
+                    put("required", minSharedContacts)
+                }.toString().toByteArray(Charsets.UTF_8))
+                return
+            }
+            
+            // Step 9: Read client's messages
+            val clientMessagesFrame = readFrame(input)
+            val receivedMessages = processIncomingMessages(
+                String(clientMessagesFrame, Charsets.UTF_8),
+                messageStore,
+                friendStore,
+                commonFriends
+            )
+            
+            // Step 10: Send our messages
+            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends)
+            writeFrame(output, outgoingData.toByteArray(Charsets.UTF_8))
+            
+            val duration = System.currentTimeMillis() - startTime
+            Timber.i("LAN exchange (server) complete in ${duration}ms: received ${receivedMessages.size} messages, commonFriends=$commonFriends")
+            
             trackTelemetry(
                 "exchange_complete_server",
                 "peer" to peerDeviceId.take(8),
-                "received" to receivedMessages.size.toString()
+                "received" to receivedMessages.size.toString(),
+                "common_friends" to commonFriends.toString(),
+                "duration_ms" to duration.toString()
             )
             
             onExchangeComplete?.invoke(true, 0, receivedMessages.size)
             
         } catch (e: Exception) {
-            Timber.e(e, "LAN exchange failed with client $clientAddress")
+            val duration = System.currentTimeMillis() - startTime
+            Timber.e(e, "LAN exchange failed with client $clientAddress after ${duration}ms")
             trackTelemetry("exchange_error_server", "error" to e.message.toString())
             onExchangeComplete?.invoke(false, 0, 0)
         } finally {
@@ -233,13 +320,7 @@ class LanTransport {
     }
     
     /**
-     * Initiate an exchange with a discovered LAN peer.
-     * 
-     * @param peer The LAN peer to connect to
-     * @param context Android context
-     * @param messageStore Message store for exchange
-     * @param friendStore Friend store for trust computation
-     * @return ExchangeResult with success status and message counts
+     * Initiate an exchange with a discovered LAN peer (with full PSI).
      */
     suspend fun exchangeWithPeer(
         peer: LanDiscoveryManager.LanPeer,
@@ -261,7 +342,7 @@ class LanTransport {
     }
     
     /**
-     * Perform the actual exchange with a peer.
+     * Perform the actual exchange with PSI.
      */
     private suspend fun doExchange(
         peer: LanDiscoveryManager.LanPeer,
@@ -273,74 +354,128 @@ class LanTransport {
         var socket: Socket? = null
         
         try {
-            Timber.i("Starting LAN exchange with ${peer.deviceId.take(8)}... at ${peer.ipAddress.hostAddress}")
+            Timber.i("Starting LAN exchange (PSI) with ${peer.deviceId.take(8)}... at ${peer.ipAddress.hostAddress}")
             
             // Connect to peer
             socket = Socket()
-            socket.connect(InetSocketAddress(peer.ipAddress, EXCHANGE_PORT), HANDSHAKE_TIMEOUT_MS)
+            socket.connect(InetSocketAddress(peer.ipAddress, peer.port), HANDSHAKE_TIMEOUT_MS)
             socket.soTimeout = EXCHANGE_TIMEOUT_MS
             
-            val input = BufferedReader(InputStreamReader(socket.getInputStream()))
-            val output = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
+            val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
+            val output = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
             
-            // Send handshake
+            // Step 1: Send handshake
             val nonce = generateNonce()
             val handshake = JSONObject().apply {
                 put("device_id", localDeviceId)
                 put("nonce", nonce)
-                put("version", PROTOCOL_VERSION as Any)
+                put("version", PROTOCOL_VERSION)
             }
-            output.write(handshake.toString())
-            output.newLine()
-            output.flush()
+            writeFrame(output, handshake.toString().toByteArray(Charsets.UTF_8))
             
-            // Read handshake response
-            val responseJson = input.readLine() ?: throw IOException("No handshake response")
-            val response = JSONObject(responseJson)
-            
+            // Step 2: Read handshake response
+            val responseFrame = readFrame(input)
+            val response = JSONObject(String(responseFrame, Charsets.UTF_8))
             val peerDeviceId = response.optString("device_id")
             val echoedNonce = response.optString("nonce")
             
-            // Verify nonce
             if (echoedNonce != nonce) {
                 throw IOException("Nonce mismatch - possible MITM")
             }
             
             Timber.d("LAN handshake verified with peer: ${peerDeviceId.take(8)}...")
             
-            // Send our messages
-            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore)
-            val messagesSent = if (outgoingData != null) {
-                output.write(outgoingData)
-                // Count messages in the JSON
-                try {
-                    val json = JSONObject(outgoingData)
-                    json.optInt("message_count", 0)
-                } catch (e: Exception) {
-                    0
-                }
-            } else {
-                0
-            }
-            output.newLine()
-            output.flush()
+            // Step 3: PSI - Send our blinded friends
+            val useTrust = SecurityManager.useTrust(context)
+            val localFriends = friendStore.getAllFriendIds()
+            val clientPSI = Crypto.PrivateSetIntersection(localFriends)
+            val serverPSI = Crypto.PrivateSetIntersection(localFriends)
             
-            // Read their messages
-            val incomingData = input.readLine() ?: ""
-            val receivedMessages = if (incomingData.isNotBlank()) {
-                processIncomingMessages(incomingData, messageStore, friendStore)
+            val ourBlindedFriends = if (useTrust) {
+                clientPSI.encodeBlindedItems()
             } else {
                 emptyList()
             }
             
+            val clientFriendsJson = JSONObject().apply {
+                put("blinded_friends", encodeBlindedFriends(ourBlindedFriends))
+            }
+            writeFrame(output, clientFriendsJson.toString().toByteArray(Charsets.UTF_8))
+            
+            // Step 4: Read server's blinded friends
+            val serverFriendsFrame = readFrame(input)
+            val serverFriendsJson = JSONObject(String(serverFriendsFrame, Charsets.UTF_8))
+            val remoteBlindedFriends = if (useTrust) {
+                decodeBlindedFriends(serverFriendsJson.optJSONArray("blinded_friends"))
+            } else {
+                emptyList()
+            }
+            
+            // Step 5: Read server's reply
+            val serverReplyFrame = readFrame(input)
+            val serverReplyJson = JSONObject(String(serverReplyFrame, Charsets.UTF_8))
+            val remoteDoubleBlinded = decodeBlindedFriends(serverReplyJson.optJSONArray("double_blinded"))
+            val remoteHashedBlinded = decodeBlindedFriends(serverReplyJson.optJSONArray("hashed_blinded"))
+            
+            // Step 6: Compute and send our reply
+            val clientReply = serverPSI.replyToBlindedItems(ArrayList(remoteBlindedFriends))
+            val clientReplyJson = JSONObject().apply {
+                put("double_blinded", encodeBlindedFriends(clientReply.doubleBlindedItems))
+                put("hashed_blinded", encodeBlindedFriends(clientReply.hashedBlindedItems))
+            }
+            writeFrame(output, clientReplyJson.toString().toByteArray(Charsets.UTF_8))
+            
+            // Step 7: Compute common friends
+            val commonFriends = if (useTrust) {
+                clientPSI.getCardinality(
+                    Crypto.PrivateSetIntersection.ServerReplyTuple(
+                        ArrayList(remoteDoubleBlinded),
+                        ArrayList(remoteHashedBlinded)
+                    )
+                )
+            } else {
+                0
+            }
+            
+            Timber.d("LAN PSI complete: $commonFriends common friends with ${peerDeviceId.take(8)}...")
+            
+            // Step 8: Check minimum shared contacts
+            val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)
+            if (useTrust && commonFriends < minSharedContacts) {
+                Timber.w("LAN exchange rejected: sharedContacts=$commonFriends minRequired=$minSharedContacts")
+                return@withContext ExchangeResult(
+                    false, 0, 0,
+                    "Insufficient trust: $commonFriends < $minSharedContacts shared contacts"
+                )
+            }
+            
+            // Step 9: Send our messages
+            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends)
+            val messagesSent = try {
+                val json = JSONObject(outgoingData)
+                json.optInt("message_count", 0)
+            } catch (e: Exception) { 0 }
+            
+            writeFrame(output, outgoingData.toByteArray(Charsets.UTF_8))
+            
+            // Step 10: Read server's messages
+            val serverMessagesFrame = readFrame(input)
+            val receivedMessages = processIncomingMessages(
+                String(serverMessagesFrame, Charsets.UTF_8),
+                messageStore,
+                friendStore,
+                commonFriends
+            )
+            
             val duration = System.currentTimeMillis() - startTime
-            Timber.i("LAN exchange complete in ${duration}ms: sent $messagesSent, received ${receivedMessages.size}")
+            Timber.i("LAN exchange (client) complete in ${duration}ms: sent $messagesSent, received ${receivedMessages.size}, commonFriends=$commonFriends")
             
             trackTelemetry(
                 "exchange_complete_client",
                 "peer" to peerDeviceId.take(8),
                 "sent" to messagesSent.toString(),
                 "received" to receivedMessages.size.toString(),
+                "common_friends" to commonFriends.toString(),
                 "duration_ms" to duration.toString()
             )
             
@@ -366,6 +501,159 @@ class LanTransport {
             }
         }
     }
+    
+    // ========================================================================
+    // Frame I/O - Length-prefixed to prevent unbounded reads
+    // ========================================================================
+    
+    /**
+     * Write a length-prefixed frame.
+     * Format: [4 bytes big-endian length][payload]
+     */
+    private fun writeFrame(output: DataOutputStream, data: ByteArray) {
+        if (data.size > MAX_FRAME_SIZE) {
+            throw IOException("Frame too large: ${data.size} > $MAX_FRAME_SIZE")
+        }
+        output.writeInt(data.size)
+        output.write(data)
+        output.flush()
+    }
+    
+    /**
+     * Read a length-prefixed frame.
+     * Enforces MAX_FRAME_SIZE to prevent memory exhaustion.
+     */
+    private fun readFrame(input: DataInputStream): ByteArray {
+        val length = input.readInt()
+        
+        if (length < 0 || length > MAX_FRAME_SIZE) {
+            throw IOException("Invalid frame length: $length (max: $MAX_FRAME_SIZE)")
+        }
+        
+        val buffer = ByteArray(length)
+        input.readFully(buffer)
+        return buffer
+    }
+    
+    // ========================================================================
+    // PSI Helpers
+    // ========================================================================
+    
+    /**
+     * Encode blinded friends as JSON array of base64 strings.
+     */
+    private fun encodeBlindedFriends(friends: List<ByteArray>): JSONArray {
+        val array = JSONArray()
+        for (friend in friends) {
+            array.put(android.util.Base64.encodeToString(friend, android.util.Base64.NO_WRAP))
+        }
+        return array
+    }
+    
+    /**
+     * Decode blinded friends from JSON array.
+     */
+    private fun decodeBlindedFriends(array: JSONArray?): List<ByteArray> {
+        if (array == null) return emptyList()
+        val result = mutableListOf<ByteArray>()
+        for (i in 0 until array.length()) {
+            val encoded = array.optString(i)
+            if (encoded.isNotBlank()) {
+                result.add(android.util.Base64.decode(encoded, android.util.Base64.NO_WRAP))
+            }
+        }
+        return result
+    }
+    
+    // ========================================================================
+    // Message Encoding/Decoding
+    // ========================================================================
+    
+    /**
+     * Prepare outgoing messages for exchange.
+     * Uses commonFriends for proper trust computation.
+     */
+    private fun prepareOutgoingMessages(
+        context: Context,
+        messageStore: MessageStore,
+        friendStore: FriendStore,
+        commonFriends: Int
+    ): String {
+        val maxMessages = SecurityManager.maxMessagesPerExchange(context)
+        val messages = messageStore.getMessagesForExchange(commonFriends, maxMessages)
+        
+        val myFriends = friendStore.getAllFriendIds().size
+        val json = JSONObject().apply {
+            put("protocol", "psi_v2")
+            put("timestamp", System.currentTimeMillis())
+            put("message_count", messages.size)
+            put("common_friends", commonFriends)
+            val msgArray = JSONArray()
+            for (msg in messages) {
+                val encoded = LegacyExchangeCodec.encodeMessage(context, msg, commonFriends, myFriends)
+                msgArray.put(encoded)
+            }
+            put("messages", msgArray)
+        }
+        return json.toString()
+    }
+    
+    /**
+     * Process incoming messages from exchange.
+     * Uses commonFriends for proper trust computation.
+     */
+    private fun processIncomingMessages(
+        data: String,
+        messageStore: MessageStore,
+        friendStore: FriendStore,
+        commonFriends: Int
+    ): List<RangzenMessage> {
+        return try {
+            val json = JSONObject(data)
+            
+            // Check for error response
+            if (json.has("error")) {
+                Timber.w("LAN peer rejected exchange: ${json.optString("error")}")
+                return emptyList()
+            }
+            
+            val msgArray = json.optJSONArray("messages") ?: return emptyList()
+            
+            val received = mutableListOf<RangzenMessage>()
+            val myFriendsCount = friendStore.getAllFriendIds().size
+            
+            for (i in 0 until msgArray.length()) {
+                val msgJson = msgArray.getJSONObject(i)
+                val msg = LegacyExchangeCodec.decodeMessage(msgJson)
+                
+                val existing = messageStore.getMessage(msg.messageId)
+                if (existing != null) {
+                    // Update trust using proper commonFriends value
+                    val newTrust = LegacyExchangeMath.newPriority(
+                        msg.trustScore,
+                        existing.trustScore,
+                        commonFriends,
+                        myFriendsCount
+                    )
+                    if (newTrust > existing.trustScore) {
+                        messageStore.updateTrustScore(msg.messageId, newTrust)
+                    }
+                } else if (msg.text != null && msg.text.isNotEmpty()) {
+                    messageStore.addMessage(msg)
+                    received.add(msg)
+                }
+            }
+            
+            received
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to process incoming LAN messages")
+            emptyList()
+        }
+    }
+    
+    // ========================================================================
+    // Utility
+    // ========================================================================
     
     /**
      * Check if an exchange is currently in progress.
@@ -397,81 +685,6 @@ class LanTransport {
         val bytes = ByteArray(16)
         SecureRandom().nextBytes(bytes)
         return bytes.joinToString("") { "%02x".format(it) }
-    }
-    
-    /**
-     * Prepare outgoing messages for exchange.
-     * Simplified protocol - no PSI, just message encoding.
-     */
-    private fun prepareOutgoingMessages(
-        context: Context,
-        messageStore: MessageStore,
-        friendStore: FriendStore
-    ): String? {
-        val maxMessages = SecurityManager.maxMessagesPerExchange(context)
-        // Use 0 common friends for simplified exchange (no PSI)
-        val messages = messageStore.getMessagesForExchange(0, maxMessages)
-        if (messages.isEmpty()) return null
-        
-        val myFriends = friendStore.getAllFriendIds().size
-        val json = JSONObject().apply {
-            put("protocol", "simplified_v1")
-            put("timestamp", System.currentTimeMillis())
-            put("message_count", messages.size)
-            val msgArray = org.json.JSONArray()
-            for (msg in messages) {
-                // Encode without PSI context (0 common friends)
-                val encoded = LegacyExchangeCodec.encodeMessage(context, msg, 0, myFriends)
-                msgArray.put(encoded)
-            }
-            put("messages", msgArray)
-        }
-        return json.toString()
-    }
-    
-    /**
-     * Process incoming messages from exchange.
-     * Decodes messages and merges them into the local store.
-     */
-    private fun processIncomingMessages(
-        data: String,
-        messageStore: MessageStore,
-        friendStore: FriendStore
-    ): List<RangzenMessage> {
-        return try {
-            val json = JSONObject(data)
-            val msgArray = json.optJSONArray("messages") ?: return emptyList()
-            
-            val received = mutableListOf<RangzenMessage>()
-            val myFriendsCount = friendStore.getAllFriendIds().size
-            
-            for (i in 0 until msgArray.length()) {
-                val msgJson = msgArray.getJSONObject(i)
-                val msg = LegacyExchangeCodec.decodeMessage(msgJson)
-                
-                val existing = messageStore.getMessage(msg.messageId)
-                if (existing != null) {
-                    // Update trust if new value is higher
-                    val newTrust = LegacyExchangeMath.newPriority(
-                        msg.trustScore,
-                        existing.trustScore,
-                        0, // No PSI context in simplified exchange
-                        myFriendsCount
-                    )
-                    if (newTrust > existing.trustScore) {
-                        messageStore.updateTrustScore(msg.messageId, newTrust)
-                    }
-                } else if (msg.text != null && msg.text.isNotEmpty()) {
-                    messageStore.addMessage(msg)
-                    received.add(msg)
-                }
-            }
-            
-            received
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to process incoming LAN messages")
-            emptyList()
-        }
     }
     
     /**

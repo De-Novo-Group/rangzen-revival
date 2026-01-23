@@ -183,10 +183,13 @@ class RangzenService : Service() {
             Timber.d("WiFi Direct: ${wifiPeers.size} total peers discovered")
         }
         
-        // Set our WiFi Direct RSVP name to broadcast our device identifier
-        val deviceId = wifiDirectManager.getDeviceIdentifier()
+        // Get privacy-preserving device ID (derived from crypto keypair, not hardware)
+        // This ID is safe to share over network - cannot be traced to hardware identifiers
+        val deviceId = DeviceIdentity.getDeviceId(this)
+        
+        // Set our WiFi Direct RSVP name (best-effort, blocked on Android 12+)
         wifiDirectManager.setRsvpName(deviceId)
-        Timber.i("WiFi Direct RSVP initialized with identifier: $deviceId")
+        Timber.i("Device ID (privacy-preserving): ${deviceId.take(8)}...")
         
         // Wire up WiFi Direct transport for high-bandwidth exchanges
         setupWifiDirectTransport(deviceId)
