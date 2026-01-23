@@ -39,8 +39,9 @@ object ShareModeManager {
     // After this, session is automatically cancelled for safety
     const val SESSION_TIMEOUT_MS = 5 * 60 * 1000L
     
-    // Session code length: 6 digits for easy verbal sharing
-    private const val SESSION_CODE_LENGTH = 6
+    // Session code length: 3 digits for minimal friction
+    // This is consent verification, not cryptographic security
+    private const val SESSION_CODE_LENGTH = 3
     
     /**
      * Share Mode states.
