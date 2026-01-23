@@ -227,8 +227,12 @@ class NsdDiscoveryManager(private val context: Context) {
             return
         }
         
+        // FIX #13: Sanitize device ID for mDNS compatibility
+        // mDNS names: alphanumeric + hyphens only, max 63 chars
+        val sanitizedId = sanitizeForMdns(localDeviceId)
+        
         val serviceInfo = NsdServiceInfo().apply {
-            serviceName = "$SERVICE_NAME_PREFIX$localDeviceId"
+            serviceName = "$SERVICE_NAME_PREFIX$sanitizedId"
             serviceType = SERVICE_TYPE
             port = EXCHANGE_PORT
         }
@@ -341,6 +345,31 @@ class NsdDiscoveryManager(private val context: Context) {
             nsdManager?.resolveService(serviceInfo, resolveListener)
         } catch (e: Exception) {
             Timber.w(e, "Exception resolving NSD service")
+        }
+    }
+    
+    /**
+     * Sanitize a device ID for use in mDNS service names.
+     * 
+     * mDNS service names must:
+     * - Contain only alphanumeric characters and hyphens
+     * - Not start or end with hyphen
+     * - Be max 63 characters (we leave room for prefix)
+     * 
+     * Device IDs may contain colons (Bluetooth MAC) or other chars.
+     */
+    private fun sanitizeForMdns(deviceId: String): String {
+        // Replace colons and other invalid chars with empty string
+        // Keep only alphanumeric and convert to lowercase
+        val sanitized = deviceId
+            .replace(Regex("[^a-zA-Z0-9]"), "")
+            .lowercase()
+            .take(50) // Leave room for "murmur-" prefix
+        
+        return if (sanitized.isEmpty()) {
+            "unknown"
+        } else {
+            sanitized
         }
     }
     

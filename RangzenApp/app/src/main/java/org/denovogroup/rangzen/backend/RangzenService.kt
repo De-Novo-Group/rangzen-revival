@@ -389,80 +389,99 @@ class RangzenService : Service() {
         val lanPeers = lanDiscoveryManager.getDiscoveredPeers()
         val nsdPeers = nsdDiscoveryManager.getDiscoveredPeers()
         
-        // Combine LAN and NSD peers (deduplicate by device ID)
-        val networkPeers = (lanPeers.map { it.deviceId to it } + 
-                          nsdPeers.map { it.deviceId to null })
-                          .groupBy { it.first }
-                          .mapValues { it.value.firstOrNull()?.second }
-                          .filterValues { it != null }
-                          .mapValues { it.value!! }
+        // FIX #9: Properly merge LAN and NSD peers - don't drop NSD-only peers
+        // Convert NSD peers to LanPeer format for exchange
+        val lanPeerMap = lanPeers.associateBy { it.deviceId }
+        val nsdOnlyPeers = nsdPeers
+            .filter { nsdPeer -> !lanPeerMap.containsKey(nsdPeer.deviceId) }
+            .map { nsdPeer ->
+                // Convert NSD peer to LAN peer format
+                LanDiscoveryManager.LanPeer(
+                    deviceId = nsdPeer.deviceId,
+                    ipAddress = java.net.InetAddress.getByName(nsdPeer.host),
+                    port = nsdPeer.port,
+                    lastSeen = nsdPeer.discoveredAt
+                )
+            }
         
-        val totalPeers = networkPeers.size
+        // Combine: LAN peers take precedence, then NSD-only peers
+        val allNetworkPeers = lanPeers + nsdOnlyPeers
         
-        if (totalPeers == 0) {
+        if (allNetworkPeers.isEmpty()) {
             return
         }
         
-        Timber.i("PARALLEL EXCHANGE: Found $totalPeers network peers, starting concurrent exchanges...")
+        Timber.i("PARALLEL EXCHANGE: Found ${allNetworkPeers.size} network peers " +
+            "(${lanPeers.size} LAN, ${nsdOnlyPeers.size} NSD-only), starting concurrent exchanges...")
         
-        // Get location once for all exchanges (QA telemetry)
-        val location = getLocationForTelemetry()
+        // FIX #11: Only fetch location if telemetry is enabled (privacy + battery)
+        val location = if (TelemetryClient.getInstance()?.isEnabled() == true) {
+            getLocationForTelemetry()
+        } else {
+            null
+        }
+        
+        // FIX #10: Check concurrency guard ONCE before launching parallel jobs
+        // Use a mutex to ensure we don't spawn overlapping exchange cycles
+        if (lanTransport.isExchangeInProgress()) {
+            Timber.d("PARALLEL: Skipping cycle - exchange already in progress")
+            return
+        }
         
         // Launch all LAN exchanges in parallel
         val lanJobs = mutableListOf<Job>()
-        for ((deviceId, lanPeer) in networkPeers) {
-            if (!lanTransport.isExchangeInProgress()) {
-                val job = serviceScope.launch {
-                    val startTime = System.currentTimeMillis()
-                    try {
-                        val result = lanTransport.exchangeWithPeer(
-                            peer = lanPeer,
-                            context = this@RangzenService,
-                            messageStore = messageStore,
-                            friendStore = friendStore
-                        )
+        for (lanPeer in allNetworkPeers) {
+            val deviceId = lanPeer.deviceId
+            val job = serviceScope.launch {
+                val startTime = System.currentTimeMillis()
+                try {
+                    val result = lanTransport.exchangeWithPeer(
+                        peer = lanPeer,
+                        context = this@RangzenService,
+                        messageStore = messageStore,
+                        friendStore = friendStore
+                    )
+                    
+                    val durationMs = System.currentTimeMillis() - startTime
+                    
+                    // Track exchange with location for QA
+                    TelemetryClient.getInstance()?.trackExchangeWithLocation(
+                        success = result.success,
+                        peerIdHash = deviceId.hashCode().toString(),
+                        transport = "lan",
+                        location = location,
+                        durationMs = durationMs,
+                        messagesSent = result.messagesSent,
+                        messagesReceived = result.messagesReceived
+                    )
+                    
+                    if (result.success) {
+                        Timber.i("PARALLEL: LAN exchange complete with ${deviceId.take(8)}...: " +
+                            "sent=${result.messagesSent}, received=${result.messagesReceived}")
                         
-                        val durationMs = System.currentTimeMillis() - startTime
-                        
-                        // Track exchange with location for QA
-                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
-                            success = result.success,
-                            peerIdHash = deviceId.hashCode().toString(),
-                            transport = "lan",
-                            location = location,
-                            durationMs = durationMs,
-                            messagesSent = result.messagesSent,
-                            messagesReceived = result.messagesReceived
-                        )
-                        
-                        if (result.success) {
-                            Timber.i("PARALLEL: LAN exchange complete with ${deviceId.take(8)}...: " +
-                                "sent=${result.messagesSent}, received=${result.messagesReceived}")
-                            
-                            if (result.messagesReceived > 0) {
-                                messageStore.refreshMessagesNow()
-                            }
+                        if (result.messagesReceived > 0) {
+                            messageStore.refreshMessagesNow()
                         }
-                    } catch (e: Exception) {
-                        val durationMs = System.currentTimeMillis() - startTime
-                        
-                        // Track failure with location for QA
-                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
-                            success = false,
-                            peerIdHash = deviceId.hashCode().toString(),
-                            transport = "lan",
-                            location = location,
-                            durationMs = durationMs,
-                            messagesSent = 0,
-                            messagesReceived = 0,
-                            error = e.message
-                        )
-                        
-                        Timber.e(e, "PARALLEL: LAN exchange failed with ${deviceId.take(8)}...")
                     }
+                } catch (e: Exception) {
+                    val durationMs = System.currentTimeMillis() - startTime
+                    
+                    // Track failure with location for QA
+                    TelemetryClient.getInstance()?.trackExchangeWithLocation(
+                        success = false,
+                        peerIdHash = deviceId.hashCode().toString(),
+                        transport = "lan",
+                        location = location,
+                        durationMs = durationMs,
+                        messagesSent = 0,
+                        messagesReceived = 0,
+                        error = e.message
+                    )
+                    
+                    Timber.e(e, "PARALLEL: LAN exchange failed with ${deviceId.take(8)}...")
                 }
-                lanJobs.add(job)
             }
+            lanJobs.add(job)
         }
         
         // Note: BLE exchanges are handled by the separate exchange loop (performExchangeCycle)
@@ -478,7 +497,7 @@ class RangzenService : Service() {
             Timber.w("PARALLEL: Some LAN exchanges timed out")
         }
         
-        Timber.d("PARALLEL EXCHANGE: Completed cycle for $totalPeers network peers")
+        Timber.d("PARALLEL EXCHANGE: Completed cycle for ${allNetworkPeers.size} network peers")
     }
     
     /**

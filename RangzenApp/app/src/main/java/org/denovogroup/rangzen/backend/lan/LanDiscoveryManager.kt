@@ -337,7 +337,9 @@ class LanDiscoveryManager(private val context: Context) {
             put("version", PROTOCOL_VERSION)
             put("device_id", localDeviceId)
             put("ip", localIp)
-            put("port", DISCOVERY_PORT)
+            // FIX #6: Advertise TCP EXCHANGE_PORT (41235), not UDP DISCOVERY_PORT (41234)
+            // This is the port where we're listening for TCP message exchange connections
+            put("port", LanTransport.EXCHANGE_PORT)
             put("timestamp", System.currentTimeMillis())
         }
         
@@ -374,17 +376,20 @@ class LanDiscoveryManager(private val context: Context) {
                 return
             }
             
+            // FIX #6: Extract port from packet (should be TCP EXCHANGE_PORT)
+            val peerPort = json.optInt("port", LanTransport.EXCHANGE_PORT)
+            
             when (type) {
                 MSG_HELLO -> {
                     // Another Murmur device is announcing itself
-                    handleHelloPacket(deviceId, senderAddress, version)
+                    handleHelloPacket(deviceId, senderAddress, version, peerPort)
                     
                     // Send a response so they know about us
                     sendHelloResponse(senderAddress)
                 }
                 MSG_HELLO_RESPONSE -> {
                     // Response to our hello
-                    handleHelloPacket(deviceId, senderAddress, version)
+                    handleHelloPacket(deviceId, senderAddress, version, peerPort)
                 }
             }
             
@@ -395,12 +400,14 @@ class LanDiscoveryManager(private val context: Context) {
     
     /**
      * Handle a hello packet from another Murmur device.
+     * 
+     * @param port The TCP port where the peer is listening for exchange connections
      */
-    private fun handleHelloPacket(deviceId: String, address: InetAddress, version: Int) {
+    private fun handleHelloPacket(deviceId: String, address: InetAddress, version: Int, port: Int) {
         val peer = LanPeer(
             deviceId = deviceId,
             ipAddress = address,
-            port = DISCOVERY_PORT,
+            port = port,
             lastSeen = System.currentTimeMillis(),
             protocolVersion = version
         )
@@ -434,7 +441,8 @@ class LanDiscoveryManager(private val context: Context) {
             put("version", PROTOCOL_VERSION)
             put("device_id", localDeviceId)
             put("ip", localIp)
-            put("port", DISCOVERY_PORT)
+            // FIX #6: Advertise TCP EXCHANGE_PORT, not UDP DISCOVERY_PORT
+            put("port", LanTransport.EXCHANGE_PORT)
             put("timestamp", System.currentTimeMillis())
         }
         
