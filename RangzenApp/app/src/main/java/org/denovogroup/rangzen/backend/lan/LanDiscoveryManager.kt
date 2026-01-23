@@ -181,6 +181,10 @@ class LanDiscoveryManager(private val context: Context) {
     
     /**
      * Get the broadcast address for the current WiFi network.
+     * 
+     * Uses the directed broadcast address (e.g., 192.168.1.255 for /24)
+     * rather than the limited broadcast (255.255.255.255) for better
+     * reliability across different network configurations.
      */
     private fun getBroadcastAddress(): InetAddress? {
         try {
@@ -190,17 +194,43 @@ class LanDiscoveryManager(private val context: Context) {
             @Suppress("DEPRECATION")
             val dhcp = wifiManager.dhcpInfo ?: return null
             
-            // Calculate broadcast address from IP and netmask
-            val broadcast = (dhcp.ipAddress and dhcp.netmask) or dhcp.netmask.inv()
+            // DhcpInfo stores IP addresses as little-endian integers
+            val ip = dhcp.ipAddress
+            val netmask = dhcp.netmask
+            
+            // If netmask is 0 or invalid, assume /24 (255.255.255.0)
+            // This is the most common subnet mask for home/small networks
+            val effectiveNetmask = if (netmask == 0) {
+                Timber.w("Netmask is 0, assuming /24 subnet")
+                0x00FFFFFF  // 255.255.255.0 in little-endian
+            } else {
+                netmask
+            }
+            
+            // Calculate broadcast: (IP & netmask) | (~netmask)
+            // This gives us the directed broadcast for our subnet
+            val broadcast = (ip and effectiveNetmask) or effectiveNetmask.inv()
+            
+            // Convert little-endian int to byte array
             val bytes = ByteArray(4)
             for (i in 0..3) {
                 bytes[i] = (broadcast shr (i * 8) and 0xFF).toByte()
             }
-            return InetAddress.getByAddress(bytes)
+            
+            val address = InetAddress.getByAddress(bytes)
+            Timber.d("Calculated broadcast address: ${address.hostAddress} (IP: ${ipToString(ip)}, netmask: ${ipToString(effectiveNetmask)})")
+            return address
         } catch (e: Exception) {
             Timber.e(e, "Failed to get broadcast address")
             return null
         }
+    }
+    
+    /**
+     * Convert little-endian int to IP string for logging.
+     */
+    private fun ipToString(ip: Int): String {
+        return "${ip and 0xFF}.${(ip shr 8) and 0xFF}.${(ip shr 16) and 0xFF}.${(ip shr 24) and 0xFF}"
     }
     
     /**
