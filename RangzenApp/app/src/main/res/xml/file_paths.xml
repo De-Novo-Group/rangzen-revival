@@ -2,4 +2,7 @@
 <paths>
     <!-- Directory for OTA update APK files -->
     <cache-path name="updates" path="updates/" />
+    
+    <!-- Directory for offline distribution APK files -->
+    <cache-path name="distribution" path="distribution/" />
 </paths>

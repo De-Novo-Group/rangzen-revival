@@ -47,6 +47,18 @@ class SettingsFragment : Fragment() {
         setupSettings()
         loadStats()
         checkForPendingUpdate()
+        setupShareApp()
+    }
+
+    private fun setupShareApp() {
+        // Share App button - opens ShareFragment
+        binding.cardShareApp.setOnClickListener {
+            // Navigate to ShareFragment (uses same container as other fragments)
+            parentFragmentManager.beginTransaction()
+                .replace(org.denovogroup.rangzen.R.id.fragment_container, ShareFragment.newInstance())
+                .addToBackStack("share")
+                .commit()
+        }
     }
 
     private fun checkForPendingUpdate() {
