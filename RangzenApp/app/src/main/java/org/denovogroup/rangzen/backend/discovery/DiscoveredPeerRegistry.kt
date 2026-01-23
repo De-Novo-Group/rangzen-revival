@@ -129,56 +129,82 @@ class DiscoveredPeerRegistry {
     /**
      * Report a peer discovered via WiFi Direct.
      * 
+     * Transport v2: When a peer is discovered via DNS-SD, we get their public ID
+     * BEFORE connecting. This allows us to correlate with BLE discoveries and
+     * make informed connection decisions.
+     * 
      * @param wifiAddress WiFi P2P device address
-     * @param deviceName WiFi Direct device name (may contain RSVP identifier)
-     * @param extractedId Optional identifier extracted from device name (RSVP) or DNS-SD
+     * @param deviceName WiFi Direct device name
+     * @param extractedId Public ID from DNS-SD TXT record (privacy-preserving, key-derived)
+     * @param servicePort Port from DNS-SD for exchange connection
      */
     fun reportWifiDirectPeer(
         wifiAddress: String,
         deviceName: String,
-        extractedId: String? = null
+        extractedId: String? = null,
+        servicePort: Int? = null
     ) {
         val transportKey = "wifi:$wifiAddress"
         var existingPeerId = addressToPeerId[transportKey]
         
-        // If we have an ID (from DNS-SD), check if we already know a peer with this ID
-        // This handles the case where BLE discovered the peer first, or we discovered it via DNS-SD before
+        // Phase 2 Correlation: If we have a public ID from DNS-SD, check if we 
+        // already know this peer via another transport (BLE or LAN)
         if (existingPeerId == null && extractedId != null) {
-             // Check if we have a mapping for this ID (treated as BLE address)
-             val potentialBleKey = "ble:$extractedId"
-             existingPeerId = addressToPeerId[potentialBleKey]
-             
-             // If still null, maybe we have a peer keyed by this ID directly?
-             if (existingPeerId == null && peers.containsKey(extractedId)) {
-                 existingPeerId = extractedId
-             }
+            // Check if this public ID is already known (peer discovered via another transport)
+            if (peers.containsKey(extractedId)) {
+                existingPeerId = extractedId
+                Timber.d("$TAG: WiFi peer $wifiAddress correlates with known peer $extractedId")
+            }
+            
+            // Also check address mappings for correlation
+            val idKey = "id:$extractedId"
+            addressToPeerId[idKey]?.let { mappedPeerId ->
+                existingPeerId = mappedPeerId
+            }
         }
         
         val transportInfo = PeerTransportInfo(
             transport = TransportType.WIFI_DIRECT,
             lastSeen = System.currentTimeMillis(),
             wifiDirectAddress = wifiAddress,
-            wifiDirectName = deviceName
+            wifiDirectName = deviceName,
+            wifiDirectPort = servicePort  // Store port from DNS-SD
         )
         
-        if (existingPeerId != null) {
-            // Update existing peer
-            peers[existingPeerId]?.let { peer ->
+        // Capture to val for smart cast inside closure
+        val foundPeerId = existingPeerId
+        
+        if (foundPeerId != null) {
+            // Update existing peer - adds WiFi Direct transport to peer we may have found via BLE
+            peers[foundPeerId]?.let { peer ->
                 val isNewTransport = !peer.hasTransport(TransportType.WIFI_DIRECT)
                 peer.updateTransport(transportInfo)
                 
-                // If we now have an ID but didn't before, update the peer ID
-                if (extractedId != null && !peer.handshakeCompleted && peer.publicId.startsWith(TEMP_ID_PREFIX)) {
-                    updatePeerIdAfterHandshake(transportKey, extractedId)
+                // Update address mapping to point to this peer
+                addressToPeerId[transportKey] = foundPeerId
+                
+                // If we now have a verified ID, mark handshake as complete
+                if (extractedId != null && !peer.handshakeCompleted) {
+                    // DNS-SD provides identity without needing BLE handshake
+                    peers.remove(peer.publicId)
+                    val updatedPeer = peer.copy(
+                        publicId = extractedId,
+                        handshakeCompleted = true
+                    )
+                    peers[extractedId] = updatedPeer
+                    addressToPeerId[transportKey] = extractedId
+                    addressToPeerId["id:$extractedId"] = extractedId
+                    Timber.i("$TAG: Peer upgraded to verified ID via DNS-SD: $extractedId")
                 }
                 
                 if (isNewTransport) {
+                    Timber.i("$TAG: Added WiFi Direct transport to existing peer: $foundPeerId")
                     onPeerTransportAdded?.invoke(peer, TransportType.WIFI_DIRECT)
                 }
             }
         } else {
-            // Create new peer
-            // If we have an extracted ID, use it as the public ID (it's the BLE MAC)
+            // Create new peer with the public ID if available
+            // DNS-SD provides verified identity, so handshake is considered complete
             val peerId = extractedId ?: "${TEMP_ID_PREFIX}$transportKey"
             val peer = UnifiedPeer(
                 publicId = peerId,
@@ -188,17 +214,12 @@ class DiscoveredPeerRegistry {
             peers[peerId] = peer
             addressToPeerId[transportKey] = peerId
             
-            // If we have an ID (BLE MAC), also map the BLE address to this peer
-            // This ensures that when BLE scanning finds this device later, it maps to this same peer
+            // Create ID mapping for future correlation
             if (extractedId != null) {
-                val bleKey = "ble:$extractedId"
-                if (!addressToPeerId.containsKey(bleKey)) {
-                    addressToPeerId[bleKey] = peerId
-                    Timber.d("$TAG: Pre-mapped BLE address $bleKey to WiFi peer $peerId")
-                }
+                addressToPeerId["id:$extractedId"] = peerId
             }
             
-            Timber.i("$TAG: New WiFi Direct peer discovered: $wifiAddress ($deviceName) -> ID: $extractedId")
+            Timber.i("$TAG: New WiFi Direct peer: $wifiAddress -> ID: ${extractedId ?: "pending"}")
             onPeerDiscovered?.invoke(peer)
         }
         

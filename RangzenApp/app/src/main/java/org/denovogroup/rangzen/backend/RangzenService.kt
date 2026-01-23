@@ -159,28 +159,36 @@ class RangzenService : Service() {
         wifiDirectManager = WifiDirectManager(this)
         wifiDirectManager.initialize()
         
-        // Set up callback for when peers are discovered via WiFi Direct
+        // Set up callback for when Murmur peers are discovered via DNS-SD
+        // Transport v2: DNS-SD provides identity BEFORE connection (no blind popups)
         wifiDirectManager.onMurmurPeerDiscovered = { wifiPeer ->
-            // Report to unified peer registry
+            // Report to unified peer registry with full info from DNS-SD
             peerRegistry.reportWifiDirectPeer(
                 wifiAddress = wifiPeer.wifiDirectAddress,
                 deviceName = wifiPeer.deviceName,
-                extractedId = wifiPeer.deviceId  // RSVP identifier if available
+                extractedId = wifiPeer.deviceId,      // Public ID from DNS-SD TXT record
+                servicePort = wifiPeer.servicePort    // Exchange port from DNS-SD
             )
-            Timber.i("WiFi Direct peer discovered: ${wifiPeer.deviceName} -> ${wifiPeer.deviceId}")
+            Timber.i("DNS-SD: Murmur peer discovered: ${wifiPeer.deviceId.take(8)}... via ${wifiPeer.deviceName}")
         }
         
-        // Also report raw WiFi Direct peers (even without MURMUR- prefix)
-        // This allows correlation via app-layer handshake later
+        // Also report raw WiFi Direct peers (those without DNS-SD service)
+        // These will need app-layer handshake for identity verification
         wifiDirectManager.onPeersChanged = { wifiPeers ->
             wifiPeers.forEach { device ->
-                peerRegistry.reportWifiDirectPeer(
-                    wifiAddress = device.deviceAddress,
-                    deviceName = device.deviceName ?: "Unknown",
-                    extractedId = null  // Will be established via handshake
-                )
+                // Only report if not already known via DNS-SD
+                val knownViaDnsSd = wifiDirectManager.murmurPeers.value
+                    .any { it.wifiDirectAddress == device.deviceAddress }
+                if (!knownViaDnsSd) {
+                    peerRegistry.reportWifiDirectPeer(
+                        wifiAddress = device.deviceAddress,
+                        deviceName = device.deviceName ?: "Unknown",
+                        extractedId = null,  // Will need handshake for identity
+                        servicePort = null
+                    )
+                }
             }
-            Timber.d("WiFi Direct: ${wifiPeers.size} total peers discovered")
+            Timber.d("WiFi Direct: ${wifiPeers.size} total peers, ${wifiDirectManager.murmurPeers.value.size} verified Murmur")
         }
         
         // Get privacy-preserving device ID (derived from crypto keypair, not hardware)
@@ -386,17 +394,25 @@ class RangzenService : Service() {
      * be in range for seconds. We must do all we can in that brief window.
      */
     private suspend fun attemptParallelExchanges() {
+        // =====================================================================
+        // Transport v2: Multi-Transport Parallel Exchange with Arbitration
+        // =====================================================================
+        // Priority order (highest bandwidth first):
+        // 1. WiFi Direct (if connected and verified via DNS-SD)
+        // 2. LAN/NSD (if on same network)
+        // 3. BLE (handled separately in performExchangeCycle)
+        // =====================================================================
+        
         // Collect peers from all transports
         val lanPeers = lanDiscoveryManager.getDiscoveredPeers()
         val nsdPeers = nsdDiscoveryManager.getDiscoveredPeers()
+        val wifiDirectPeers = wifiDirectManager.murmurPeers.value  // DNS-SD verified peers
         
-        // FIX #9: Properly merge LAN and NSD peers - don't drop NSD-only peers
-        // Convert NSD peers to LanPeer format for exchange
+        // Merge LAN and NSD peers
         val lanPeerMap = lanPeers.associateBy { it.deviceId }
         val nsdOnlyPeers = nsdPeers
             .filter { nsdPeer -> !lanPeerMap.containsKey(nsdPeer.deviceId) }
             .map { nsdPeer ->
-                // Convert NSD peer to LAN peer format
                 LanDiscoveryManager.LanPeer(
                     deviceId = nsdPeer.deviceId,
                     ipAddress = java.net.InetAddress.getByName(nsdPeer.host),
@@ -404,101 +420,173 @@ class RangzenService : Service() {
                     lastSeen = nsdPeer.discoveredAt
                 )
             }
-        
-        // Combine: LAN peers take precedence, then NSD-only peers
         val allNetworkPeers = lanPeers + nsdOnlyPeers
         
-        if (allNetworkPeers.isEmpty()) {
+        val totalPeers = allNetworkPeers.size + wifiDirectPeers.size
+        if (totalPeers == 0) {
             return
         }
         
-        Timber.i("PARALLEL EXCHANGE: Found ${allNetworkPeers.size} network peers " +
-            "(${lanPeers.size} LAN, ${nsdOnlyPeers.size} NSD-only), starting concurrent exchanges...")
+        Timber.i("PARALLEL EXCHANGE: Found $totalPeers peers " +
+            "(${lanPeers.size} LAN, ${nsdOnlyPeers.size} NSD, ${wifiDirectPeers.size} WiFi Direct)")
         
-        // FIX #11: Only fetch location if telemetry is enabled (privacy + battery)
+        // Fetch location for QA telemetry (only if enabled)
         val location = if (TelemetryClient.getInstance()?.isEnabled() == true) {
             getLocationForTelemetry()
         } else {
             null
         }
         
-        // FIX #10: Check concurrency guard ONCE before launching parallel jobs
-        // Use a mutex to ensure we don't spawn overlapping exchange cycles
+        // Check concurrency guard before launching parallel jobs
         if (lanTransport.isExchangeInProgress()) {
-            Timber.d("PARALLEL: Skipping cycle - exchange already in progress")
-            return
+            Timber.d("PARALLEL: Skipping LAN cycle - exchange already in progress")
         }
         
-        // Launch all LAN exchanges in parallel
-        val lanJobs = mutableListOf<Job>()
-        for (lanPeer in allNetworkPeers) {
-            val deviceId = lanPeer.deviceId
-            val job = serviceScope.launch {
-                val startTime = System.currentTimeMillis()
-                try {
-                    val result = lanTransport.exchangeWithPeer(
-                        peer = lanPeer,
-                        context = this@RangzenService,
-                        messageStore = messageStore,
-                        friendStore = friendStore
-                    )
-                    
-                    val durationMs = System.currentTimeMillis() - startTime
-                    
-                    // Track exchange with location for QA
-                    TelemetryClient.getInstance()?.trackExchangeWithLocation(
-                        success = result.success,
-                        peerIdHash = deviceId.hashCode().toString(),
-                        transport = "lan",
-                        location = location,
-                        durationMs = durationMs,
-                        messagesSent = result.messagesSent,
-                        messagesReceived = result.messagesReceived
-                    )
-                    
-                    if (result.success) {
-                        Timber.i("PARALLEL: LAN exchange complete with ${deviceId.take(8)}...: " +
-                            "sent=${result.messagesSent}, received=${result.messagesReceived}")
+        val allJobs = mutableListOf<Job>()
+        
+        // =====================================================================
+        // WiFi Direct Exchanges (Phase 3: Only with verified peers from DNS-SD)
+        // =====================================================================
+        // Only attempt WiFi Direct if:
+        // 1. We have DNS-SD verified peers (handshakeCompleted = true)
+        // 2. We're connected and not the group owner (clients initiate)
+        // =====================================================================
+        val wifiConnected = wifiDirectManager.connectionState.value == WifiDirectManager.ConnectionState.CONNECTED
+        val isGroupOwner = wifiDirectManager.isGroupOwner()
+        val groupOwnerAddress = wifiDirectManager.getGroupOwnerAddress()
+        
+        if (wifiConnected && !isGroupOwner && groupOwnerAddress != null && wifiDirectPeers.isNotEmpty()) {
+            // We're a WiFi Direct client - initiate exchange with the group owner
+            // The group owner should be one of our DNS-SD verified peers
+            val localId = DeviceIdentity.getDeviceId(this)
+            val exchangeData = legacyExchangeClient.prepareExchangeData()
+            
+            if (exchangeData != null) {
+                val wifiJob = serviceScope.launch {
+                    val startTime = System.currentTimeMillis()
+                    try {
+                        Timber.i("PARALLEL: WiFi Direct exchange with group owner at ${groupOwnerAddress.hostAddress}")
                         
-                        if (result.messagesReceived > 0) {
-                            messageStore.refreshMessagesNow()
+                        val result = wifiDirectTransport.connectAndExchange(
+                            groupOwnerAddress = groupOwnerAddress,
+                            localPublicId = localId,
+                            data = exchangeData
+                        )
+                        
+                        val durationMs = System.currentTimeMillis() - startTime
+                        
+                        if (result != null) {
+                            // Process the response
+                            val received = legacyExchangeClient.processExchangeResponse(result.responseData)
+                            
+                            TelemetryClient.getInstance()?.trackExchangeWithLocation(
+                                success = true,
+                                peerIdHash = result.peerPublicId.hashCode().toString(),
+                                transport = "wifi_direct",
+                                location = location,
+                                durationMs = durationMs,
+                                messagesSent = 0,  // Count not easily available
+                                messagesReceived = received
+                            )
+                            
+                            Timber.i("PARALLEL: WiFi Direct exchange complete with ${result.peerPublicId.take(8)}...")
+                            
+                            if (received > 0) {
+                                messageStore.refreshMessagesNow()
+                            }
                         }
+                    } catch (e: Exception) {
+                        val durationMs = System.currentTimeMillis() - startTime
+                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
+                            success = false,
+                            peerIdHash = "wifi_direct",
+                            transport = "wifi_direct",
+                            location = location,
+                            durationMs = durationMs,
+                            messagesSent = 0,
+                            messagesReceived = 0,
+                            error = e.message
+                        )
+                        Timber.e(e, "PARALLEL: WiFi Direct exchange failed")
                     }
-                } catch (e: Exception) {
-                    val durationMs = System.currentTimeMillis() - startTime
-                    
-                    // Track failure with location for QA
-                    TelemetryClient.getInstance()?.trackExchangeWithLocation(
-                        success = false,
-                        peerIdHash = deviceId.hashCode().toString(),
-                        transport = "lan",
-                        location = location,
-                        durationMs = durationMs,
-                        messagesSent = 0,
-                        messagesReceived = 0,
-                        error = e.message
-                    )
-                    
-                    Timber.e(e, "PARALLEL: LAN exchange failed with ${deviceId.take(8)}...")
                 }
+                allJobs.add(wifiJob)
             }
-            lanJobs.add(job)
+        }
+        
+        // =====================================================================
+        // LAN/NSD Exchanges (parallel with WiFi Direct)
+        // =====================================================================
+        if (!lanTransport.isExchangeInProgress()) {
+            for (lanPeer in allNetworkPeers) {
+                val deviceId = lanPeer.deviceId
+                val job = serviceScope.launch {
+                    val startTime = System.currentTimeMillis()
+                    try {
+                        val result = lanTransport.exchangeWithPeer(
+                            peer = lanPeer,
+                            context = this@RangzenService,
+                            messageStore = messageStore,
+                            friendStore = friendStore
+                        )
+                        
+                        val durationMs = System.currentTimeMillis() - startTime
+                        
+                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
+                            success = result.success,
+                            peerIdHash = deviceId.hashCode().toString(),
+                            transport = "lan",
+                            location = location,
+                            durationMs = durationMs,
+                            messagesSent = result.messagesSent,
+                            messagesReceived = result.messagesReceived
+                        )
+                        
+                        if (result.success) {
+                            Timber.i("PARALLEL: LAN exchange complete with ${deviceId.take(8)}...: " +
+                                "sent=${result.messagesSent}, received=${result.messagesReceived}")
+                            
+                            if (result.messagesReceived > 0) {
+                                messageStore.refreshMessagesNow()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        val durationMs = System.currentTimeMillis() - startTime
+                        
+                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
+                            success = false,
+                            peerIdHash = deviceId.hashCode().toString(),
+                            transport = "lan",
+                            location = location,
+                            durationMs = durationMs,
+                            messagesSent = 0,
+                            messagesReceived = 0,
+                            error = e.message
+                        )
+                        
+                        Timber.e(e, "PARALLEL: LAN exchange failed with ${deviceId.take(8)}...")
+                    }
+                }
+                allJobs.add(job)
+            }
         }
         
         // Note: BLE exchanges are handled by the separate exchange loop (performExchangeCycle)
-        // which runs independently and concurrently with this LAN exchange loop.
-        // This means BLE and LAN exchanges happen in TRUE parallel.
+        // which runs independently and concurrently with this loop.
+        // This means BLE, LAN, and WiFi Direct exchanges can happen in TRUE parallel.
         
-        // Wait for all LAN exchanges to complete (or timeout)
-        try {
-            withTimeout(30_000L) {
-                lanJobs.forEach { it.join() }
+        // Wait for all exchanges to complete (or timeout)
+        if (allJobs.isNotEmpty()) {
+            try {
+                withTimeout(45_000L) {  // Longer timeout to accommodate WiFi Direct
+                    allJobs.forEach { it.join() }
+                }
+            } catch (e: TimeoutCancellationException) {
+                Timber.w("PARALLEL: Some exchanges timed out")
             }
-        } catch (e: TimeoutCancellationException) {
-            Timber.w("PARALLEL: Some LAN exchanges timed out")
         }
         
-        Timber.d("PARALLEL EXCHANGE: Completed cycle for ${allNetworkPeers.size} network peers")
+        Timber.d("PARALLEL EXCHANGE: Completed cycle for $totalPeers peers")
     }
     
     /**
