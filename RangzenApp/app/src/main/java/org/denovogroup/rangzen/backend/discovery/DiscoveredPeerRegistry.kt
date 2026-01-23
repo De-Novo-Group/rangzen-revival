@@ -131,7 +131,7 @@ class DiscoveredPeerRegistry {
      * 
      * @param wifiAddress WiFi P2P device address
      * @param deviceName WiFi Direct device name (may contain RSVP identifier)
-     * @param extractedId Optional identifier extracted from device name (RSVP)
+     * @param extractedId Optional identifier extracted from device name (RSVP) or DNS-SD
      */
     fun reportWifiDirectPeer(
         wifiAddress: String,
@@ -139,7 +139,20 @@ class DiscoveredPeerRegistry {
         extractedId: String? = null
     ) {
         val transportKey = "wifi:$wifiAddress"
-        val existingPeerId = addressToPeerId[transportKey]
+        var existingPeerId = addressToPeerId[transportKey]
+        
+        // If we have an ID (from DNS-SD), check if we already know a peer with this ID
+        // This handles the case where BLE discovered the peer first, or we discovered it via DNS-SD before
+        if (existingPeerId == null && extractedId != null) {
+             // Check if we have a mapping for this ID (treated as BLE address)
+             val potentialBleKey = "ble:$extractedId"
+             existingPeerId = addressToPeerId[potentialBleKey]
+             
+             // If still null, maybe we have a peer keyed by this ID directly?
+             if (existingPeerId == null && peers.containsKey(extractedId)) {
+                 existingPeerId = extractedId
+             }
+        }
         
         val transportInfo = PeerTransportInfo(
             transport = TransportType.WIFI_DIRECT,
@@ -153,27 +166,40 @@ class DiscoveredPeerRegistry {
             peers[existingPeerId]?.let { peer ->
                 val isNewTransport = !peer.hasTransport(TransportType.WIFI_DIRECT)
                 peer.updateTransport(transportInfo)
+                
+                // If we now have an ID but didn't before, update the peer ID
+                if (extractedId != null && !peer.handshakeCompleted && peer.publicId.startsWith(TEMP_ID_PREFIX)) {
+                    updatePeerIdAfterHandshake(transportKey, extractedId)
+                }
+                
                 if (isNewTransport) {
                     onPeerTransportAdded?.invoke(peer, TransportType.WIFI_DIRECT)
                 }
             }
         } else {
-            // Create new temporary peer
-            val tempId = "${TEMP_ID_PREFIX}$transportKey"
+            // Create new peer
+            // If we have an extracted ID, use it as the public ID (it's the BLE MAC)
+            val peerId = extractedId ?: "${TEMP_ID_PREFIX}$transportKey"
             val peer = UnifiedPeer(
-                publicId = tempId,
-                transports = mutableMapOf(TransportType.WIFI_DIRECT to transportInfo)
+                publicId = peerId,
+                transports = mutableMapOf(TransportType.WIFI_DIRECT to transportInfo),
+                handshakeCompleted = extractedId != null
             )
-            peers[tempId] = peer
-            addressToPeerId[transportKey] = tempId
+            peers[peerId] = peer
+            addressToPeerId[transportKey] = peerId
             
-            Timber.i("$TAG: New WiFi Direct peer discovered: $wifiAddress ($deviceName)")
+            // If we have an ID (BLE MAC), also map the BLE address to this peer
+            // This ensures that when BLE scanning finds this device later, it maps to this same peer
+            if (extractedId != null) {
+                val bleKey = "ble:$extractedId"
+                if (!addressToPeerId.containsKey(bleKey)) {
+                    addressToPeerId[bleKey] = peerId
+                    Timber.d("$TAG: Pre-mapped BLE address $bleKey to WiFi peer $peerId")
+                }
+            }
+            
+            Timber.i("$TAG: New WiFi Direct peer discovered: $wifiAddress ($deviceName) -> ID: $extractedId")
             onPeerDiscovered?.invoke(peer)
-        }
-        
-        // If we extracted an ID from RSVP, try to correlate with existing peers
-        if (extractedId != null) {
-            tryCorrelateByRsvpId(transportKey, extractedId)
         }
         
         updatePeerList()
@@ -268,41 +294,25 @@ class DiscoveredPeerRegistry {
                 handshakeCompleted = true
             )
             peers[newPublicId] = updatedPeer
-            addressToPeerId[transportKey] = newPublicId
+            
+            // Update all address mappings for this peer
+            updatedPeer.transports.forEach { (transport, info) ->
+                info.connectionId()?.let { connId ->
+                    val key = "${transport.identifier()}:$connId"
+                    addressToPeerId[key] = newPublicId
+                }
+            }
+            
+            // If the new ID looks like a BLE address, ensure it's mapped too
+            // This handles the case where we get ID from WiFi/LAN but haven't seen BLE yet
+            if (!addressToPeerId.containsKey("ble:$newPublicId")) {
+                addressToPeerId["ble:$newPublicId"] = newPublicId
+            }
             
             Timber.i("$TAG: Peer $currentPeerId renamed to $newPublicId after handshake")
         }
         
         updatePeerList()
-    }
-    
-    /**
-     * Try to correlate a peer using RSVP identifier from WiFi Direct device name.
-     * If a BLE peer has the same identifier, merge them.
-     */
-    private fun tryCorrelateByRsvpId(wifiTransportKey: String, rsvpId: String) {
-        // Look for a BLE peer with matching address (RSVP broadcasts BLE MAC)
-        val bleTransportKey = "ble:$rsvpId"
-        val blePeerId = addressToPeerId[bleTransportKey]
-        
-        if (blePeerId != null) {
-            val wifiPeerId = addressToPeerId[wifiTransportKey]
-            if (wifiPeerId != null && wifiPeerId != blePeerId) {
-                // Found matching BLE peer - merge WiFi into BLE
-                val blePeer = peers[blePeerId]
-                val wifiPeer = peers[wifiPeerId]
-                
-                if (blePeer != null && wifiPeer != null) {
-                    wifiPeer.transports.forEach { (transport, info) ->
-                        blePeer.updateTransport(info)
-                    }
-                    addressToPeerId[wifiTransportKey] = blePeerId
-                    peers.remove(wifiPeerId)
-                    
-                    Timber.i("$TAG: Correlated WiFi Direct peer with BLE peer via RSVP: $rsvpId")
-                }
-            }
-        }
     }
     
     /**

@@ -37,6 +37,9 @@ data class PeerTransportInfo(
     
     /** WiFi Direct-specific: Device name (may contain RSVP identifier) */
     val wifiDirectName: String? = null,
+
+    /** WiFi Direct-specific: Service port (from DNS-SD) */
+    val wifiDirectPort: Int? = null,
     
     /** LAN-specific: IP address */
     val lanAddress: String? = null,

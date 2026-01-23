@@ -80,6 +80,10 @@ object AppConfig {
     private const val KEY_OTA_WIFI_ONLY = "otaWifiOnly"
     // JSON key for OTA auto-download.
     private const val KEY_OTA_AUTO_DOWNLOAD = "otaAutoDownload"
+    // JSON key for Wi-Fi Direct service type (DNS-SD).
+    private const val KEY_WIFI_DIRECT_SERVICE_TYPE = "wifiDirectServiceType"
+    // JSON key for Wi-Fi Direct service port.
+    private const val KEY_WIFI_DIRECT_SERVICE_PORT = "wifiDirectServicePort"
 
     // Cached JSON config to avoid repeated disk reads.
     @Volatile
@@ -502,5 +506,21 @@ object AppConfig {
     fun otaAutoDownload(context: Context): Boolean {
         val config = loadConfig(context)
         return config.optBoolean(KEY_OTA_AUTO_DOWNLOAD, true)
+    }
+
+    /**
+     * Read Wi-Fi Direct service type (DNS-SD).
+     */
+    fun wifiDirectServiceType(context: Context): String {
+        val config = loadConfig(context)
+        return config.optString(KEY_WIFI_DIRECT_SERVICE_TYPE, "_murmur._tcp")
+    }
+
+    /**
+     * Read Wi-Fi Direct service port.
+     */
+    fun wifiDirectServicePort(context: Context): Int {
+        val config = loadConfig(context)
+        return config.optInt(KEY_WIFI_DIRECT_SERVICE_PORT, 41234)
     }
 }
