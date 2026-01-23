@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Compact message card layout. Trust indicator on left, -->
+<!-- header row with sender/like/timestamp, then message body. -->
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="8dp"
-    android:layout_marginVertical="4dp"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="2dp"
+    android:layout_marginVertical="3dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="1dp"
     app:strokeWidth="0dp">
 
     <LinearLayout
@@ -15,7 +17,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
 
-        <!-- Trust indicator bar -->
+        <!-- Trust indicator bar (narrow, full height) -->
         <View
             android:id="@+id/trust_indicator"
             android:layout_width="4dp"
@@ -27,28 +29,56 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="8dp">
 
-            <!-- Header row: pseudonym + composed/received times -->
+            <!-- Header row: pseudonym, like button+count, timestamps -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
+                <!-- Sender pseudonym -->
                 <TextView
                     android:id="@+id/text_pseudonym"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:textSize="14sp"
+                    android:textSize="13sp"
                     android:textColor="@color/text_secondary"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:ellipsize="end"
+                    android:maxLines="1" />
 
+                <!-- Like button (compact) -->
+                <ImageButton
+                    android:id="@+id/btn_like"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_like"
+                    android:contentDescription="@string/action_like"
+                    android:scaleType="centerInside"
+                    android:padding="2dp" />
+
+                <!-- Like count -->
+                <TextView
+                    android:id="@+id/text_likes"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:layout_marginEnd="8dp"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_hint"
+                    android:minWidth="16dp" />
+
+                <!-- Timestamps (C/R) -->
                 <TextView
                     android:id="@+id/text_timestamp"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
                     android:textColor="@color/text_hint" />
 
             </LinearLayout>
@@ -58,37 +88,10 @@
                 android:id="@+id/text_message"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textSize="16sp"
+                android:layout_marginTop="4dp"
+                android:textSize="15sp"
                 android:textColor="@color/text_primary"
-                android:lineSpacingMultiplier="1.2" />
-
-            <!-- Action row: like button -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <ImageButton
-                    android:id="@+id/btn_like"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/ic_like"
-                    android:contentDescription="@string/action_like"
-                    android:padding="6dp" />
-
-                <TextView
-                    android:id="@+id/text_likes"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary" />
-
-            </LinearLayout>
+                android:lineSpacingMultiplier="1.15" />
 
         </LinearLayout>
 

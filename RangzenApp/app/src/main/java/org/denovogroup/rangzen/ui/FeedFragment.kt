@@ -48,10 +48,14 @@ class FeedFragment : Fragment() {
     private var cachedMessages: List<RangzenMessage> = emptyList()
     // Track whether the feed should show only liked messages.
     private var onlyLiked = false
+    // Track whether to hide user's own messages (default: true)
+    private var hideMine = true
     // Shared preferences for UI-only hidden messages.
     private lateinit var feedPrefs: SharedPreferences
     // Local cache of hidden message IDs.
     private var hiddenMessageIds: MutableSet<String> = mutableSetOf()
+    // User's pseudonym for filtering own messages.
+    private var myPseudonym: String? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -179,20 +183,30 @@ class FeedFragment : Fragment() {
     }
 
     private fun setupFilters() {
-        // Initialize the toggle with the current state.
+        // Load user's pseudonym for "hide mine" filter.
+        myPseudonym = requireContext()
+            .getSharedPreferences("rangzen_prefs", Context.MODE_PRIVATE)
+            .getString("default_pseudonym", null)
+        
+        // Initialize the toggles with current state.
         binding.switchOnlyLiked.isChecked = onlyLiked
-        // Update the feed when the filter is toggled.
+        binding.checkHideMine.isChecked = hideMine
+        
+        // Update the feed when liked filter is toggled.
         binding.switchOnlyLiked.setOnCheckedChangeListener { _, isChecked ->
-            // Track the current filter state.
             onlyLiked = isChecked
-            // Re-render the list using the cached messages.
             updateUI(applyFilters(cachedMessages))
         }
-        // Wire up the "re-display" button for hidden messages.
+        
+        // Update the feed when "hide mine" filter is toggled.
+        binding.checkHideMine.setOnCheckedChangeListener { _, isChecked ->
+            hideMine = isChecked
+            updateUI(applyFilters(cachedMessages))
+        }
+        
+        // Wire up the "show all" button to clear hidden messages.
         binding.btnShowHidden.setOnClickListener {
-            // Clear hidden IDs and persist the change.
             clearHiddenMessages()
-            // Refresh the UI immediately.
             updateUI(applyFilters(cachedMessages))
         }
     }
@@ -211,6 +225,8 @@ class FeedFragment : Fragment() {
     private fun observeServiceStatus() {
         viewLifecycleOwner.lifecycleScope.launch {
             rangzenService?.peers?.collectLatest { peers ->
+                // Currently only BLE peers are tracked in this flow.
+                // TODO: Expose unified peer registry to show LAN/WD counts.
                 updateStatusText(peers.size)
             }
         }
@@ -230,16 +246,22 @@ class FeedFragment : Fragment() {
     }
 
     private fun applyFilters(messages: List<RangzenMessage>): List<RangzenMessage> {
-        // Return full list when filter is off.
-        val base = if (onlyLiked) {
-            // Filter down to liked messages only.
-            messages.filter { it.isLiked }
-        } else {
-            // Use the full list when not filtering by like.
-            messages
+        var result = messages
+        
+        // Filter by liked if enabled.
+        if (onlyLiked) {
+            result = result.filter { it.isLiked }
         }
-        // Filter out any hidden messages for UI-only suppression.
-        return base.filter { !hiddenMessageIds.contains(it.messageId) }
+        
+        // Filter out own messages if "hide mine" is checked.
+        if (hideMine && myPseudonym != null) {
+            result = result.filter { it.pseudonym != myPseudonym }
+        }
+        
+        // Filter out swiped/hidden messages.
+        result = result.filter { !hiddenMessageIds.contains(it.messageId) }
+        
+        return result
     }
 
     private fun hideMessage(messageId: String) {
@@ -271,8 +293,10 @@ class FeedFragment : Fragment() {
     }
 
     private fun updateStatusText(peerCount: Int) {
+        // Show peer count. Currently only BLE peers are tracked.
+        // TODO: Add transport breakdown when unified registry is exposed.
         binding.statusText.text = if (peerCount > 0) {
-            getString(R.string.status_peers_found, peerCount)
+            "$peerCount peers nearby"
         } else {
             getString(R.string.status_discovering)
         }

@@ -46,4 +46,29 @@
     <string name="status_exchanging">در حال تبادل پیام‌ها…</string>
     <string name="status_idle">در انتظار دستگاه‌ها</string>
     <string name="status_peers_found">%1$d دستگاه در نزدیکی</string>
+    
+    <!-- Share Feature -->
+    <string name="share_title">اشتراک‌گذاری برنامه</string>
+    <string name="share_back">بازگشت</string>
+    <string name="share_offline_title">اشتراک آفلاین مورمور</string>
+    <string name="share_offline_desc">برنامه را بدون اینترنت با افراد نزدیک به اشتراک بگذارید. به یک شبکه WiFi مشترک متصل شوید یا هات‌اسپات موبایل ایجاد کنید.</string>
+    <string name="share_send_title">ارسال برنامه</string>
+    <string name="share_send_desc">مورمور را با کسی نزدیک به اشتراک بگذارید. یک کد دریافت می‌کنید که به آن‌ها بدهید.</string>
+    <string name="share_receive_title">دریافت برنامه</string>
+    <string name="share_receive_desc">مورمور را از کسی نزدیک دریافت کنید. باید کد آن‌ها را وارد کنید.</string>
+    <string name="share_code_prompt">این کد را به اشتراک بگذارید</string>
+    <string name="share_waiting">در انتظار گیرنده…</string>
+    <string name="share_network_hint">مطمئن شوید هر دو دستگاه در یک شبکه هستند</string>
+    <string name="share_cancel">لغو</string>
+    <string name="share_enter_code">کد فرستنده را وارد کنید</string>
+    <string name="share_code_hint">کد</string>
+    <string name="share_connect">اتصال</string>
+    <string name="share_connecting">در حال اتصال…</string>
+    <string name="share_downloading">در حال دانلود…</string>
+    <string name="share_complete">انتقال کامل شد</string>
+    <string name="share_install">نصب</string>
+    <string name="share_done">تمام</string>
+    <string name="share_failed">انتقال ناموفق</string>
+    <string name="share_murmur">اشتراک مورمور</string>
+    <string name="share_murmur_desc">ارسال یا دریافت آفلاین برنامه</string>
 </resources>

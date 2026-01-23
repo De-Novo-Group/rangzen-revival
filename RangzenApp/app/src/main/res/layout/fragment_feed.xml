@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Feed layout: compact header with peer status and filters, -->
+<!-- then scrollable message list. No title (redundant with tabs). -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -6,62 +8,79 @@
     android:layout_height="match_parent"
     android:background="@color/background">
 
-    <!-- Header -->
+    <!-- Compact header with peer status and filter controls -->
     <LinearLayout
         android:id="@+id/header"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
         android:background="@color/surface"
-        android:elevation="4dp"
+        android:elevation="2dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/title_feed"
-            android:textSize="24sp"
-            android:textColor="@color/text_primary"
-            android:textStyle="bold" />
-
+        <!-- Row 1: Peer status with transport breakdown -->
         <TextView
             android:id="@+id/status_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/status_discovering"
-            android:textSize="14sp"
-            android:textColor="@color/text_secondary"
-            android:layout_marginTop="4dp" />
+            android:textSize="13sp"
+            android:textColor="@color/text_secondary" />
 
-        <!-- Feed filters row -->
+        <!-- Row 2: Filter controls (compact horizontal layout) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <!-- Feed filter: show only liked messages -->
-            <com.google.android.material.switchmaterial.SwitchMaterial
+            <!-- Filter: show only liked messages -->
+            <CheckBox
                 android:id="@+id/switch_only_liked"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Only liked"
-                android:textSize="14sp"
-                android:textColor="@color/text_secondary" />
+                android:text="Liked"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:minHeight="32dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="0dp" />
 
-            <!-- Re-display swiped-away messages -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_show_hidden"
+            <!-- Filter: hide my own messages -->
+            <CheckBox
+                android:id="@+id/check_hide_mine"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:text="Re-display"
+                android:text="Hide mine"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:minHeight="32dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="0dp"
+                android:checked="true" />
+
+            <!-- Spacer -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- Show hidden/swiped messages -->
+            <TextView
+                android:id="@+id/btn_show_hidden"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Show all"
                 android:textSize="12sp"
-                style="@style/Widget.Material3.Button.OutlinedButton" />
+                android:textColor="@color/primary"
+                android:padding="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless" />
 
         </LinearLayout>
 
@@ -86,7 +105,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
-                android:padding="8dp" />
+                android:paddingHorizontal="4dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="8dp" />
 
             <!-- Empty state -->
             <LinearLayout
@@ -99,10 +120,10 @@
                 android:visibility="gone">
 
                 <ImageView
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     android:src="@drawable/ic_feed"
-                    android:alpha="0.5" />
+                    android:alpha="0.4" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -110,7 +131,8 @@
                     android:text="@string/empty_feed"
                     android:textColor="@color/text_secondary"
                     android:textAlignment="center"
-                    android:layout_marginTop="16dp" />
+                    android:textSize="14sp"
+                    android:layout_marginTop="12dp" />
 
             </LinearLayout>
 

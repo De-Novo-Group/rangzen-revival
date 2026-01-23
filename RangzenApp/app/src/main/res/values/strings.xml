@@ -54,4 +54,29 @@
     <string name="status_exchanging">Exchanging messages…</string>
     <string name="status_idle">Waiting for peers</string>
     <string name="status_peers_found">%1$d peers nearby</string>
+    
+    <!-- Share Feature -->
+    <string name="share_title">Share App</string>
+    <string name="share_back">Back</string>
+    <string name="share_offline_title">Share Murmur Offline</string>
+    <string name="share_offline_desc">Share the app with people nearby without using the internet. Connect to the same WiFi network or create a mobile hotspot.</string>
+    <string name="share_send_title">Send App</string>
+    <string name="share_send_desc">Share Murmur with someone nearby. You will get a code to give them.</string>
+    <string name="share_receive_title">Receive App</string>
+    <string name="share_receive_desc">Get Murmur from someone nearby. You will need to enter their code.</string>
+    <string name="share_code_prompt">Share this code</string>
+    <string name="share_waiting">Waiting for receiver…</string>
+    <string name="share_network_hint">Make sure both devices are on the same network</string>
+    <string name="share_cancel">Cancel</string>
+    <string name="share_enter_code">Enter sender\'s code</string>
+    <string name="share_code_hint">Code</string>
+    <string name="share_connect">Connect</string>
+    <string name="share_connecting">Connecting…</string>
+    <string name="share_downloading">Downloading…</string>
+    <string name="share_complete">Transfer Complete</string>
+    <string name="share_install">Install</string>
+    <string name="share_done">Done</string>
+    <string name="share_failed">Transfer Failed</string>
+    <string name="share_murmur">Share Murmur</string>
+    <string name="share_murmur_desc">Send or receive the app offline</string>
 </resources>

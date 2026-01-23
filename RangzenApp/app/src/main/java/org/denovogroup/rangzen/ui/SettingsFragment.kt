@@ -138,8 +138,16 @@ class SettingsFragment : Fragment() {
         AlertDialog.Builder(requireContext())
             .setTitle("Enable QA Testing Mode")
             .setMessage(
-                "By enabling QA testing mode, you allow the app to share details of how it is functioning and being used.\n\n" +
-                "This helps developers improve the app. No personal messages or friend information is shared."
+                "QA mode sends diagnostic data to De Novo Group's server via internet (WiFi or cellular).\n\n" +
+                "What's sent:\n" +
+                "• Device model & app version\n" +
+                "• Exchange statistics (peer counts, success rates)\n" +
+                "• Error logs for debugging\n\n" +
+                "NOT sent:\n" +
+                "• Your messages\n" +
+                "• Friend list\n" +
+                "• Location (unless location is enabled separately)\n\n" +
+                "This mode also enables automatic app updates via internet."
             )
             .setPositiveButton("Enable") { _, _ ->
                 prefs.edit().putBoolean("qa_mode", true).apply()

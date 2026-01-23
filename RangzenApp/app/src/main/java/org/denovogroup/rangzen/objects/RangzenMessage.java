@@ -88,6 +88,8 @@ public class RangzenMessage {
     public static final String BIGPARENT_KEY = "bigparent";
     public static final String HOP_KEY = "hop";
     public static final String MIN_USERS_P_HOP_KEY = "min_users_p_hop";
+    // Creation timestamp - when the message was originally composed
+    public static final String TIMESTAMP_KEY = "ts";
 
     /** Random source for legacy trust noise */
     private static final Random TRUST_RANDOM = new Random();
@@ -369,6 +371,8 @@ public class RangzenMessage {
             result.put(PRIORITY_KEY, priority);  // Wire format: message priority (not likes)
             result.put(HOP_KEY, hopCount + 1);
             result.put(MIN_USERS_P_HOP_KEY, minContactsForHop);
+            // Include original creation timestamp so receivers know when message was composed.
+            result.put(TIMESTAMP_KEY, timestamp);
             // Optional parent linkage.
             if (parentId != null && !parentId.isEmpty()) {
                 result.put(PARENT_KEY, parentId);
@@ -473,7 +477,15 @@ public class RangzenMessage {
         message.setBigParentId(json.optString(BIGPARENT_KEY, null));
         message.setHopCount(json.optInt(HOP_KEY, 0));
         message.setMinContactsForHop(json.optInt(MIN_USERS_P_HOP_KEY, 0));
-        message.setTimestamp(System.currentTimeMillis());
+        // Parse original creation timestamp. If not present (old protocol), use now.
+        // This preserves when the message was originally composed.
+        long creationTime = json.optLong(TIMESTAMP_KEY, 0L);
+        if (creationTime <= 0) {
+            // Fallback for messages from older versions that don't include timestamp
+            creationTime = System.currentTimeMillis();
+        }
+        message.setTimestamp(creationTime);
+        // receivedTimestamp is NOT set here - MessageStore sets it when storing.
         return message;
     }
 
