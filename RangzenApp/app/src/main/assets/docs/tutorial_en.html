@@ -5,152 +5,272 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome to Murmur</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #1a1a2e;
-            color: #e0e0e0;
-            line-height: 1.6;
-            padding: 16px;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        h1 { color: #bb86fc; font-size: 28px; margin-bottom: 8px; text-align: center; }
-        .subtitle { color: #03dac6; font-size: 16px; text-align: center; margin-bottom: 24px; }
-        h2 { color: #03dac6; font-size: 20px; margin: 24px 0 12px 0; }
-        h3 { color: #bb86fc; font-size: 16px; margin: 16px 0 8px 0; }
-        p { margin-bottom: 12px; }
-        ul { margin: 12px 0 12px 24px; }
-        li { margin-bottom: 8px; }
-        .highlight {
-            background: rgba(187, 134, 252, 0.15);
-            border-radius: 8px;
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .hero {
+            text-align: center;
+            padding: 40px 20px;
+            color: white;
+            animation: fadeInDown 0.8s ease-out;
+        }
+        
+        .hero h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .hero .tagline {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            animation: fadeInUp 0.6s ease-out;
+            animation-fill-mode: both;
+        }
+        
+        .card:nth-child(2) { animation-delay: 0.1s; }
+        .card:nth-child(3) { animation-delay: 0.2s; }
+        .card:nth-child(4) { animation-delay: 0.3s; }
+        .card:nth-child(5) { animation-delay: 0.4s; }
+        
+        .card h2 {
+            color: #667eea;
+            font-size: 1.3em;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card h2 .icon {
+            font-size: 1.5em;
+        }
+        
+        .step-list {
+            list-style: none;
+            counter-reset: steps;
+        }
+        
+        .step-list li {
+            counter-increment: steps;
+            padding: 12px 0 12px 50px;
+            position: relative;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .step-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .step-list li::before {
+            content: counter(steps);
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .step-list li strong {
+            color: #667eea;
+        }
+        
+        .highlight-box {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+            border-left: 4px solid #667eea;
             padding: 16px;
+            border-radius: 0 8px 8px 0;
             margin: 16px 0;
         }
-        .step {
-            background: rgba(3, 218, 198, 0.1);
-            border-left: 4px solid #03dac6;
-            padding: 12px;
-            margin: 12px 0;
-            border-radius: 4px;
+        
+        .highlight-box.warning {
+            background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
+            border-left-color: #ffc107;
         }
-        .step-number {
-            display: inline-block;
-            background: #03dac6;
-            color: #1a1a2e;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            text-align: center;
-            line-height: 24px;
-            font-weight: bold;
-            margin-right: 8px;
+        
+        .highlight-box.success {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border-left-color: #4caf50;
         }
-        .icon { font-size: 24px; margin-right: 8px; }
-        hr { border: none; border-top: 1px solid #333; margin: 24px 0; }
+        
         .feature-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, 1fr);
             gap: 12px;
-            margin: 16px 0;
+            margin-top: 16px;
         }
+        
         .feature-item {
-            background: rgba(255,255,255,0.05);
-            padding: 12px;
-            border-radius: 8px;
+            background: #f8f9ff;
+            padding: 16px;
+            border-radius: 12px;
             text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-        .feature-icon { font-size: 32px; margin-bottom: 8px; }
-        .feature-title { font-weight: bold; color: #03dac6; }
+        
+        .feature-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+        
+        .feature-item .emoji {
+            font-size: 2em;
+            margin-bottom: 8px;
+        }
+        
+        .feature-item .label {
+            font-size: 0.85em;
+            color: #666;
+        }
+        
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px 20px;
+            color: rgba(255,255,255,0.8);
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
-    <h1>Welcome to Murmur</h1>
-    <p class="subtitle">Anonymous, censorship-resistant messaging</p>
-
-    <div class="highlight">
-        <p><strong>Murmur</strong> lets you share messages without the internet. Messages spread person-to-person via Bluetooth and Wi-Fi when devices come near each other.</p>
-    </div>
-
-    <h2>How It Works</h2>
-
-    <div class="feature-grid">
-        <div class="feature-item">
-            <div class="feature-icon">📱</div>
-            <div class="feature-title">No Internet</div>
-            <p style="font-size: 14px;">Works completely offline</p>
+    <div class="container">
+        <div class="hero">
+            <h1>📡 Murmur</h1>
+            <p class="tagline">Anonymous messaging without internet</p>
         </div>
-        <div class="feature-item">
-            <div class="feature-icon">🔒</div>
-            <div class="feature-title">Anonymous</div>
-            <p style="font-size: 14px;">No phone number or email needed</p>
+        
+        <div class="card">
+            <h2><span class="icon">🌐</span> What is Murmur?</h2>
+            <p>Murmur is a mesh messaging app for when the internet is blocked or unavailable. Messages spread directly from phone to phone using <strong>Bluetooth</strong> and <strong>Wi-Fi</strong>.</p>
+            
+            <div class="highlight-box success">
+                <strong>No internet or cellular data required!</strong>
+            </div>
         </div>
-        <div class="feature-item">
-            <div class="feature-icon">📡</div>
-            <div class="feature-title">Mesh Network</div>
-            <p style="font-size: 14px;">Messages hop between devices</p>
+        
+        <div class="card">
+            <h2><span class="icon">✨</span> How It Works</h2>
+            <ol class="step-list">
+                <li><strong>WRITE</strong> — Compose a short message (140 characters)</li>
+                <li><strong>WALK</strong> — Move around your city or village</li>
+                <li><strong>SPREAD</strong> — When near another Murmur user (10-100m), phones automatically exchange messages</li>
+                <li><strong>REPEAT</strong> — That person shares your message with others they meet</li>
+            </ol>
         </div>
-        <div class="feature-item">
-            <div class="feature-icon">🛡️</div>
-            <div class="feature-title">Censorship-Resistant</div>
-            <p style="font-size: 14px;">No server to block or shutdown</p>
+        
+        <div class="card">
+            <h2><span class="icon">🔒</span> Privacy & Safety</h2>
+            
+            <div class="feature-grid">
+                <div class="feature-item">
+                    <div class="emoji">🎭</div>
+                    <div class="label">Anonymous identity</div>
+                </div>
+                <div class="feature-item">
+                    <div class="emoji">🚫</div>
+                    <div class="label">No central server</div>
+                </div>
+                <div class="feature-item">
+                    <div class="emoji">✍️</div>
+                    <div class="label">Signed messages</div>
+                </div>
+                <div class="feature-item">
+                    <div class="emoji">📱</div>
+                    <div class="label">Data stays on device</div>
+                </div>
+            </div>
+            
+            <div class="highlight-box warning">
+                <strong>Important:</strong> Use a screen lock! If someone takes your unlocked phone, they can see your messages.
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2><span class="icon">📱</span> App Features</h2>
+            
+            <p><strong>Feed</strong> — Messages from nearby users</p>
+            <p style="margin-top: 12px;"><strong>Trust Bars</strong> — Green (friend), Yellow (neutral), Red (unknown)</p>
+            <p style="margin-top: 12px;"><strong>Heart ❤️</strong> — Saves message locally (private bookmark)</p>
+            <p style="margin-top: 12px;"><strong>Friends</strong> — Scan QR codes to build your trusted network</p>
+            <p style="margin-top: 12px;"><strong>Import Contacts</strong> — Find friends privately (no upload)</p>
+        </div>
+        
+        <div class="card">
+            <h2><span class="icon">🔧</span> Troubleshooting</h2>
+            
+            <p><strong>"No peers nearby"</strong></p>
+            <ul style="margin: 8px 0 16px 20px; color: #666;">
+                <li>Ensure Bluetooth & Wi-Fi are ON</li>
+                <li>Grant Location permission</li>
+                <li>Check "Enable Murmur" in Settings</li>
+            </ul>
+            
+            <p><strong>"Messages not sending"</strong></p>
+            <ul style="margin: 8px 0 0 20px; color: #666;">
+                <li>Be patient! Messages spread as people move</li>
+                <li>It may take hours to cross a city</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            <p>Originally "Rangzen" by De Novo Group</p>
+            <p>Open Source • Free Forever</p>
         </div>
     </div>
-
-    <hr>
-
-    <h2>Quick Start</h2>
-
-    <div class="step">
-        <span class="step-number">1</span>
-        <strong>Grant Permissions</strong>
-        <p>Allow Location and Bluetooth access. These are needed to discover nearby devices (we don't track your location).</p>
-    </div>
-
-    <div class="step">
-        <span class="step-number">2</span>
-        <strong>Write a Message</strong>
-        <p>Tap the <strong>Compose</strong> tab (✏️) to write and post a message. It will spread to nearby users automatically.</p>
-    </div>
-
-    <div class="step">
-        <span class="step-number">3</span>
-        <strong>Add Friends</strong>
-        <p>Go to the <strong>Friends</strong> tab to scan QR codes or import contacts. Messages from friends show a green trust bar.</p>
-    </div>
-
-    <div class="step">
-        <span class="step-number">4</span>
-        <strong>Share the App</strong>
-        <p>Go to <strong>Settings → Share Murmur</strong> to send the app to others nearby—no internet required!</p>
-    </div>
-
-    <hr>
-
-    <h2>The Feed</h2>
-    <p>Your feed shows messages from the mesh network:</p>
-    <ul>
-        <li><strong style="color: #4caf50;">Green bar</strong> = From a friend (trusted)</li>
-        <li><strong style="color: #ffeb3b;">Yellow bar</strong> = Neutral source</li>
-        <li><strong style="color: #f44336;">Red bar</strong> = Unknown/low trust</li>
-    </ul>
-    <p><strong>Pull down</strong> to refresh and scan for nearby peers.</p>
-    <p>Tap the <strong>heart</strong> to bookmark a message locally.</p>
-
-    <hr>
-
-    <h2>Tips</h2>
-    <ul>
-        <li><strong>Be patient:</strong> Messages take time to spread through the network.</li>
-        <li><strong>Stay near people:</strong> The more users nearby, the faster messages spread.</li>
-        <li><strong>Keep Bluetooth on:</strong> This is how devices discover each other.</li>
-        <li><strong>Check Settings:</strong> Make sure "Enable Murmur" is ON.</li>
-    </ul>
-
-    <hr>
-
-    <p style="text-align: center; color: #666; margin-top: 24px;">
-        For more information, see <strong>Help &amp; FAQ</strong> in Settings.
-    </p>
-
 </body>
 </html>
