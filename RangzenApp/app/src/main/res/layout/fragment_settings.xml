@@ -106,6 +106,18 @@
 
                     </LinearLayout>
 
+                    <!-- Help icon for testers guide - only visible when QA mode is ON -->
+                    <ImageButton
+                        android:id="@+id/btn_qa_help"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:src="@android:drawable/ic_menu_help"
+                        android:contentDescription="Tester's Guide"
+                        android:visibility="gone"
+                        app:tint="@color/primary" />
+
                     <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/switch_qa_mode"
                         android:layout_width="wrap_content"
@@ -214,9 +226,9 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- Help & FAQ (clickable row) -->
+                <!-- How to Use / Tutorial (clickable row) -->
                 <LinearLayout
-                    android:id="@+id/row_help"
+                    android:id="@+id/row_tutorial"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
@@ -235,14 +247,63 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Help &amp; FAQ"
+                            android:text="How to Use"
                             android:textSize="16sp"
                             android:textColor="@color/text_primary" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="How to use Murmur, common questions"
+                            android:text="Quick start guide and tips"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_secondary" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textSize="24sp"
+                        android:textColor="@color/text_hint" />
+
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="16dp"
+                    android:background="@color/surface_variant" />
+
+                <!-- FAQ (clickable row) -->
+                <LinearLayout
+                    android:id="@+id/row_faq"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="16dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="FAQ"
+                            android:textSize="16sp"
+                            android:textColor="@color/text_primary" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Frequently asked questions"
                             android:textSize="14sp"
                             android:textColor="@color/text_secondary" />
 

@@ -35,6 +35,8 @@ import org.denovogroup.rangzen.backend.RangzenService
 import org.denovogroup.rangzen.databinding.ActivityMainBinding
 import timber.log.Timber
 
+private const val PREF_FIRST_LAUNCH_COMPLETE = "first_launch_complete"
+
 /**
  * Main Activity with bottom navigation for Feed, Compose, Friends, and Settings.
  */
@@ -75,6 +77,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * First-time tutorial launcher.
+     * Shows the tutorial on first app launch. User can dismiss (skip) at any time.
+     * After viewing/skipping, we mark first launch as complete.
+     */
+    private val tutorialLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        // Mark first launch as complete when user closes/skips the tutorial
+        val prefs = getSharedPreferences("rangzen_prefs", MODE_PRIVATE)
+        prefs.edit().putBoolean(PREF_FIRST_LAUNCH_COMPLETE, true).apply()
+        Timber.d("First launch tutorial completed/skipped")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -107,8 +123,29 @@ class MainActivity : AppCompatActivity() {
             showFragment(FeedFragment())
         }
 
+        // Check if this is first launch - show tutorial if so
+        checkFirstLaunch()
+
         // Request permissions
         checkAndRequestPermissions()
+    }
+
+    /**
+     * Checks if this is the first time the app is launched.
+     * If so, shows the tutorial. User can dismiss/skip at any time.
+     */
+    private fun checkFirstLaunch() {
+        val prefs = getSharedPreferences("rangzen_prefs", MODE_PRIVATE)
+        val firstLaunchComplete = prefs.getBoolean(PREF_FIRST_LAUNCH_COMPLETE, false)
+        
+        if (!firstLaunchComplete) {
+            // First launch - show the tutorial
+            Timber.d("First launch detected, showing tutorial")
+            val intent = Intent(this, HelpActivity::class.java).apply {
+                putExtra(HelpActivity.EXTRA_DOC_TYPE, HelpActivity.DOC_TUTORIAL)
+            }
+            tutorialLauncher.launch(intent)
+        }
     }
 
     override fun onStart() {

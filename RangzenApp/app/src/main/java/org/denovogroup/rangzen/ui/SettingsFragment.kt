@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,31 @@ class SettingsFragment : Fragment() {
     private var _binding: FragmentSettingsBinding? = null
     private val binding get() = _binding!!
 
+    // Activity result launcher for QA mode confirmation
+    // When user closes the testers guide, QA mode is enabled
+    private val qaModeLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        // User has read and dismissed the testers guide - enable QA mode
+        val prefs = requireContext().getSharedPreferences("rangzen_prefs", 0)
+        prefs.edit().putBoolean("qa_mode", true).apply()
+        TelemetryClient.getInstance()?.setEnabled(true)
+        
+        // Start OTA update checks and check immediately
+        UpdateClient.getInstance()?.let { client ->
+            client.startPeriodicChecks()
+            CoroutineScope(Dispatchers.IO).launch {
+                val update = client.checkForUpdate()
+                if (update != null) {
+                    Timber.i("Update available: ${update.versionName}")
+                }
+            }
+        }
+        
+        // Update UI to show the help icon now that QA mode is on
+        updateQaHelpIconVisibility()
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -45,6 +71,7 @@ class SettingsFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         setupSettings()
+        setupQaHelpIcon()
         loadStats()
         checkForPendingUpdate()
         setupShareApp()
@@ -52,9 +79,14 @@ class SettingsFragment : Fragment() {
     }
 
     private fun setupHelp() {
-        // Help & FAQ row - opens Help Activity with tutorial
-        binding.rowHelp.setOnClickListener {
+        // Tutorial row - opens How to Use guide
+        binding.rowTutorial.setOnClickListener {
             openHelpActivity(HelpActivity.DOC_TUTORIAL)
+        }
+        
+        // FAQ row - opens FAQ
+        binding.rowFaq.setOnClickListener {
+            openHelpActivity(HelpActivity.DOC_FAQ)
         }
     }
 
@@ -138,60 +170,50 @@ class SettingsFragment : Fragment() {
         binding.switchQaMode.isChecked = prefs.getBoolean("qa_mode", false)
         binding.switchQaMode.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
-                // Show confirmation dialog when enabling
+                // Show testers guide when enabling - QA mode enabled on dismiss
                 showQaModeConfirmation(prefs)
             } else {
                 // Disable without confirmation
                 prefs.edit().putBoolean("qa_mode", false).apply()
                 TelemetryClient.getInstance()?.setEnabled(false)
                 UpdateClient.getInstance()?.stopPeriodicChecks()
+                // Hide the help icon since QA mode is now off
+                updateQaHelpIconVisibility()
             }
         }
     }
 
+    /**
+     * Shows the Testers Guide when enabling QA mode.
+     * QA mode is enabled when user dismisses the guide (reads and closes it).
+     */
     private fun showQaModeConfirmation(prefs: android.content.SharedPreferences) {
-        AlertDialog.Builder(requireContext())
-            .setTitle("Enable QA Testing Mode")
-            .setMessage(
-                "QA mode sends diagnostic data to De Novo Group's server via internet (WiFi or cellular).\n\n" +
-                "What IS sent:\n" +
-                "• Device model & app version\n" +
-                "• A hashed device ID (to track same device over time)\n" +
-                "• Exchange statistics (peer counts, success rates)\n" +
-                "• Error logs for debugging\n" +
-                "• Location of exchanges (if location permission granted)\n" +
-                "• Your IP address (visible to our server)\n\n" +
-                "What is NOT sent:\n" +
-                "• Your messages or their content\n" +
-                "• Your friend list\n" +
-                "• Your pseudonym\n" +
-                "• Phone number or real identity\n\n" +
-                "This mode also enables automatic app updates via internet.\n\n" +
-                "⚠️ Do NOT enable in high-risk environments (Iran, etc.)"
-            )
-            .setPositiveButton("Enable") { _, _ ->
-                prefs.edit().putBoolean("qa_mode", true).apply()
-                TelemetryClient.getInstance()?.setEnabled(true)
-                // Start OTA update checks and check immediately
-                UpdateClient.getInstance()?.let { client ->
-                    client.startPeriodicChecks()
-                    CoroutineScope(Dispatchers.IO).launch {
-                        val update = client.checkForUpdate()
-                        if (update != null) {
-                            Timber.i("Update available: ${update.versionName}")
-                        }
-                    }
-                }
-            }
-            .setNegativeButton("Cancel") { _, _ ->
-                // Revert the toggle
-                binding.switchQaMode.isChecked = false
-            }
-            .setOnCancelListener {
-                // Revert the toggle if dismissed
-                binding.switchQaMode.isChecked = false
-            }
-            .show()
+        // Launch the testers guide - QA mode will be enabled when user closes it
+        val intent = Intent(requireContext(), HelpActivity::class.java).apply {
+            putExtra(HelpActivity.EXTRA_DOC_TYPE, HelpActivity.DOC_TESTERS_GUIDE)
+        }
+        qaModeLauncher.launch(intent)
+    }
+
+    /**
+     * Sets up the help icon next to the QA mode toggle.
+     * Only visible when QA mode is enabled, allows re-reading the testers guide.
+     */
+    private fun setupQaHelpIcon() {
+        binding.btnQaHelp.setOnClickListener {
+            openHelpActivity(HelpActivity.DOC_TESTERS_GUIDE)
+        }
+        updateQaHelpIconVisibility()
+    }
+
+    /**
+     * Updates the visibility of the QA help icon based on QA mode state.
+     */
+    private fun updateQaHelpIconVisibility() {
+        val prefs = requireContext().getSharedPreferences("rangzen_prefs", 0)
+        val qaEnabled = prefs.getBoolean("qa_mode", false)
+        // Show help icon only when QA mode is ON
+        binding.btnQaHelp.visibility = if (qaEnabled) View.VISIBLE else View.GONE
     }
 
     private fun loadStats() {
