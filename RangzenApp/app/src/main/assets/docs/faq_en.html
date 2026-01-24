@@ -123,18 +123,23 @@
         }
         
         .tag.yes {
-            background: #e8f5e9;
-            color: #2e7d32;
+            background: #eceff1;
+            color: #455a64;
         }
         
         .tag.no {
-            background: #ffebee;
-            color: #c62828;
+            background: #eceff1;
+            color: #455a64;
         }
         
         .tag.info {
             background: #e3f2fd;
             color: #1565c0;
+        }
+        
+        .warning {
+            color: #c62828;
+            font-weight: 600;
         }
         
         ul {
@@ -189,7 +194,7 @@
                 <div class="faq-answer">
                     <div class="faq-answer-content">
                         <p><span class="tag no">NO</span> Messaging works entirely offline.</p>
-                        <p><em>Note: If you enable "QA Mode" (for developers), it will use internet for telemetry. Do NOT enable in restricted environments.</em></p>
+                        <p><em>Note: If you enable "QA Mode" (for developers), it will use internet for telemetry. <span class="warning">Do NOT enable in restricted environments.</span></em></p>
                     </div>
                 </div>
             </div>
@@ -234,7 +239,7 @@
                         <p><span class="tag no">NOT FROM A DISTANCE</span></p>
                         <p>There is no central server to hack or subpoena. Messages move directly from phone to phone — no company in the middle.</p>
                         <p><strong>However:</strong> If someone (including a government agent) installs Murmur and physically comes near other users, their phone will receive messages like any other peer. This is unavoidable in any open mesh network.</p>
-                        <p><em>Also: If someone takes your unlocked phone, they can read your messages. Use a strong screen lock.</em></p>
+                        <p><em><span class="warning">Warning:</span> If someone takes your unlocked phone, they can read your messages. Use a strong screen lock.</em></p>
                     </div>
                 </div>
             </div>
@@ -243,9 +248,9 @@
                 <div class="faq-question">Can I delete messages?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p><span class="tag no">NO</span> Messages cannot be deleted — they remain stored on your device.</p>
+                        <p><span class="tag no">NO</span> You cannot recall messages from the network.</p>
                         <p>You can <strong>hide</strong> messages by swiping them away. This clears your feed but doesn't erase anything. Use "Restore swiped" to bring them back.</p>
-                        <p>Once a message spreads to others, it's out of your control. This is by design — it prevents censorship.</p>
+                        <p>Some messages may expire automatically. Once a message spreads to others, it's out of your control. This prevents censorship.</p>
                     </div>
                 </div>
             </div>
@@ -295,8 +300,8 @@
                 <div class="faq-question">What does the Heart (❤️) do?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>Tapping the heart is like <strong>voting up</strong> a message. It tells the network: "this is worth spreading."</p>
-                        <p>Messages with more hearts are prioritized during exchanges — they spread further and faster.</p>
+                        <p>Tapping the heart adds a public count to the message. Hearts are shared between peers as a count.</p>
+                        <p>Right now, hearts <strong>do not change exchange ordering</strong> (messages are still sent by recency). This may change in future versions.</p>
                         <p><em>Your identity is not attached to the heart. No one knows who voted.</em></p>
                     </div>
                 </div>
@@ -320,13 +325,14 @@
                 <div class="faq-question">What is "Hash Contacts"?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>This helps Murmur figure out if you and another user share mutual contacts — without revealing who those contacts are.</p>
+                        <p>This helps Murmur estimate whether you and another user share mutual contacts — without revealing who those contacts are.</p>
                         <ul>
                             <li><strong>Privacy:</strong> Your contacts never leave your phone</li>
                             <li><strong>How:</strong> Phone numbers are scrambled into "hashes" (one-way codes) and compared locally</li>
                             <li><strong>Result:</strong> Only the <em>count</em> of shared contacts is used, not identities</li>
                         </ul>
-                        <p><em>This is a weak trust signal. The strongest trust comes from scanning QR codes.</em></p>
+                        <p>Only <strong>same‑country mobile numbers</strong> are used; landlines and foreign numbers are skipped.</p>
+                        <p><em>This is a weak trust signal. The strongest trust comes from scanning QR codes. If this feels risky, skip it.</em></p>
                     </div>
                 </div>
             </div>

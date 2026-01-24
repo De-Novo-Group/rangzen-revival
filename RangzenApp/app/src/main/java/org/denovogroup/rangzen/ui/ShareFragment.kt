@@ -142,10 +142,30 @@ class ShareFragment : Fragment() {
     // ========================================================================
     
     /**
-     * Share the APK via Android's system share sheet.
-     * This allows Quick Share, Bluetooth, USB, or any other sharing app.
+     * Show preparatory dialog explaining that the receiver needs to have 
+     * Quick Share open in receive mode before proceeding.
+     * 
+     * This prevents confusion where users tap "Share" but the receiver
+     * isn't ready to receive the file.
      */
     private fun shareViaSystemSheet() {
+        // Show dialog explaining that receiver must be ready first
+        AlertDialog.Builder(requireContext())
+            .setTitle(org.denovogroup.rangzen.R.string.share_quickshare_prep_title)
+            .setMessage(org.denovogroup.rangzen.R.string.share_quickshare_prep_message)
+            .setPositiveButton(org.denovogroup.rangzen.R.string.share_quickshare_prep_continue) { _, _ ->
+                // User confirmed receiver is ready - proceed with share
+                performSystemShare()
+            }
+            .setNegativeButton(org.denovogroup.rangzen.R.string.share_quickshare_prep_cancel, null)
+            .show()
+    }
+    
+    /**
+     * Actually perform the system share after user confirms receiver is ready.
+     * Exports APK and launches Android's share sheet.
+     */
+    private fun performSystemShare() {
         scope.launch {
             // Show loading state
             binding.btnShareSystem.isEnabled = false

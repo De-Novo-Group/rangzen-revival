@@ -219,7 +219,7 @@
                 <ol class="checklist">
                     <li>
                         <span class="num">1</span>
-                        <div><strong>Install:</strong> Get APK via download or Share App</div>
+                        <div><strong>Install:</strong> Get APK via Quick Share, Bluetooth, or a direct download link</div>
                     </li>
                     <li>
                         <span class="num">2</span>
@@ -229,10 +229,28 @@
                         <span class="num">3</span>
                         <div><strong>Enable:</strong> Turn ON "Enable Murmur" in Settings</div>
                     </li>
+                    <li>
+                        <span class="num">4</span>
+                        <div><strong>QA Mode:</strong> Toggle ON <em>QA Mode</em> when the testing team asks you to</div>
+                    </li>
                 </ol>
             </div>
         </div>
         
+        <div class="card">
+            <div class="card-header">
+                <span>🔐</span> Privacy & Telemetry (QA)
+            </div>
+            <div class="card-content">
+                <p>QA telemetry is anonymous, but it is <strong>not perfectly private</strong>. Please understand:</p>
+                <ul>
+                    <li><strong>IP address:</strong> The server will see the IP assigned to your phone by your carrier or Wi‑Fi ISP (dynamic and changes often).</li>
+                    <li><strong>Location:</strong> The app will collect device location during QA events to study movement and propagation.</li>
+                </ul>
+                <p>This data helps us tune the mesh and validate propagation under real movement patterns.</p>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <span>📋</span> The Feed
@@ -240,10 +258,38 @@
             <div class="card-content">
                 <p><strong>Pull to Refresh</strong> — Forces scan for nearby peers</p>
                 <p style="margin-top: 12px;"><strong>Trust Bar</strong> — Green = Friend, Yellow = Neutral</p>
-                <p style="margin-top: 12px;"><strong>Heart ❤️</strong> — Local bookmark (saves message)</p>
+                <p style="margin-top: 12px;"><strong>Heart ❤️</strong> — Adds a shared heart count (does not change exchange order yet)</p>
             </div>
         </div>
         
+        <div class="card">
+            <div class="card-header">
+                <span>👥</span> Build Critical Mass
+            </div>
+            <div class="card-content">
+                <p>Murmur doesn’t work in isolation. For meaningful tests, grow a nearby cluster:</p>
+                <ul>
+                    <li>Use <strong>Quick Share</strong> or Bluetooth to share the APK with friends.</li>
+                    <li>Share the download link or QR with people in the same area.</li>
+                    <li>Try to get several people in the same neighborhood or workplace.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span>🗓️</span> Daily Use (Realistic Testing)
+            </div>
+            <div class="card-content">
+                <p>One‑time tests are not enough. Please use the app daily:</p>
+                <ul>
+                    <li>Post at least one message per day.</li>
+                    <li>Walk/commute as usual so messages can propagate naturally.</li>
+                    <li>Scan QR codes with trusted contacts when possible.</li>
+                </ul>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <span>🔬</span> Test Scenarios
@@ -271,10 +317,10 @@
                 </div>
                 
                 <div class="scenario">
-                    <h4><span class="scenario-label">D</span> Import Contacts</h4>
+                    <h4><span class="scenario-label">D</span> Hash Contacts</h4>
                     <p><strong>Setup:</strong> Phone A has B's number in contacts</p>
-                    <p><strong>Action:</strong> A → Friends → Import Contacts</p>
-                    <div class="result">✓ B appears as Friend after exchange</div>
+                    <p><strong>Action:</strong> A → Friends → Hash Contacts</p>
+                    <div class="result">✓ After exchange, shared contacts boost trust → message prioritization</div>
                 </div>
             </div>
         </div>
@@ -317,6 +363,8 @@
                 <span>🐛</span> Reporting Bugs
             </div>
             <div class="card-content">
+                <p><strong>Bug reporting is coming soon</strong> (in‑app report button).</p>
+                <p>For now, there is no in‑app reporting channel. Please wait for the built‑in feature.</p>
                 <div class="bug-report">
                     <h4>Please include:</h4>
                     <ol>
@@ -326,6 +374,16 @@
                         <li><strong>What happened</strong> (e.g., "App froze")</li>
                     </ol>
                 </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span>📡</span> Planned QA Messaging
+            </div>
+            <div class="card-content">
+                <p>We plan to send <strong>clearly marked QA messages</strong> over the internet to request specific tests.</p>
+                <p>This feature is not live yet.</p>
             </div>
         </div>
         

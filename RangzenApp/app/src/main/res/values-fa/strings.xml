@@ -70,6 +70,12 @@
     <string name="share_system_desc">بهترین برای دستگاه‌های نزدیک. بدون نیاز به WiFi.</string>
     <string name="share_system_btn">اشتراک با Quick Share</string>
     
+    <!-- Quick Share preparation dialog -->
+    <string name="share_quickshare_prep_title">آماده‌سازی دستگاه گیرنده</string>
+    <string name="share_quickshare_prep_message">قبل از ادامه، از شخصی که برنامه را دریافت می‌کند بخواهید:\n\n۱. Quick Share را روی دستگاهش باز کند\n۲. آن را روی «دریافت از همه» یا «دریافت از مخاطبین» تنظیم کند\n۳. صفحه را روشن نگه دارد و منتظر فایل بماند\n\nوقتی آماده شدند، روی ادامه بزنید.</string>
+    <string name="share_quickshare_prep_continue">ادامه</string>
+    <string name="share_quickshare_prep_cancel">لغو</string>
+    
     <!-- Secondary: QR code -->
     <string name="share_qr_title">روی یک WiFi هستید؟</string>
     <string name="share_qr_desc">یک کد QR نشان دهید که گیرنده با دوربینش اسکن کند. در مرورگر باز می‌شود.</string>

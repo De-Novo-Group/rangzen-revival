@@ -75,6 +75,12 @@
     <string name="share_system_desc">Best for nearby devices. Works without WiFi.</string>
     <string name="share_system_btn">Share via Quick Share</string>
     
+    <!-- Quick Share preparation dialog -->
+    <string name="share_quickshare_prep_title">Prepare the Receiving Device</string>
+    <string name="share_quickshare_prep_message">Before continuing, ask the person receiving the app to:\n\n1. Open Quick Share on their device\n2. Set it to "Receive from everyone" or "Receive from contacts"\n3. Keep the screen on and wait for the file\n\nOnce they\'re ready, tap Continue.</string>
+    <string name="share_quickshare_prep_continue">Continue</string>
+    <string name="share_quickshare_prep_cancel">Cancel</string>
+    
     <!-- Secondary: QR code -->
     <string name="share_qr_title">On the same WiFi?</string>
     <string name="share_qr_desc">Show a QR code the receiver scans with their camera. Opens in browser.</string>
