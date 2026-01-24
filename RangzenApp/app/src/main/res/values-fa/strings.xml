@@ -39,19 +39,7 @@
     <string name="action_add_friend">افزودن دوست</string>
     <string name="action_show_qr">نمایش کد QR من</string>
     <string name="action_scan_qr">اسکن کد QR</string>
-    <string name="action_hash_contacts">هش مخاطبین</string>
-    
-    <!-- Contact hashing (privacy-preserving friend discovery) -->
-    <string name="hash_contacts_explain_title">هش مخاطبین چگونه کار می‌کند</string>
-    <string name="hash_contacts_explain_message">مخاطبین شما هرگز گوشی را ترک نمی‌کنند.\n\nشماره تلفن‌ها به هش‌های یک‌طرفه (کدهای درهم‌ریخته) تبدیل می‌شوند و به صورت محلی هنگام ملاقات با کاربران دیگر مورمور مقایسه می‌شوند.\n\nاین کمک می‌کند همپوشانی پیدا شود — اگر شما و کسی مخاطبین مشترک داشته باشید، برنامه می‌تواند ارتباط پیام‌ها را کمی افزایش دهد. فقط تعداد مخاطبین مشترک استفاده می‌شود، نه اینکه چه کسانی هستند.\n\nتوجه: این یک سیگنال ضعیف است. قوی‌ترین اعتماد از اسکن کدهای QR می‌آید.</string>
-    <string name="hash_contacts_explain_continue">ادامه</string>
-    <string name="permission_contacts_title">مجوز مخاطبین مورد نیاز است</string>
-    <string name="permission_contacts_message">مورمور برای هش کردن محلی مخاطبین شما به دسترسی نیاز دارد. شماره‌ها هرگز آپلود یا به صورت متن ساده ذخیره نمی‌شوند.</string>
-    <string name="contacts_hashed">%1$d مخاطب از دفترچه تلفن هش شد</string>
-    <string name="contacts_already_hashed">همه مخاطبین قبلاً هش شده‌اند</string>
-    <string name="contacts_no_mobile_numbers">شماره موبایلی یافت نشد</string>
-    <string name="contacts_processing">در حال پردازش مخاطبین…</string>
-    
+
     <!-- Status -->
     <string name="status_discovering">در حال یافتن دستگاه‌ها…</string>
     <string name="status_connecting">در حال اتصال…</string>

@@ -39,24 +39,7 @@
     <string name="action_add_friend">Add Friend</string>
     <string name="action_show_qr">Show My QR Code</string>
     <string name="action_scan_qr">Scan QR Code</string>
-    <string name="action_hash_contacts">Hash Contacts</string>
-    
-    <!-- Contact hashing (privacy-preserving friend discovery) -->
-    <!-- Pre-permission explanatory dialog -->
-    <string name="hash_contacts_explain_title">How Contact Hashing Works</string>
-    <string name="hash_contacts_explain_message">Your contacts never leave your phone.\n\nPhone numbers are turned into one-way hashes (scrambled codes) and compared locally when you meet other Murmur users.\n\nThis helps find overlap — if you and someone share contacts, the app can gently boost message relevance. Only the COUNT of shared contacts is used, not WHO they are.\n\nNote: This is a weak signal. The strongest trust comes from scanning QR codes.</string>
-    <string name="hash_contacts_explain_continue">Continue</string>
-    
-    <!-- Permission dialog -->
-    <string name="permission_contacts_title">Contacts Permission Required</string>
-    <string name="permission_contacts_message">Murmur needs access to your contacts to hash them locally. Numbers are never uploaded or stored in plain text.</string>
-    
-    <!-- Results -->
-    <string name="contacts_hashed">Hashed %1$d contacts from your phonebook</string>
-    <string name="contacts_already_hashed">All contacts already hashed</string>
-    <string name="contacts_no_mobile_numbers">No mobile phone numbers found</string>
-    <string name="contacts_processing">Processing contacts…</string>
-    
+
     <!-- Status -->
     <string name="status_discovering">Discovering peers…</string>
     <string name="status_connecting">Connecting…</string>

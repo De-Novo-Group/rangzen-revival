@@ -40,9 +40,6 @@
     
     <!-- Boot receiver permission -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    
-    <!-- Contacts permission for importing friends from phonebook -->
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- OTA update permission -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
