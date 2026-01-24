@@ -70,10 +70,10 @@ class HttpDistributionServer(private val context: Context) {
      * 
      * @param apkFile The APK file to serve
      * @param apkInfo Metadata about the APK
-     * @param sessionCode Session code for authentication
+     * @param sessionCode Optional session code (null = no authentication required)
      * @return Server URL (http://ip:port) or null on failure
      */
-    fun start(apkFile: File, apkInfo: ApkInfo, sessionCode: String): String? {
+    fun start(apkFile: File, apkInfo: ApkInfo, sessionCode: String?): String? {
         if (isRunning) {
             Timber.w("$TAG: Server already running")
             return null
@@ -223,12 +223,14 @@ class HttpDistributionServer(private val context: Context) {
      * Handle /info request - returns APK metadata.
      */
     private fun handleInfoRequest(output: OutputStream, request: HttpRequest) {
-        // Verify session code
-        val providedCode = request.headers["x-session-code"]
-        if (providedCode != currentSessionCode) {
-            Timber.w("$TAG: Invalid session code on /info")
-            sendErrorResponse(output, 403, "Forbidden")
-            return
+        // Verify session code (only if one was set)
+        if (currentSessionCode != null) {
+            val providedCode = request.headers["x-session-code"]
+            if (providedCode != currentSessionCode) {
+                Timber.w("$TAG: Invalid session code on /info")
+                sendErrorResponse(output, 403, "Forbidden")
+                return
+            }
         }
         
         val info = currentApkInfo
@@ -269,12 +271,14 @@ class HttpDistributionServer(private val context: Context) {
      * Handle /download request - streams APK file.
      */
     private suspend fun handleDownloadRequest(output: OutputStream, request: HttpRequest) {
-        // Verify session code
-        val providedCode = request.headers["x-session-code"]
-        if (providedCode != currentSessionCode) {
-            Timber.w("$TAG: Invalid session code on /download")
-            sendErrorResponse(output, 403, "Forbidden")
-            return
+        // Verify session code (only if one was set)
+        if (currentSessionCode != null) {
+            val providedCode = request.headers["x-session-code"]
+            if (providedCode != currentSessionCode) {
+                Timber.w("$TAG: Invalid session code on /download")
+                sendErrorResponse(output, 403, "Forbidden")
+                return
+            }
         }
         
         val apkFile = currentApkFile

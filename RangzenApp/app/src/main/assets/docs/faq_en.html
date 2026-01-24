@@ -196,58 +196,19 @@
         </div>
         
         <div class="section">
-            <div class="section-title">Features</div>
-            
-            <div class="faq-item">
-                <div class="faq-question">What is "Import Contacts"?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>This helps you find friends who also use Murmur.</p>
-                        <ul>
-                            <li><strong>Privacy:</strong> It does NOT upload your contacts</li>
-                            <li><strong>How it works:</strong> Phone numbers are "hashed" (scrambled) and compared with other Murmur users you meet</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">What does the Heart (❤️) do?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>It's a <strong>local bookmark</strong>. Tapping the heart saves the message to your device.</p>
-                        <p><em>Unlike social media, this "like" is NOT broadcast to the network. Other users don't see it.</em></p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">What is the Trust indicator?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>The colored bar on the left of each message:</p>
-                        <ul>
-                            <li><strong style="color: #4caf50;">Green</strong> — From a Friend or Friend-of-Friend</li>
-                            <li><strong style="color: #ff9800;">Yellow</strong> — Neutral</li>
-                            <li><strong style="color: #f44336;">Red</strong> — Unknown source</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="section">
             <div class="section-title">Technical</div>
             
             <div class="faq-item">
                 <div class="faq-question">How does it work offline?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
+                        <p>When two Murmur users come near each other, their phones automatically exchange messages using:</p>
                         <ul>
-                            <li><strong>Bluetooth (BLE)</strong> — Discover nearby users, exchange small data</li>
-                            <li><strong>Wi-Fi Direct</strong> — Move larger amounts quickly (~50-100m range)</li>
-                            <li><strong>LAN/Hotspot</strong> — Find peers on the same Wi-Fi network</li>
+                            <li><strong>Bluetooth (BLE)</strong> — Discovers nearby users and exchanges small amounts of data</li>
+                            <li><strong>Wi-Fi Direct</strong> — Transfers larger batches quickly (up to ~100m range)</li>
+                            <li><strong>Local Network</strong> — Works over shared Wi-Fi (cafes, hotspots)</li>
                         </ul>
+                        <p>No internet needed. Messages hop from phone to phone.</p>
                     </div>
                 </div>
             </div>
@@ -256,8 +217,8 @@
                 <div class="faq-question">Why do I see a "Location" icon?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>Android requires <strong>Location Permission</strong> to scan for Bluetooth and Wi-Fi devices.</p>
-                        <p>Murmur does <strong>NOT</strong> track your GPS location. We only use this permission to find nearby peers.</p>
+                        <p>Android requires <strong>Location Permission</strong> to scan for Bluetooth and Wi-Fi devices. This is an Android rule, not ours.</p>
+                        <p>Murmur does <strong>NOT</strong> track your GPS location or store it anywhere. We only use this permission to find nearby peers.</p>
                     </div>
                 </div>
             </div>
@@ -270,19 +231,116 @@
                 <div class="faq-question">Can the government see my messages?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p><span class="tag no">NOT REMOTELY</span></p>
-                        <p>There is no central server to hack or subpoena. Messages move directly from phone to phone.</p>
-                        <p><em>Warning: If someone physically takes your unlocked phone, they can see your messages. Use a strong screen lock.</em></p>
+                        <p><span class="tag no">NOT FROM A DISTANCE</span></p>
+                        <p>There is no central server to hack or subpoena. Messages move directly from phone to phone — no company in the middle.</p>
+                        <p><strong>However:</strong> If someone (including a government agent) installs Murmur and physically comes near other users, their phone will receive messages like any other peer. This is unavoidable in any open mesh network.</p>
+                        <p><em>Also: If someone takes your unlocked phone, they can read your messages. Use a strong screen lock.</em></p>
                     </div>
                 </div>
             </div>
             
             <div class="faq-item">
-                <div class="faq-question">Can I delete a message?</div>
+                <div class="faq-question">Can I delete messages?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>You can delete it from <strong>your phone</strong>, but you <strong>cannot</strong> recall it from the network.</p>
-                        <p>Once a message spreads, it's out of your control. This prevents censorship.</p>
+                        <p><span class="tag no">NO</span> Messages cannot be deleted — they remain stored on your device.</p>
+                        <p>You can <strong>hide</strong> messages by swiping them away. This clears your feed but doesn't erase anything. Use "Restore swiped" to bring them back.</p>
+                        <p>Once a message spreads to others, it's out of your control. This is by design — it prevents censorship.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Are messages encrypted?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Messages are <strong>signed</strong> (to prove they came from the same author), but they are <strong>not encrypted</strong> — anyone on the mesh can read them.</p>
+                        <p>Think of it like a public bulletin board, not a private chat. Do not share secrets.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Trust & Prioritization</div>
+            
+            <div class="faq-item">
+                <div class="faq-question">How do I establish trust with someone?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>The strongest way is to <strong>scan each other's QR codes</strong> in person. This creates a direct trust link.</p>
+                        <p>Go to the Friends tab, show your QR code, and have them scan it (and vice versa). Once connected, messages from that person — and people they trust — will be prioritized in your feed.</p>
+                        <p><em>You can also use "Hash Contacts" for weaker trust signals, but QR exchange is the gold standard.</em></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Why does trust matter for message delivery?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>When two phones meet, they only have a <strong>brief window</strong> to exchange messages — maybe seconds or minutes. Not everything can be shared in time.</p>
+                        <p>Murmur must decide <strong>what to send first</strong>. It prioritizes messages from people in your trust network, so important content reaches you faster.</p>
+                        <p>This means your feed naturally reflects your community. A government employee whose contacts are mostly other officials will see more official messages. A dissident whose trust circle includes activists will see more from that community — and less from outside it.</p>
+                        <p><em>Trust shapes what spreads. Build your network intentionally.</em></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Features</div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What does the Heart (❤️) do?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Tapping the heart is like <strong>voting up</strong> a message. It tells the network: "this is worth spreading."</p>
+                        <p>Messages with more hearts are prioritized during exchanges — they spread further and faster.</p>
+                        <p><em>Your identity is not attached to the heart. No one knows who voted.</em></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What is the Trust indicator?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>The colored bar on the left of each message shows how close the author is to your social circle:</p>
+                        <ul>
+                            <li><strong style="color: #4caf50;">Green</strong> — From a Friend or Friend-of-Friend</li>
+                            <li><strong style="color: #ff9800;">Yellow</strong> — Neutral (no strong connection)</li>
+                            <li><strong style="color: #f44336;">Red</strong> — Unknown source (be skeptical)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What is "Hash Contacts"?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>This helps Murmur figure out if you and another user share mutual contacts — without revealing who those contacts are.</p>
+                        <ul>
+                            <li><strong>Privacy:</strong> Your contacts never leave your phone</li>
+                            <li><strong>How:</strong> Phone numbers are scrambled into "hashes" (one-way codes) and compared locally</li>
+                            <li><strong>Result:</strong> Only the <em>count</em> of shared contacts is used, not identities</li>
+                        </ul>
+                        <p><em>This is a weak trust signal. The strongest trust comes from scanning QR codes.</em></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">How do I share Murmur without internet?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Open <strong>Share Murmur</strong> from Settings. You have two options:</p>
+                        <ul>
+                            <li><strong>Quick Share / Bluetooth</strong> — Best for nearby devices. Tap "Share via Quick Share" and select how to send.</li>
+                            <li><strong>QR Code</strong> — If both devices are on the same WiFi, use the QR option. The receiver scans it with their camera and downloads via browser.</li>
+                        </ul>
+                        <p>The receiver doesn't need Murmur installed — they accept the file and install it.</p>
                     </div>
                 </div>
             </div>

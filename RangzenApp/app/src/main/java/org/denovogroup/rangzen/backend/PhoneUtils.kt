@@ -3,6 +3,7 @@
  * All rights reserved.
  *
  * Phone number utilities for E.164 normalization.
+ * Used by contact hashing (privacy-preserving friend discovery).
  */
 package org.denovogroup.rangzen.backend
 
@@ -146,6 +147,111 @@ object PhoneUtils {
             "AE" -> "971"
             "IL" -> "972"
             else -> null
+        }
+    }
+
+    /**
+     * Check if an E.164 number belongs to the given country.
+     * This is used to filter contacts to same-country only (for Iran use case).
+     *
+     * @param e164Number The E.164 formatted number (e.g., "+989121234567")
+     * @param deviceCountryCode The device's country ISO code (e.g., "IR")
+     * @return true if the number matches the device's country
+     */
+    fun isNumberFromCountry(e164Number: String, deviceCountryCode: String): Boolean {
+        if (!e164Number.startsWith("+")) return false
+        
+        val callingCode = getCallingCodeForCountry(deviceCountryCode) ?: return false
+        // Check if number starts with +[calling_code]
+        return e164Number.startsWith("+$callingCode")
+    }
+
+    /**
+     * Check if a phone number is likely a mobile number.
+     * This uses country-specific prefix patterns.
+     *
+     * For contact hashing, we only want mobile numbers (not landlines, toll-free, etc.)
+     * because Murmur is a mobile app - people won't be running it on landlines.
+     *
+     * NOTE: This is a heuristic - some numbers may be miscategorized.
+     * The patterns are based on common mobile prefixes per country.
+     *
+     * @param e164Number The E.164 formatted number
+     * @param countryCode The ISO country code for more accurate detection
+     * @return true if the number appears to be a mobile number
+     */
+    fun isMobileNumber(e164Number: String, countryCode: String): Boolean {
+        if (!e164Number.startsWith("+")) return false
+
+        // Get the digits after the + sign
+        val digitsOnly = e164Number.drop(1)
+
+        return when (countryCode.uppercase(Locale.US)) {
+            "IR" -> {
+                // Iranian mobile numbers: +98 9XX XXX XXXX
+                // Mobile prefixes: 901-939 (various carriers)
+                // Landlines have different area code patterns (21 for Tehran, etc.)
+                digitsOnly.startsWith("989") && digitsOnly.length == 12
+            }
+            "US", "CA" -> {
+                // North America doesn't have clear mobile vs landline prefixes.
+                // All 10-digit numbers can be mobile or landline.
+                // For simplicity, we accept all valid NANP numbers.
+                // This may include some landlines, which is acceptable.
+                digitsOnly.startsWith("1") && digitsOnly.length == 11
+            }
+            "GB", "UK" -> {
+                // UK mobile numbers: +44 7XXX XXXXXX
+                // Landlines: +44 1XXX, +44 2XXX (area codes)
+                digitsOnly.startsWith("447") && digitsOnly.length in 11..12
+            }
+            "DE" -> {
+                // German mobile: +49 15XX, +49 16X, +49 17X
+                // The pattern is +49 followed by mobile prefix
+                digitsOnly.startsWith("4915") || 
+                digitsOnly.startsWith("4916") || 
+                digitsOnly.startsWith("4917")
+            }
+            "FR" -> {
+                // French mobile: +33 6XX or +33 7XX
+                (digitsOnly.startsWith("336") || digitsOnly.startsWith("337")) &&
+                digitsOnly.length == 11
+            }
+            "IN" -> {
+                // Indian mobile: +91 [6-9]XXX XXX XXX (10 digits after country code)
+                // Mobile numbers start with 6, 7, 8, or 9
+                digitsOnly.startsWith("91") && digitsOnly.length == 12 &&
+                digitsOnly[2] in '6'..'9'
+            }
+            "PK" -> {
+                // Pakistani mobile: +92 3XX XXXXXXX
+                digitsOnly.startsWith("923") && digitsOnly.length == 12
+            }
+            "AF" -> {
+                // Afghan mobile: +93 7X XXX XXXX
+                digitsOnly.startsWith("937") && digitsOnly.length == 11
+            }
+            "TR" -> {
+                // Turkish mobile: +90 5XX XXX XXXX
+                digitsOnly.startsWith("905") && digitsOnly.length == 12
+            }
+            "EG" -> {
+                // Egyptian mobile: +20 1X XXX XXXX
+                digitsOnly.startsWith("201") && digitsOnly.length == 12
+            }
+            "SA" -> {
+                // Saudi mobile: +966 5X XXX XXXX
+                digitsOnly.startsWith("9665") && digitsOnly.length == 12
+            }
+            "AE" -> {
+                // UAE mobile: +971 5X XXX XXXX
+                digitsOnly.startsWith("9715") && digitsOnly.length == 12
+            }
+            else -> {
+                // For unknown countries, accept all numbers (better false positives than false negatives)
+                // This ensures we don't accidentally exclude valid mobile numbers.
+                true
+            }
         }
     }
 }

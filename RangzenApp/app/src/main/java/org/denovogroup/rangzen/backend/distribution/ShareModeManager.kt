@@ -2,7 +2,7 @@
  * Copyright (c) 2026, De Novo Group
  * All rights reserved.
  *
- * ShareModeManager - Manages the state machine for offline APK distribution.
+ * ShareModeManager - Manages the state machine for offline APK distribution (SEND ONLY).
  * 
  * SAFETY PRINCIPLES:
  * - Share Mode is completely separate from message transport
@@ -21,10 +21,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
-import java.security.SecureRandom
 
 /**
- * Singleton manager for Share Mode - the offline APK distribution feature.
+ * Singleton manager for Share Mode - the offline APK distribution feature (send-only).
  * 
  * Share Mode operates independently of message transport:
  * - Uses separate sockets/ports from messaging
@@ -39,36 +38,21 @@ object ShareModeManager {
     // After this, session is automatically cancelled for safety
     const val SESSION_TIMEOUT_MS = 5 * 60 * 1000L
     
-    // Session code length: 3 digits for minimal friction
-    // This is consent verification, not cryptographic security
-    private const val SESSION_CODE_LENGTH = 3
-    
     /**
-     * Share Mode states.
+     * Share Mode states (send-only).
      * 
      * State transitions:
-     * IDLE -> SENDER_PREPARING -> SENDER_WAITING -> SENDER_TRANSFERRING -> IDLE
-     * IDLE -> RECEIVER_CONNECTING -> RECEIVER_DOWNLOADING -> RECEIVER_VERIFYING -> IDLE
+     * IDLE -> PREPARING -> SHARING -> IDLE
      */
     enum class State {
         /** No share session active */
         IDLE,
         
-        // Sender states
-        /** Sender is preparing APK and session code */
-        SENDER_PREPARING,
-        /** Sender is waiting for receiver to connect */
-        SENDER_WAITING,
-        /** Transfer in progress (sender side) */
-        SENDER_TRANSFERRING,
+        /** Preparing APK for sharing */
+        PREPARING,
         
-        // Receiver states
-        /** Receiver is connecting to sender */
-        RECEIVER_CONNECTING,
-        /** Receiver is downloading APK */
-        RECEIVER_DOWNLOADING,
-        /** Receiver is verifying APK integrity */
-        RECEIVER_VERIFYING,
+        /** Actively sharing (HTTP server running or system share in progress) */
+        SHARING,
         
         /** Session completed (success or failure) */
         COMPLETED,
@@ -81,11 +65,9 @@ object ShareModeManager {
      * Transfer method being used.
      */
     enum class TransferMethod {
-        /** HTTP transfer over LAN/Hotspot */
+        /** HTTP transfer over LAN/Hotspot (QR code) */
         HTTP,
-        /** WiFi Direct P2P transfer */
-        WIFI_DIRECT,
-        /** System share intent (third-party apps) */
+        /** System share intent (Quick Share, Bluetooth, etc.) */
         SYSTEM_SHARE
     }
     
@@ -104,7 +86,6 @@ object ShareModeManager {
      * Exposed for UI display.
      */
     data class SessionInfo(
-        val sessionCode: String,
         val method: TransferMethod,
         val startTime: Long,
         val expiresAt: Long,
@@ -127,12 +108,10 @@ object ShareModeManager {
     
     // Internal
     private var timeoutJob: Job? = null
-    private var currentSessionCode: String? = null
     private var sessionStartTime: Long = 0
-    private val secureRandom = SecureRandom()
     
     // Callbacks for transfer implementations
-    var onSessionStarted: ((sessionCode: String, method: TransferMethod) -> Unit)? = null
+    var onSessionStarted: ((method: TransferMethod) -> Unit)? = null
     var onSessionEnded: ((result: SessionResult) -> Unit)? = null
     
     /**
@@ -140,25 +119,21 @@ object ShareModeManager {
      * 
      * @param context Android context
      * @param method Transfer method to use
-     * @return Session code for receiver to enter, or null on failure
+     * @return true if session started
      */
-    fun startSenderSession(context: Context, method: TransferMethod): String? {
+    fun startSession(context: Context, method: TransferMethod): Boolean {
         if (_state.value != State.IDLE) {
-            Timber.w("$TAG: Cannot start sender session - already in state ${_state.value}")
-            return null
+            Timber.w("$TAG: Cannot start session - already in state ${_state.value}")
+            return false
         }
         
-        Timber.i("$TAG: Starting sender session with method $method")
+        Timber.i("$TAG: Starting session with method $method")
         
-        // Generate session code
-        val sessionCode = generateSessionCode()
-        currentSessionCode = sessionCode
         sessionStartTime = System.currentTimeMillis()
         
         // Update state
-        _state.value = State.SENDER_PREPARING
+        _state.value = State.PREPARING
         _sessionInfo.value = SessionInfo(
-            sessionCode = sessionCode,
             method = method,
             startTime = sessionStartTime,
             expiresAt = sessionStartTime + SESSION_TIMEOUT_MS
@@ -168,51 +143,18 @@ object ShareModeManager {
         startTimeoutTimer()
         
         // Notify listeners
-        onSessionStarted?.invoke(sessionCode, method)
+        onSessionStarted?.invoke(method)
         
-        // Move to waiting state (actual server start happens in transport layer)
-        _state.value = State.SENDER_WAITING
-        
-        Timber.i("$TAG: Sender session started with code $sessionCode")
-        return sessionCode
+        return true
     }
     
     /**
-     * Start a receiver session.
-     * 
-     * @param context Android context
-     * @param sessionCode Code from sender
-     * @param method Transfer method to use
-     * @return true if session started
+     * Mark session as actively sharing.
      */
-    fun startReceiverSession(context: Context, sessionCode: String, method: TransferMethod): Boolean {
-        if (_state.value != State.IDLE) {
-            Timber.w("$TAG: Cannot start receiver session - already in state ${_state.value}")
-            return false
+    fun setSharing() {
+        if (_state.value == State.PREPARING) {
+            _state.value = State.SHARING
         }
-        
-        // Validate session code format
-        if (!isValidSessionCode(sessionCode)) {
-            Timber.w("$TAG: Invalid session code format")
-            return false
-        }
-        
-        Timber.i("$TAG: Starting receiver session with code $sessionCode")
-        
-        currentSessionCode = sessionCode
-        sessionStartTime = System.currentTimeMillis()
-        
-        _state.value = State.RECEIVER_CONNECTING
-        _sessionInfo.value = SessionInfo(
-            sessionCode = sessionCode,
-            method = method,
-            startTime = sessionStartTime,
-            expiresAt = sessionStartTime + SESSION_TIMEOUT_MS
-        )
-        
-        startTimeoutTimer()
-        
-        return true
     }
     
     /**
@@ -228,19 +170,8 @@ object ShareModeManager {
         )
         
         // Update state if needed
-        if (_state.value == State.SENDER_WAITING) {
-            _state.value = State.SENDER_TRANSFERRING
-        } else if (_state.value == State.RECEIVER_CONNECTING) {
-            _state.value = State.RECEIVER_DOWNLOADING
-        }
-    }
-    
-    /**
-     * Mark receiver as verifying APK.
-     */
-    fun setVerifying() {
-        if (_state.value == State.RECEIVER_DOWNLOADING) {
-            _state.value = State.RECEIVER_VERIFYING
+        if (_state.value == State.PREPARING) {
+            _state.value = State.SHARING
         }
     }
     
@@ -306,18 +237,6 @@ object ShareModeManager {
     fun isActive(): Boolean = _state.value != State.IDLE
     
     /**
-     * Get the current session code (for verification).
-     */
-    fun getCurrentSessionCode(): String? = currentSessionCode
-    
-    /**
-     * Verify a session code matches the current session.
-     */
-    fun verifySessionCode(code: String): Boolean {
-        return currentSessionCode != null && currentSessionCode == code
-    }
-    
-    /**
      * Clean up any stale state on app startup.
      * Call this from Application.onCreate() or Service.onCreate().
      */
@@ -327,7 +246,6 @@ object ShareModeManager {
         // Reset state
         _state.value = State.IDLE
         _sessionInfo.value = null
-        currentSessionCode = null
         timeoutJob?.cancel()
         timeoutJob = null
         
@@ -337,19 +255,6 @@ object ShareModeManager {
     // ========================================================================
     // Private helpers
     // ========================================================================
-    
-    private fun generateSessionCode(): String {
-        // Generate 6-digit numeric code
-        val code = StringBuilder()
-        for (i in 0 until SESSION_CODE_LENGTH) {
-            code.append(secureRandom.nextInt(10))
-        }
-        return code.toString()
-    }
-    
-    private fun isValidSessionCode(code: String): Boolean {
-        return code.length == SESSION_CODE_LENGTH && code.all { it.isDigit() }
-    }
     
     private fun startTimeoutTimer() {
         timeoutJob?.cancel()
@@ -377,7 +282,6 @@ object ShareModeManager {
             delay(100)
             _state.value = State.IDLE
             _sessionInfo.value = null
-            currentSessionCode = null
         }
     }
 }

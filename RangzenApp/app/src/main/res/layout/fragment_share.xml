@@ -85,28 +85,25 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Send Button -->
+            <!-- Primary action: System Share -->
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/card_send"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground">
+                app:cardElevation="4dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="20dp"
+                    android:gravity="center_horizontal">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/share_send_title"
+                        android:text="@string/share_system_title"
                         android:textSize="18sp"
                         android:textColor="@color/primary"
                         android:textStyle="bold" />
@@ -115,46 +112,62 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="@string/share_send_desc"
+                        android:text="@string/share_system_desc"
                         android:textSize="14sp"
-                        android:textColor="@color/text_secondary" />
+                        android:textColor="@color/text_secondary"
+                        android:textAlignment="center" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_share_system"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/share_system_btn" />
 
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Receive Button -->
+            <!-- Secondary action: QR Code -->
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/card_receive"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="4dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground">
+                app:cardElevation="2dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/text_hint">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="20dp">
+                    android:padding="20dp"
+                    android:gravity="center_horizontal">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/share_receive_title"
-                        android:textSize="18sp"
-                        android:textColor="@color/primary"
+                        android:text="@string/share_qr_title"
+                        android:textSize="16sp"
+                        android:textColor="@color/text_primary"
                         android:textStyle="bold" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="@string/share_receive_desc"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_secondary" />
+                        android:text="@string/share_qr_desc"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_secondary"
+                        android:textAlignment="center" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_share_qr"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/share_qr_btn" />
 
                 </LinearLayout>
 
@@ -162,9 +175,9 @@
 
         </LinearLayout>
 
-        <!-- Sender View (initially hidden) -->
+        <!-- QR Server View (initially hidden) -->
         <LinearLayout
-            android:id="@+id/layout_sender"
+            android:id="@+id/layout_qr_server"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -187,174 +200,55 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/share_code_prompt"
+                        android:text="@string/share_qr_scan_prompt"
                         android:textSize="16sp"
-                        android:textColor="@color/text_secondary" />
+                        android:textColor="@color/text_primary"
+                        android:textStyle="bold" />
 
-                    <!-- Session Code Display -->
+                    <!-- QR Code Display -->
+                    <ImageView
+                        android:id="@+id/img_qr_code"
+                        android:layout_width="250dp"
+                        android:layout_height="250dp"
+                        android:layout_marginVertical="16dp"
+                        android:background="@color/white"
+                        android:padding="8dp" />
+
+                    <!-- Server URL -->
                     <TextView
-                        android:id="@+id/text_session_code"
+                        android:id="@+id/text_server_url"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="------"
-                        android:textSize="48sp"
-                        android:textColor="@color/primary"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.3" />
+                        android:text=""
+                        android:textSize="12sp"
+                        android:textColor="@color/text_hint"
+                        android:fontFamily="monospace"
+                        android:textAlignment="center" />
 
                     <!-- Status -->
                     <TextView
-                        android:id="@+id/text_sender_status"
+                        android:id="@+id/text_server_status"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:text="@string/share_waiting"
+                        android:text=""
                         android:textSize="14sp"
-                        android:textColor="@color/text_secondary" />
+                        android:textColor="@color/text_secondary"
+                        android:textAlignment="center" />
 
-                    <!-- Progress Bar -->
-                    <ProgressBar
-                        android:id="@+id/progress_sender"
-                        style="?android:attr/progressBarStyleHorizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:max="100"
-                        android:progress="0"
-                        android:visibility="gone" />
-
-                    <!-- Network Info -->
+                    <!-- Instructions -->
                     <TextView
-                        android:id="@+id/text_network_info"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="24dp"
-                        android:text="@string/share_network_hint"
+                        android:text="@string/share_qr_instructions"
                         android:textSize="12sp"
                         android:textColor="@color/text_hint"
                         android:textAlignment="center" />
 
-                    <!-- Cancel Button -->
+                    <!-- Stop Button -->
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_cancel_send"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="24dp"
-                        android:text="@string/share_cancel" />
-
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
-        </LinearLayout>
-
-        <!-- Receiver View (initially hidden) -->
-        <LinearLayout
-            android:id="@+id/layout_receiver"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:visibility="gone">
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="24dp"
-                    android:gravity="center_horizontal">
-
-                    <!-- Code Entry Section (initially visible) -->
-                    <LinearLayout
-                        android:id="@+id/layout_code_entry"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:gravity="center_horizontal">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/share_enter_code"
-                            android:textSize="16sp"
-                            android:textColor="@color/text_secondary" />
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:layout_width="200dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
-                            android:hint="@string/share_code_hint">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/edit_session_code"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="number"
-                                android:maxLength="3"
-                                android:textSize="24sp"
-                                android:textAlignment="center"
-                                android:letterSpacing="0.2" />
-
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_connect"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="24dp"
-                            android:text="@string/share_connect"
-                            android:enabled="false" />
-
-                    </LinearLayout>
-
-                    <!-- Download Progress Section (initially hidden) -->
-                    <LinearLayout
-                        android:id="@+id/layout_download"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:gravity="center_horizontal"
-                        android:visibility="gone">
-
-                        <TextView
-                            android:id="@+id/text_receiver_status"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/share_connecting"
-                            android:textSize="16sp"
-                            android:textColor="@color/text_primary" />
-
-                        <ProgressBar
-                            android:id="@+id/progress_receiver"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
-                            android:max="100"
-                            android:progress="0" />
-
-                        <TextView
-                            android:id="@+id/text_progress_details"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="0 / 0 MB"
-                            android:textSize="14sp"
-                            android:textColor="@color/text_secondary" />
-
-                    </LinearLayout>
-
-                    <!-- Cancel Button -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_cancel_receive"
+                        android:id="@+id/btn_stop_server"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -417,19 +311,11 @@
                         android:textAlignment="center" />
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_install"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="24dp"
-                        android:text="@string/share_install"
-                        android:visibility="gone" />
-
-                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btn_done"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="24dp"
                         android:text="@string/share_done" />
 
                 </LinearLayout>

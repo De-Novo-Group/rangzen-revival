@@ -39,6 +39,18 @@
     <string name="action_add_friend">افزودن دوست</string>
     <string name="action_show_qr">نمایش کد QR من</string>
     <string name="action_scan_qr">اسکن کد QR</string>
+    <string name="action_hash_contacts">هش مخاطبین</string>
+    
+    <!-- Contact hashing (privacy-preserving friend discovery) -->
+    <string name="hash_contacts_explain_title">هش مخاطبین چگونه کار می‌کند</string>
+    <string name="hash_contacts_explain_message">مخاطبین شما هرگز گوشی را ترک نمی‌کنند.\n\nشماره تلفن‌ها به هش‌های یک‌طرفه (کدهای درهم‌ریخته) تبدیل می‌شوند و به صورت محلی هنگام ملاقات با کاربران دیگر مورمور مقایسه می‌شوند.\n\nاین کمک می‌کند همپوشانی پیدا شود — اگر شما و کسی مخاطبین مشترک داشته باشید، برنامه می‌تواند ارتباط پیام‌ها را کمی افزایش دهد. فقط تعداد مخاطبین مشترک استفاده می‌شود، نه اینکه چه کسانی هستند.\n\nتوجه: این یک سیگنال ضعیف است. قوی‌ترین اعتماد از اسکن کدهای QR می‌آید.</string>
+    <string name="hash_contacts_explain_continue">ادامه</string>
+    <string name="permission_contacts_title">مجوز مخاطبین مورد نیاز است</string>
+    <string name="permission_contacts_message">مورمور برای هش کردن محلی مخاطبین شما به دسترسی نیاز دارد. شماره‌ها هرگز آپلود یا به صورت متن ساده ذخیره نمی‌شوند.</string>
+    <string name="contacts_hashed">%1$d مخاطب از دفترچه تلفن هش شد</string>
+    <string name="contacts_already_hashed">همه مخاطبین قبلاً هش شده‌اند</string>
+    <string name="contacts_no_mobile_numbers">شماره موبایلی یافت نشد</string>
+    <string name="contacts_processing">در حال پردازش مخاطبین…</string>
     
     <!-- Status -->
     <string name="status_discovering">در حال یافتن دستگاه‌ها…</string>
@@ -47,28 +59,29 @@
     <string name="status_idle">در انتظار دستگاه‌ها</string>
     <string name="status_peers_found">%1$d دستگاه در نزدیکی</string>
     
-    <!-- Share Feature -->
-    <string name="share_title">اشتراک‌گذاری برنامه</string>
+    <!-- Share Feature (send-only) -->
+    <string name="share_title">اشتراک مورمور</string>
     <string name="share_back">بازگشت</string>
     <string name="share_offline_title">اشتراک آفلاین مورمور</string>
-    <string name="share_offline_desc">برنامه را بدون اینترنت با افراد نزدیک به اشتراک بگذارید. به یک شبکه WiFi مشترک متصل شوید یا هات‌اسپات موبایل ایجاد کنید.</string>
-    <string name="share_send_title">ارسال برنامه</string>
-    <string name="share_send_desc">مورمور را با کسی نزدیک به اشتراک بگذارید. یک کد دریافت می‌کنید که به آن‌ها بدهید.</string>
-    <string name="share_receive_title">دریافت برنامه</string>
-    <string name="share_receive_desc">مورمور را از کسی نزدیک دریافت کنید. باید کد آن‌ها را وارد کنید.</string>
-    <string name="share_code_prompt">این کد را به اشتراک بگذارید</string>
-    <string name="share_waiting">در انتظار گیرنده…</string>
-    <string name="share_network_hint">مطمئن شوید هر دو دستگاه در یک شبکه هستند</string>
+    <string name="share_offline_desc">برنامه را بدون اینترنت به اشتراک بگذارید. از Quick Share یا بلوتوث برای دستگاه‌های نزدیک استفاده کنید، یا QR اگر روی یک WiFi هستید.</string>
+    
+    <!-- Primary: System share -->
+    <string name="share_system_title">Quick Share / بلوتوث</string>
+    <string name="share_system_desc">بهترین برای دستگاه‌های نزدیک. بدون نیاز به WiFi.</string>
+    <string name="share_system_btn">اشتراک با Quick Share</string>
+    
+    <!-- Secondary: QR code -->
+    <string name="share_qr_title">روی یک WiFi هستید؟</string>
+    <string name="share_qr_desc">یک کد QR نشان دهید که گیرنده با دوربینش اسکن کند. در مرورگر باز می‌شود.</string>
+    <string name="share_qr_btn">اشتراک با کد QR</string>
+    <string name="share_qr_scan_prompt">این کد QR را اسکن کنید</string>
+    <string name="share_qr_instructions">هر دو دستگاه باید روی یک شبکه WiFi باشند.\nگیرنده این کد را اسکن می‌کند ← مرورگر باز می‌شود ← برنامه دانلود می‌شود.</string>
+    
+    <!-- Common -->
     <string name="share_cancel">لغو</string>
-    <string name="share_enter_code">کد فرستنده را وارد کنید</string>
-    <string name="share_code_hint">کد</string>
-    <string name="share_connect">اتصال</string>
-    <string name="share_connecting">در حال اتصال…</string>
-    <string name="share_downloading">در حال دانلود…</string>
     <string name="share_complete">انتقال کامل شد</string>
-    <string name="share_install">نصب</string>
     <string name="share_done">تمام</string>
     <string name="share_failed">انتقال ناموفق</string>
     <string name="share_murmur">اشتراک مورمور</string>
-    <string name="share_murmur_desc">ارسال یا دریافت آفلاین برنامه</string>
+    <string name="share_murmur_desc">اشتراک آفلاین برنامه</string>
 </resources>

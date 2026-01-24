@@ -55,12 +55,14 @@ class FriendsFragment : Fragment() {
 
     /**
      * Permission request launcher for READ_CONTACTS.
+     * When permission is granted, proceeds to hash contacts locally.
      */
     private val contactsPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            importContactsFromPhonebook()
+            // Permission granted - proceed with hashing
+            hashContactsFromPhonebook()
         } else {
             Toast.makeText(
                 context,
@@ -112,25 +114,43 @@ class FriendsFragment : Fragment() {
             scanFriendQR()
         }
 
-        binding.btnImportContacts.setOnClickListener {
-            requestContactsPermissionAndImport()
+        // "Hash Contacts" button (Casific's privacy-preserving friend discovery)
+        binding.btnHashContacts.setOnClickListener {
+            showHashContactsExplanation()
         }
     }
 
     /**
-     * Request contacts permission if needed, then import contacts.
+     * Show an explanatory dialog BEFORE requesting contacts permission.
+     * This explains how contact hashing works and that numbers never leave the device.
      */
-    private fun requestContactsPermissionAndImport() {
+    private fun showHashContactsExplanation() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.hash_contacts_explain_title)
+            .setMessage(R.string.hash_contacts_explain_message)
+            .setPositiveButton(R.string.hash_contacts_explain_continue) { _, _ ->
+                // User understood the explanation, now request permission
+                requestContactsPermissionAndHash()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * Request contacts permission if needed, then hash contacts.
+     * Called AFTER user has seen and accepted the explanation dialog.
+     */
+    private fun requestContactsPermissionAndHash() {
         when {
             ContextCompat.checkSelfPermission(
                 requireContext(),
                 Manifest.permission.READ_CONTACTS
             ) == PackageManager.PERMISSION_GRANTED -> {
                 // Permission already granted
-                importContactsFromPhonebook()
+                hashContactsFromPhonebook()
             }
             shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS) -> {
-                // Show explanation dialog
+                // Show system rationale dialog, then request
                 AlertDialog.Builder(requireContext())
                     .setTitle(R.string.permission_contacts_title)
                     .setMessage(R.string.permission_contacts_message)
@@ -148,13 +168,33 @@ class FriendsFragment : Fragment() {
     }
 
     /**
-     * Import contacts from the device phonebook.
-     * Phone numbers are normalized to E.164 format and then hashed.
+     * Hash contacts from the device phonebook (privacy-preserving friend discovery).
+     * 
+     * Phone numbers are:
+     * 1. Filtered to device's country only (e.g., IR for Iran users)
+     * 2. Filtered to mobile numbers only (no landlines)
+     * 3. Normalized to E.164 format
+     * 4. One-way hashed using SHA-256 (via Crypto.encodeString)
+     * 
+     * The hashes are stored locally and used during PSI (Private Set Intersection)
+     * when meeting other Murmur users to compute trust overlap.
+     * 
+     * NOTE: Phone numbers NEVER leave the device - only the count of shared contacts
+     * is used for trust scoring, not the identities.
      */
-    private fun importContactsFromPhonebook() {
+    private fun hashContactsFromPhonebook() {
+        // Show processing toast (hashing can take a moment for large contact lists)
+        Toast.makeText(context, R.string.contacts_processing, Toast.LENGTH_SHORT).show()
+
         viewLifecycleOwner.lifecycleScope.launch {
             var addedCount = 0
             var totalProcessed = 0
+            // Track stats for debugging/logging
+            var skippedWrongCountry = 0
+            var skippedNotMobile = 0
+
+            // Get device country code ONCE before starting (used for filtering)
+            val deviceCountryCode = getDeviceCountryCode(requireContext())
 
             withContext(Dispatchers.IO) {
                 val contentResolver = requireContext().contentResolver
@@ -219,10 +259,26 @@ class FriendsFragment : Fragment() {
                                 if (e164Number == null || e164Number in processedNumbers) {
                                     continue
                                 }
+
+                                // FILTER 1: Country filter - only hash numbers from device's country
+                                // This is important for Iran use case: don't expose foreign contacts.
+                                if (!PhoneUtils.isNumberFromCountry(e164Number, deviceCountryCode)) {
+                                    skippedWrongCountry++
+                                    continue
+                                }
+
+                                // FILTER 2: Mobile-only filter - skip landlines, toll-free, etc.
+                                // Murmur is a mobile app; landline contacts can't be Murmur users.
+                                if (!PhoneUtils.isMobileNumber(e164Number, deviceCountryCode)) {
+                                    skippedNotMobile++
+                                    continue
+                                }
+
                                 processedNumbers.add(e164Number)
                                 totalProcessed++
 
-                                // Hash the normalized phone number
+                                // Hash the normalized phone number using one-way SHA-256
+                                // The hash is what gets stored and compared during PSI.
                                 val hashedNumber = Crypto.encodeString(e164Number)
                                 if (hashedNumber != null) {
                                     // Generate a display name suffix for multiple numbers
@@ -247,23 +303,25 @@ class FriendsFragment : Fragment() {
             withContext(Dispatchers.Main) {
                 when {
                     totalProcessed == 0 -> {
+                        // No mobile numbers from device's country found
                         Toast.makeText(
                             context,
-                            R.string.contacts_no_phone_numbers,
+                            R.string.contacts_no_mobile_numbers,
                             Toast.LENGTH_SHORT
                         ).show()
                     }
                     addedCount > 0 -> {
                         Toast.makeText(
                             context,
-                            getString(R.string.contacts_imported, addedCount),
+                            getString(R.string.contacts_hashed, addedCount),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
                     else -> {
+                        // All contacts were already hashed previously
                         Toast.makeText(
                             context,
-                            R.string.contacts_already_added,
+                            R.string.contacts_already_hashed,
                             Toast.LENGTH_SHORT
                         ).show()
                     }

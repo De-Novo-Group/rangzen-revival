@@ -2,23 +2,28 @@
  * Copyright (c) 2026, De Novo Group
  * All rights reserved.
  *
- * ShareFragment - UI for offline APK distribution.
- * Allows users to share or receive the app over LAN/Hotspot.
+ * ShareFragment - UI for offline APK distribution (SEND ONLY).
+ * 
+ * Two sharing methods:
+ * 1. System share sheet (Quick Share / Bluetooth / USB) - primary
+ * 2. Local HTTP server + QR code - fallback for same-network sharing
+ * 
+ * The receiver does NOT need Murmur installed - they use OS file acceptance
+ * or browser download.
  */
 package org.denovogroup.rangzen.ui
 
 import android.app.AlertDialog
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
+import android.graphics.Bitmap
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
+import com.google.zxing.BarcodeFormat
+import com.journeyapps.barcodescanner.BarcodeEncoder
 import kotlinx.coroutines.*
 import org.denovogroup.rangzen.backend.distribution.*
 import org.denovogroup.rangzen.databinding.FragmentShareBinding
@@ -26,13 +31,12 @@ import timber.log.Timber
 import java.io.File
 
 /**
- * Fragment for sharing/receiving the Murmur app offline.
+ * Fragment for sharing the Murmur app offline (send-only).
  * 
  * Flow:
- * 1. User chooses Send or Receive
- * 2. Send: Shows session code, starts HTTP server, waits for receiver
- * 3. Receive: User enters code, connects to sender, downloads APK
- * 4. Result: Shows success/failure, option to install (receiver)
+ * 1. User taps "Share via Quick Share / Bluetooth" -> system share sheet
+ * 2. OR user taps "Share via QR code" -> starts HTTP server, shows QR
+ * 3. Receiver downloads APK via their browser or file manager
  */
 class ShareFragment : Fragment() {
     
@@ -46,17 +50,14 @@ class ShareFragment : Fragment() {
     private val binding get() = _binding!!
     
     // State
-    private enum class Mode { SELECTION, SENDER, RECEIVER, RESULT }
+    private enum class Mode { SELECTION, QR_SERVER, RESULT }
     private var currentMode = Mode.SELECTION
     
     // Distribution components
     private var httpServer: HttpDistributionServer? = null
-    private var httpClient: HttpDistributionClient? = null
     
-    // Session data
-    private var sessionCode: String? = null
-    private var serverUrl: String? = null
-    private var downloadedApkFile: File? = null
+    // Exported APK file (for system share)
+    private var exportedApkFile: File? = null
     
     // Coroutine scope
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -94,48 +95,23 @@ class ShareFragment : Fragment() {
             handleBack()
         }
         
-        // Mode selection
-        binding.cardSend.setOnClickListener {
-            startSenderMode()
+        // Primary action: System share (Quick Share / Bluetooth / USB)
+        binding.btnShareSystem.setOnClickListener {
+            shareViaSystemSheet()
         }
         
-        binding.cardReceive.setOnClickListener {
-            startReceiverMode()
+        // Secondary action: QR code (local HTTP server)
+        binding.btnShareQr.setOnClickListener {
+            startQrServerMode()
         }
         
-        // Sender controls
-        binding.btnCancelSend.setOnClickListener {
-            cancelSending()
-        }
-        
-        // Receiver controls
-        binding.editSessionCode.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                // Enable connect button when 6 digits entered
-                binding.btnConnect.isEnabled = s?.length == 6
-            }
-        })
-        
-        binding.btnConnect.setOnClickListener {
-            val code = binding.editSessionCode.text?.toString() ?: ""
-            if (code.length == 6) {
-                startDownload(code)
-            }
-        }
-        
-        binding.btnCancelReceive.setOnClickListener {
-            cancelReceiving()
+        // QR server controls
+        binding.btnStopServer.setOnClickListener {
+            stopQrServer()
         }
         
         // Result controls
-        binding.btnInstall.setOnClickListener {
-            downloadedApkFile?.let { installApk(it) }
-        }
-        
         binding.btnDone.setOnClickListener {
-            // Go back to main activity
             activity?.onBackPressed()
         }
     }
@@ -143,8 +119,7 @@ class ShareFragment : Fragment() {
     private fun handleBack() {
         when (currentMode) {
             Mode.SELECTION -> activity?.onBackPressed()
-            Mode.SENDER -> cancelSending()
-            Mode.RECEIVER -> cancelReceiving()
+            Mode.QR_SERVER -> stopQrServer()
             Mode.RESULT -> showModeSelection()
         }
     }
@@ -158,28 +133,86 @@ class ShareFragment : Fragment() {
         cleanup()
         
         binding.layoutModeSelection.visibility = View.VISIBLE
-        binding.layoutSender.visibility = View.GONE
-        binding.layoutReceiver.visibility = View.GONE
+        binding.layoutQrServer.visibility = View.GONE
         binding.layoutResult.visibility = View.GONE
     }
     
     // ========================================================================
-    // Sender Mode
+    // System Share (Quick Share / Bluetooth / USB)
     // ========================================================================
     
-    private fun startSenderMode() {
-        currentMode = Mode.SENDER
+    /**
+     * Share the APK via Android's system share sheet.
+     * This allows Quick Share, Bluetooth, USB, or any other sharing app.
+     */
+    private fun shareViaSystemSheet() {
+        scope.launch {
+            // Show loading state
+            binding.btnShareSystem.isEnabled = false
+            binding.btnShareSystem.text = "Preparing..."
+            
+            try {
+                // Export APK
+                val exportResult = withContext(Dispatchers.IO) {
+                    ApkExporter.exportApk(requireContext())
+                }
+                
+                if (!exportResult.success || exportResult.apkFile == null) {
+                    showError("Failed to prepare app: ${exportResult.error}")
+                    return@launch
+                }
+                
+                exportedApkFile = exportResult.apkFile
+                
+                // Create share intent with FileProvider URI
+                val uri = FileProvider.getUriForFile(
+                    requireContext(),
+                    "${requireContext().packageName}.fileprovider",
+                    exportResult.apkFile
+                )
+                
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/vnd.android.package-archive"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                
+                // Launch share sheet with chooser
+                val chooserIntent = Intent.createChooser(shareIntent, "Share Murmur (offline)")
+                startActivity(chooserIntent)
+                
+                Timber.i("$TAG: Launched system share sheet")
+                
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: Failed to share via system")
+                showError("Failed to share: ${e.message}")
+            } finally {
+                // Reset button state
+                binding.btnShareSystem.isEnabled = true
+                binding.btnShareSystem.text = getString(org.denovogroup.rangzen.R.string.share_system_btn)
+            }
+        }
+    }
+    
+    // ========================================================================
+    // QR Server Mode (Local HTTP + QR Code)
+    // ========================================================================
+    
+    /**
+     * Start local HTTP server and show QR code for download URL.
+     * Receiver scans QR -> browser opens -> downloads APK.
+     */
+    private fun startQrServerMode() {
+        currentMode = Mode.QR_SERVER
         
         binding.layoutModeSelection.visibility = View.GONE
-        binding.layoutSender.visibility = View.VISIBLE
-        binding.layoutReceiver.visibility = View.GONE
+        binding.layoutQrServer.visibility = View.VISIBLE
         binding.layoutResult.visibility = View.GONE
         
         // Reset UI
-        binding.textSessionCode.text = "------"
-        binding.textSenderStatus.text = "Preparing..."
-        binding.progressSender.visibility = View.GONE
-        binding.progressSender.progress = 0
+        binding.imgQrCode.setImageBitmap(null)
+        binding.textServerUrl.text = "Preparing..."
+        binding.textServerStatus.text = ""
         
         // Start server
         scope.launch {
@@ -191,7 +224,7 @@ class ShareFragment : Fragment() {
         val context = requireContext()
         
         // Export APK
-        binding.textSenderStatus.text = "Exporting app..."
+        binding.textServerStatus.text = "Exporting app..."
         
         val exportResult = withContext(Dispatchers.IO) {
             ApkExporter.exportApk(context)
@@ -202,478 +235,121 @@ class ShareFragment : Fragment() {
             return
         }
         
-        // Start ShareMode session
-        val code = ShareModeManager.startSenderSession(context, ShareModeManager.TransferMethod.HTTP)
-        if (code == null) {
-            showError("Failed to start share session")
-            return
-        }
+        exportedApkFile = exportResult.apkFile
         
-        sessionCode = code
-        
-        // Create and start HTTP server
+        // Create and start HTTP server (no session code required)
         httpServer = HttpDistributionServer(context).apply {
             onClientConnected = {
                 activity?.runOnUiThread {
-                    binding.textSenderStatus.text = "Receiver connected, transferring..."
-                    binding.progressSender.visibility = View.VISIBLE
+                    binding.textServerStatus.text = "Someone is downloading..."
                 }
             }
             
             onTransferProgress = { transferred, total ->
                 activity?.runOnUiThread {
-                    val progress = ((transferred.toFloat() / total) * 100).toInt()
-                    binding.progressSender.progress = progress
-                    ShareModeManager.updateProgress(transferred, total)
+                    val percent = ((transferred.toFloat() / total) * 100).toInt()
+                    binding.textServerStatus.text = "Downloading: $percent%"
                 }
             }
             
             onTransferComplete = { bytes ->
                 activity?.runOnUiThread {
-                    ShareModeManager.completeSession(bytes)
-                    showSenderResult(true, bytes)
+                    showResult(true, "Successfully shared ${formatBytes(bytes)}")
                 }
             }
             
             onError = { message ->
                 activity?.runOnUiThread {
-                    ShareModeManager.failSession(message)
                     showError(message)
                 }
             }
         }
         
-        val url = httpServer?.start(exportResult.apkFile, exportResult.apkInfo, code)
+        // Start server (no session code)
+        val url = httpServer?.start(exportResult.apkFile, exportResult.apkInfo, null)
         
         if (url == null) {
-            ShareModeManager.failSession("Failed to start server")
-            showError("Failed to start server")
+            showError("Failed to start server.\n\nMake sure you're connected to WiFi or have a hotspot active.")
             return
         }
         
-        serverUrl = url
+        // Generate download URL (direct link, no code needed)
+        val downloadUrl = "$url/download"
         
-        // Update UI with session code
-        binding.textSessionCode.text = formatSessionCode(code)
-        binding.textSenderStatus.text = "Waiting for receiver..."
-        binding.textNetworkInfo.text = "Server ready at $url\nMake sure both devices are on the same network"
+        // Generate QR code for the download URL
+        try {
+            val qrBitmap = generateQrCode(downloadUrl, 400)
+            binding.imgQrCode.setImageBitmap(qrBitmap)
+        } catch (e: Exception) {
+            Timber.e(e, "$TAG: Failed to generate QR code")
+        }
         
-        Timber.i("$TAG: Sender started with code $code at $url")
+        // Update UI
+        binding.textServerUrl.text = downloadUrl
+        binding.textServerStatus.text = "Ready. Ask receiver to scan the QR code."
+        
+        Timber.i("$TAG: QR server started at $downloadUrl")
     }
     
-    private fun cancelSending() {
+    private fun stopQrServer() {
         cleanup()
-        ShareModeManager.cancelSession()
         showModeSelection()
     }
     
-    private fun showSenderResult(success: Boolean, bytesTransferred: Long) {
+    // ========================================================================
+    // Result
+    // ========================================================================
+    
+    private fun showResult(success: Boolean, message: String) {
         currentMode = Mode.RESULT
         
-        binding.layoutSender.visibility = View.GONE
+        binding.layoutModeSelection.visibility = View.GONE
+        binding.layoutQrServer.visibility = View.GONE
         binding.layoutResult.visibility = View.VISIBLE
         
         if (success) {
             binding.imgResult.setImageResource(android.R.drawable.ic_dialog_info)
             binding.textResultTitle.text = "Transfer Complete"
-            binding.textResultMessage.text = "Successfully shared ${formatBytes(bytesTransferred)} with receiver."
         } else {
             binding.imgResult.setImageResource(android.R.drawable.ic_dialog_alert)
-            binding.textResultTitle.text = "Transfer Failed"
-            binding.textResultMessage.text = "Could not complete the transfer."
+            binding.textResultTitle.text = "Error"
         }
         
-        binding.btnInstall.visibility = View.GONE
+        binding.textResultMessage.text = message
         
         cleanup()
     }
     
-    // ========================================================================
-    // Receiver Mode
-    // ========================================================================
-    
-    private fun startReceiverMode() {
-        currentMode = Mode.RECEIVER
-        
-        binding.layoutModeSelection.visibility = View.GONE
-        binding.layoutSender.visibility = View.GONE
-        binding.layoutReceiver.visibility = View.VISIBLE
-        binding.layoutResult.visibility = View.GONE
-        
-        // Reset UI
-        binding.editSessionCode.text?.clear()
-        binding.btnConnect.isEnabled = false
-        binding.layoutCodeEntry.visibility = View.VISIBLE
-        binding.layoutDownload.visibility = View.GONE
-        binding.textReceiverStatus.text = ""
-        binding.progressReceiver.progress = 0
-    }
-    
-    private fun startDownload(code: String) {
-        val context = requireContext()
-        
-        // Show download UI
-        binding.layoutCodeEntry.visibility = View.GONE
-        binding.layoutDownload.visibility = View.VISIBLE
-        binding.textReceiverStatus.text = "Searching for sender..."
-        
-        // Start receiver session
-        ShareModeManager.startReceiverSession(context, code, ShareModeManager.TransferMethod.HTTP)
-        
-        // Create client
-        httpClient = HttpDistributionClient(context).apply {
-            onProgress = { downloaded, total ->
-                activity?.runOnUiThread {
-                    val progress = ((downloaded.toFloat() / total) * 100).toInt()
-                    binding.progressReceiver.progress = progress
-                    binding.textProgressDetails.text = "${formatBytes(downloaded)} / ${formatBytes(total)}"
-                    ShareModeManager.updateProgress(downloaded, total)
-                }
-            }
-            
-            onComplete = { file ->
-                activity?.runOnUiThread {
-                    downloadedApkFile = file
-                    verifyAndShowResult(file, code)
-                }
-            }
-            
-            onError = { message ->
-                activity?.runOnUiThread {
-                    ShareModeManager.failSession(message)
-                    showError(message)
-                }
-            }
-        }
-        
-        // Try to connect and download
-        scope.launch {
-            connectAndDownload(code)
-        }
-    }
-    
-    private suspend fun connectAndDownload(code: String) {
-        // Prompt user for sender's address immediately
-        // The address is shown on sender's screen (e.g., http://192.168.219.212:55632)
-        // Auto-discovery is unreliable, so we use manual entry for reliability
-        withContext(Dispatchers.Main) {
-            promptForServerAddress(code)
-        }
-    }
-    
-    /**
-     * Discover servers on the local network.
-     * 
-     * Scans the local subnet for HTTP servers with valid APK info.
-     * Uses a broader scan to find servers on any IP in the local network.
-     */
-    private suspend fun discoverServers(code: String): List<Pair<String, ApkInfo>> {
-        val context = requireContext()
-        val results = mutableListOf<Pair<String, ApkInfo>>()
-        
-        // Get local network prefix
-        val localIp = getLocalIpAddress()
-        if (localIp == null) {
-            Timber.w("$TAG: Could not determine local IP")
-            return results
-        }
-        
-        val prefix = localIp.substringBeforeLast(".")
-        val localLastOctet = localIp.substringAfterLast(".").toIntOrNull() ?: 0
-        
-        Timber.d("$TAG: Scanning network $prefix.* for sender (we are $localIp)")
-        
-        withContext(Dispatchers.IO) {
-            val client = HttpDistributionClient(context)
-            
-            // Scan the entire local subnet (1-254), but prioritize:
-            // 1. Addresses close to our own IP (likely same router assignment range)
-            // 2. Common DHCP ranges (.100-.200, .2-.50)
-            val addressesToTry = mutableListOf<String>()
-            
-            // First, try addresses near our own IP (±20 range)
-            for (offset in -20..20) {
-                val octet = localLastOctet + offset
-                if (octet in 1..254 && octet != localLastOctet) {
-                    addressesToTry.add("$prefix.$octet")
-                }
-            }
-            
-            // Then add common DHCP ranges
-            for (octet in listOf(1, 2, 100, 101, 102, 150, 200, 201)) {
-                val addr = "$prefix.$octet"
-                if (addr !in addressesToTry) {
-                    addressesToTry.add(addr)
-                }
-            }
-            
-            // High ephemeral ports where our server runs (49152-65535)
-            // Try common and spread-out ports
-            val ports = (49152..65535 step 100).toList() + 
-                        listOf(49152, 50000, 55000, 60000, 61958, 62000, 63000, 64000, 65000)
-            
-            Timber.d("$TAG: Scanning ${addressesToTry.size} addresses, ${ports.size} ports")
-            
-            // Scan with parallelism for speed (but limited to avoid flooding)
-            val jobs = mutableListOf<kotlinx.coroutines.Deferred<Pair<String, ApkInfo>?>>()
-            
-            for (address in addressesToTry.take(50)) {  // Limit to 50 addresses
-                for (port in ports.take(20)) {  // Limit to 20 ports
-                    jobs.add(async {
-                        val url = "http://$address:$port"
-                        try {
-                            val info = client.fetchApkInfo(url, code)
-                            if (info != null) {
-                                Timber.i("$TAG: Found server at $url")
-                                return@async url to info
-                            }
-                        } catch (e: Exception) {
-                            // Ignore - connection failed
-                        }
-                        null
-                    })
-                }
-            }
-            
-            // Wait for results, return first success
-            for (job in jobs) {
-                val result = job.await()
-                if (result != null) {
-                    results.add(result)
-                    // Cancel remaining jobs
-                    jobs.forEach { it.cancel() }
-                    return@withContext
-                }
-            }
-        }
-        
-        return results
-    }
-    
-    private fun promptForServerAddress(code: String) {
-        // Show dialog to enter server IP manually
-        // The URL is shown on sender's screen like: http://192.168.1.5:54321
-        val editText = android.widget.EditText(requireContext()).apply {
-            hint = "192.168.x.x:port"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-            // Pre-fill with network prefix if available
-            getLocalIpAddress()?.let { ip ->
-                val prefix = ip.substringBeforeLast(".")
-                setText("$prefix.")
-                setSelection(text.length)
-            }
-        }
-        
-        AlertDialog.Builder(requireContext())
-            .setTitle("Enter Sender's Address")
-            .setMessage("Look at the sender's screen for the address.\n\nIt looks like: http://192.168.x.x:12345\n\nEnter the IP and port below:")
-            .setView(editText)
-            .setPositiveButton("Connect") { _, _ ->
-                val address = editText.text.toString().trim()
-                if (address.isNotEmpty()) {
-                    // Remove http:// prefix if user copied it
-                    val cleanAddress = address
-                        .removePrefix("http://")
-                        .removePrefix("https://")
-                    val url = "http://$cleanAddress"
-                    
-                    binding.textReceiverStatus.text = "Connecting to $cleanAddress..."
-                    
-                    scope.launch {
-                        downloadFromServer(url, code)
-                    }
-                }
-            }
-            .setNegativeButton("Cancel") { _, _ ->
-                cancelReceiving()
-            }
-            .setCancelable(false)
-            .show()
-    }
-    
-    private suspend fun downloadFromServer(url: String, code: String) {
-        val context = requireContext()
-        
-        Timber.i("$TAG: Attempting download from $url with code ${code.take(3)}***")
-        
-        withContext(Dispatchers.Main) {
-            binding.layoutCodeEntry.visibility = View.GONE
-            binding.layoutDownload.visibility = View.VISIBLE
-            binding.textReceiverStatus.text = "Connecting..."
-            binding.progressReceiver.progress = 0
-        }
-        
-        // Fetch APK info first
-        Timber.d("$TAG: Fetching APK info from $url")
-        val info = httpClient?.fetchApkInfo(url, code)
-        
-        if (info == null) {
-            Timber.e("$TAG: Failed to fetch APK info from $url")
-            withContext(Dispatchers.Main) {
-                showError("Could not connect to sender.\n\nCheck:\n• Both devices on same network\n• Address matches sender's screen\n• Sender is still active")
-            }
-            return
-        }
-        
-        Timber.i("$TAG: Got APK info: v${info.versionName}, ${info.sizeBytes} bytes")
-        
-        // Verify signature matches our app
-        val currentFingerprint = ApkExporter.getSignatureFingerprint(context)
-        if (info.signatureFingerprint != currentFingerprint) {
-            Timber.e("$TAG: Signature mismatch! Expected: $currentFingerprint, got: ${info.signatureFingerprint}")
-            withContext(Dispatchers.Main) {
-                showError("Security error: App signature mismatch")
-            }
-            return
-        }
-        
-        Timber.d("$TAG: Signature verified, starting download")
-        
-        withContext(Dispatchers.Main) {
-            binding.textReceiverStatus.text = "Downloading..."
-        }
-        
-        // Download APK
-        val result = httpClient?.downloadApk(url, code, info)
-        
-        if (result == null) {
-            Timber.e("$TAG: Download returned null")
-            // Error already handled by callback
-        } else {
-            Timber.i("$TAG: Download completed: ${result.absolutePath}")
-        }
-    }
-    
-    private fun cancelReceiving() {
-        httpClient?.cancel()
-        cleanup()
-        ShareModeManager.cancelSession()
-        showModeSelection()
-    }
-    
-    private fun verifyAndShowResult(file: File, code: String) {
-        scope.launch {
-            binding.textReceiverStatus.text = "Verifying..."
-            ShareModeManager.setVerifying()
-            
-            // Get expected info from server (we should have cached this)
-            val result = withContext(Dispatchers.IO) {
-                val client = HttpDistributionClient(requireContext())
-                // We need the URL we connected to - for now, trust the file
-                // In production, we'd cache the ApkInfo from the initial fetch
-                
-                // Just verify it's a valid APK with matching signature
-                ApkVerifier.isValidApk(requireContext(), file)
-            }
-            
-            if (result) {
-                ShareModeManager.completeSession(file.length())
-                showReceiverResult(true, file)
-            } else {
-                ShareModeManager.failSession("APK verification failed")
-                file.delete()
-                showReceiverResult(false, null)
-            }
-        }
-    }
-    
-    private fun showReceiverResult(success: Boolean, apkFile: File?) {
-        currentMode = Mode.RESULT
-        
-        binding.layoutReceiver.visibility = View.GONE
-        binding.layoutResult.visibility = View.VISIBLE
-        
-        if (success && apkFile != null) {
-            downloadedApkFile = apkFile
-            
-            binding.imgResult.setImageResource(android.R.drawable.ic_dialog_info)
-            binding.textResultTitle.text = "Download Complete"
-            binding.textResultMessage.text = "The app is ready to install (${formatBytes(apkFile.length())})."
-            binding.btnInstall.visibility = View.VISIBLE
-        } else {
-            binding.imgResult.setImageResource(android.R.drawable.ic_dialog_alert)
-            binding.textResultTitle.text = "Download Failed"
-            binding.textResultMessage.text = "Could not download or verify the app."
-            binding.btnInstall.visibility = View.GONE
-        }
-        
-        cleanup()
-    }
-    
-    // ========================================================================
-    // Install
-    // ========================================================================
-    
-    private fun installApk(file: File) {
-        try {
-            val context = requireContext()
-            
-            // Get content URI using FileProvider
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-            
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-            }
-            
-            startActivity(intent)
-            
-        } catch (e: Exception) {
-            Timber.e(e, "$TAG: Failed to install APK")
-            AlertDialog.Builder(requireContext())
-                .setTitle("Install Error")
-                .setMessage("Could not start installation: ${e.message}")
-                .setPositiveButton("OK", null)
-                .show()
-        }
+    private fun showError(message: String) {
+        showResult(false, message)
     }
     
     // ========================================================================
     // Utilities
     // ========================================================================
     
-    private fun showError(message: String) {
-        currentMode = Mode.RESULT
-        
-        binding.layoutModeSelection.visibility = View.GONE
-        binding.layoutSender.visibility = View.GONE
-        binding.layoutReceiver.visibility = View.GONE
-        binding.layoutResult.visibility = View.VISIBLE
-        
-        binding.imgResult.setImageResource(android.R.drawable.ic_dialog_alert)
-        binding.textResultTitle.text = "Error"
-        binding.textResultMessage.text = message
-        binding.btnInstall.visibility = View.GONE
-        
-        cleanup()
-    }
-    
     private fun cleanup() {
         httpServer?.stop()
         httpServer = null
-        httpClient?.cancel()
-        httpClient = null
-        sessionCode = null
-        serverUrl = null
         
         // Cleanup exported APK
-        ApkExporter.cleanup(requireContext())
+        try {
+            ApkExporter.cleanup(requireContext())
+        } catch (e: Exception) {
+            // Ignore - context may be unavailable
+        }
         
         // Cleanup WiFi Direct groups
-        WifiDirectGroupCleanup.forceRemoveGroup(requireContext())
+        try {
+            WifiDirectGroupCleanup.forceRemoveGroup(requireContext())
+        } catch (e: Exception) {
+            // Ignore
+        }
     }
     
-    private fun formatSessionCode(code: String): String {
-        // Format as "XXX XXX" for readability
-        return if (code.length == 6) {
-            "${code.substring(0, 3)} ${code.substring(3)}"
-        } else {
-            code
-        }
+    private fun generateQrCode(content: String, size: Int): Bitmap {
+        val barcodeEncoder = BarcodeEncoder()
+        return barcodeEncoder.encodeBitmap(content, BarcodeFormat.QR_CODE, size, size)
     }
     
     private fun formatBytes(bytes: Long): String {
@@ -682,27 +358,5 @@ class ShareFragment : Fragment() {
             bytes < 1024 * 1024 -> "${bytes / 1024} KB"
             else -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
         }
-    }
-    
-    private fun getLocalIpAddress(): String? {
-        try {
-            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                if (networkInterface.isLoopback || !networkInterface.isUp) continue
-                
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (address.isLoopbackAddress) continue
-                    if (address.hostAddress?.contains(":") == true) continue  // IPv6
-                    
-                    return address.hostAddress
-                }
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "$TAG: Failed to get local IP")
-        }
-        return null
     }
 }

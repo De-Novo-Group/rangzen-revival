@@ -39,14 +39,23 @@
     <string name="action_add_friend">Add Friend</string>
     <string name="action_show_qr">Show My QR Code</string>
     <string name="action_scan_qr">Scan QR Code</string>
-    <string name="action_import_contacts">Import Contacts</string>
+    <string name="action_hash_contacts">Hash Contacts</string>
     
-    <!-- Contact import -->
-    <string name="contacts_imported">Added %1$d new friends from contacts</string>
-    <string name="contacts_already_added">All contacts already added</string>
-    <string name="contacts_no_phone_numbers">No contacts with phone numbers found</string>
+    <!-- Contact hashing (privacy-preserving friend discovery) -->
+    <!-- Pre-permission explanatory dialog -->
+    <string name="hash_contacts_explain_title">How Contact Hashing Works</string>
+    <string name="hash_contacts_explain_message">Your contacts never leave your phone.\n\nPhone numbers are turned into one-way hashes (scrambled codes) and compared locally when you meet other Murmur users.\n\nThis helps find overlap — if you and someone share contacts, the app can gently boost message relevance. Only the COUNT of shared contacts is used, not WHO they are.\n\nNote: This is a weak signal. The strongest trust comes from scanning QR codes.</string>
+    <string name="hash_contacts_explain_continue">Continue</string>
+    
+    <!-- Permission dialog -->
     <string name="permission_contacts_title">Contacts Permission Required</string>
-    <string name="permission_contacts_message">Murmur needs access to your contacts to add friends from your phonebook. Phone numbers are hashed locally and never stored in plain text.</string>
+    <string name="permission_contacts_message">Murmur needs access to your contacts to hash them locally. Numbers are never uploaded or stored in plain text.</string>
+    
+    <!-- Results -->
+    <string name="contacts_hashed">Hashed %1$d contacts from your phonebook</string>
+    <string name="contacts_already_hashed">All contacts already hashed</string>
+    <string name="contacts_no_mobile_numbers">No mobile phone numbers found</string>
+    <string name="contacts_processing">Processing contacts…</string>
     
     <!-- Status -->
     <string name="status_discovering">Discovering peers…</string>
@@ -55,28 +64,29 @@
     <string name="status_idle">Waiting for peers</string>
     <string name="status_peers_found">%1$d peers nearby</string>
     
-    <!-- Share Feature -->
-    <string name="share_title">Share App</string>
+    <!-- Share Feature (send-only) -->
+    <string name="share_title">Share Murmur</string>
     <string name="share_back">Back</string>
     <string name="share_offline_title">Share Murmur Offline</string>
-    <string name="share_offline_desc">Share the app with people nearby without using the internet. Connect to the same WiFi network or create a mobile hotspot.</string>
-    <string name="share_send_title">Send App</string>
-    <string name="share_send_desc">Share Murmur with someone nearby. You will get a code to give them.</string>
-    <string name="share_receive_title">Receive App</string>
-    <string name="share_receive_desc">Get Murmur from someone nearby. You will need to enter their code.</string>
-    <string name="share_code_prompt">Share this code</string>
-    <string name="share_waiting">Waiting for receiver…</string>
-    <string name="share_network_hint">Make sure both devices are on the same network</string>
+    <string name="share_offline_desc">Share the app without internet. Use Quick Share or Bluetooth for nearby devices, or QR code if you\'re on the same WiFi.</string>
+    
+    <!-- Primary: System share -->
+    <string name="share_system_title">Quick Share / Bluetooth</string>
+    <string name="share_system_desc">Best for nearby devices. Works without WiFi.</string>
+    <string name="share_system_btn">Share via Quick Share</string>
+    
+    <!-- Secondary: QR code -->
+    <string name="share_qr_title">On the same WiFi?</string>
+    <string name="share_qr_desc">Show a QR code the receiver scans with their camera. Opens in browser.</string>
+    <string name="share_qr_btn">Share via QR Code</string>
+    <string name="share_qr_scan_prompt">Scan this QR code</string>
+    <string name="share_qr_instructions">Both devices must be on the same WiFi network.\nThe receiver scans this code → browser opens → downloads the app.</string>
+    
+    <!-- Common -->
     <string name="share_cancel">Cancel</string>
-    <string name="share_enter_code">Enter sender\'s code</string>
-    <string name="share_code_hint">Code</string>
-    <string name="share_connect">Connect</string>
-    <string name="share_connecting">Connecting…</string>
-    <string name="share_downloading">Downloading…</string>
     <string name="share_complete">Transfer Complete</string>
-    <string name="share_install">Install</string>
     <string name="share_done">Done</string>
     <string name="share_failed">Transfer Failed</string>
     <string name="share_murmur">Share Murmur</string>
-    <string name="share_murmur_desc">Send or receive the app offline</string>
+    <string name="share_murmur_desc">Share the app offline</string>
 </resources>
