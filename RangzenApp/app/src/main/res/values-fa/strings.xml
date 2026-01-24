@@ -90,4 +90,10 @@
     <string name="share_failed">انتقال ناموفق</string>
     <string name="share_murmur">اشتراک مورمور</string>
     <string name="share_murmur_desc">اشتراک آفلاین برنامه</string>
+    
+    <!-- Notifications -->
+    <string name="notification_new_message">پیام جدید</string>
+    <string name="notification_new_messages_title">پیام‌های جدید</string>
+    <string name="notification_new_messages_body">%1$d پیام جدید دریافت شد</string>
+    <string name="notification_unknown_sender">ناشناس</string>
 </resources>

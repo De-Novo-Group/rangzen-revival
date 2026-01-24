@@ -12,6 +12,7 @@ import org.denovogroup.rangzen.backend.AppConfig
 import org.denovogroup.rangzen.backend.Crypto
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
+import org.denovogroup.rangzen.backend.NotificationHelper
 import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.backend.ble.BleScanner
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
@@ -181,11 +182,18 @@ class LegacyExchangeClient(
         return LegacyExchangeCodec.decodeLengthValue(response)
     }
 
-    private fun mergeIncomingMessages(messages: List<RangzenMessage>, commonFriends: Int) {
+    /**
+     * Merge incoming messages into local store.
+     * @return Number of new messages added (not duplicates or updates)
+     */
+    private fun mergeIncomingMessages(messages: List<RangzenMessage>, commonFriends: Int): Int {
         val myFriendsCount = friendStore.getAllFriendIds().size
+        var newCount = 0
+        
         for (message in messages) {
             val existing = messageStore.getMessage(message.messageId)
             if (existing != null) {
+                // Message exists - update trust if new value is higher
                 val newTrust = LegacyExchangeMath.newPriority(
                     message.trustScore,
                     existing.trustScore,
@@ -196,9 +204,21 @@ class LegacyExchangeClient(
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
             } else if (message.text != null && message.text.isNotEmpty()) {
+                // New message - add to store
                 messageStore.addMessage(message)
+                newCount++
             }
         }
+        
+        // Show notification for new messages
+        if (newCount > 0) {
+            Timber.i("LegacyExchangeClient: $newCount new messages received, triggering notification")
+            NotificationHelper.showNewMessageNotification(context, newCount)
+        } else {
+            Timber.d("LegacyExchangeClient: No new messages (all ${messages.size} were duplicates)")
+        }
+        
+        return newCount
     }
     
     /**
@@ -271,6 +291,8 @@ class LegacyExchangeClient(
             if (newCount > 0) {
                 // Trigger UI refresh
                 messageStore.refreshMessagesNow()
+                // Show notification for new messages
+                NotificationHelper.showNewMessageNotification(context, newCount)
             }
             
             newCount

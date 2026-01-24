@@ -95,4 +95,10 @@
     <string name="share_failed">Transfer Failed</string>
     <string name="share_murmur">Share Murmur</string>
     <string name="share_murmur_desc">Share the app offline</string>
+    
+    <!-- Notifications -->
+    <string name="notification_new_message">New Message</string>
+    <string name="notification_new_messages_title">New Messages</string>
+    <string name="notification_new_messages_body">%1$d new messages received</string>
+    <string name="notification_unknown_sender">Anonymous</string>
 </resources>

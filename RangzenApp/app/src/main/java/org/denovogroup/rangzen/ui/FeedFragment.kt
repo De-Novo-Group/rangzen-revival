@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.MessageStore
+import org.denovogroup.rangzen.backend.NotificationHelper
 import org.denovogroup.rangzen.backend.RangzenService
 import org.denovogroup.rangzen.databinding.FragmentFeedBinding
 import org.denovogroup.rangzen.objects.RangzenMessage
@@ -112,8 +113,18 @@ class FeedFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // Mark UI as visible - notifications will be suppressed while user is looking at feed.
+        NotificationHelper.isUiVisible = true
         // Force a refresh when returning to the feed.
         refreshFeedFromDb()
+        // Clear any pending message notifications when user views the feed.
+        NotificationHelper.clearMessageNotifications(requireContext())
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Mark UI as not visible - notifications can now be shown.
+        NotificationHelper.isUiVisible = false
     }
 
     private fun setupRecyclerView() {

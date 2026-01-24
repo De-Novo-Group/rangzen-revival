@@ -26,6 +26,7 @@ import kotlinx.coroutines.*
 import org.denovogroup.rangzen.backend.Crypto
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
+import org.denovogroup.rangzen.backend.NotificationHelper
 import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeCodec
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeMath
@@ -288,6 +289,12 @@ class LanTransport {
                 commonFriends
             )
             
+            // Show notification for new messages received via LAN
+            if (receivedMessages.isNotEmpty()) {
+                Timber.i("LAN server: ${receivedMessages.size} new messages, triggering notification")
+                NotificationHelper.showNewMessageNotification(context, receivedMessages.size)
+            }
+            
             // Step 10: Send our messages
             val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends)
             writeFrame(output, outgoingData.toByteArray(Charsets.UTF_8))
@@ -466,6 +473,12 @@ class LanTransport {
                 friendStore,
                 commonFriends
             )
+            
+            // Show notification for new messages received via LAN
+            if (receivedMessages.isNotEmpty()) {
+                Timber.i("LAN client: ${receivedMessages.size} new messages, triggering notification")
+                NotificationHelper.showNewMessageNotification(context, receivedMessages.size)
+            }
             
             val duration = System.currentTimeMillis() - startTime
             Timber.i("LAN exchange (client) complete in ${duration}ms: sent $messagesSent, received ${receivedMessages.size}, commonFriends=$commonFriends")

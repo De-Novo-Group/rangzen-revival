@@ -11,8 +11,9 @@ import android.content.Context
 import org.denovogroup.rangzen.backend.AppConfig
 import org.denovogroup.rangzen.backend.Crypto
 import org.denovogroup.rangzen.backend.FriendStore
-import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.backend.MessageStore
+import org.denovogroup.rangzen.backend.NotificationHelper
+import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.denovogroup.rangzen.objects.RangzenMessage
@@ -122,6 +123,8 @@ class LegacyExchangeServer(
             if (receivedCount > 0) {
                 // Trigger UI refresh
                 messageStore.refreshMessagesNow()
+                // Show notification for new messages
+                NotificationHelper.showNewMessageNotification(context, receivedCount)
             }
             
             // Prepare our messages to send back
@@ -313,11 +316,18 @@ private class LegacyExchangeSession(
         return hashBytes.joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * Merge incoming messages into local store.
+     * Shows notification if new messages were received.
+     */
     private fun mergeIncomingMessages(messages: List<RangzenMessage>) {
         val myFriendsCount = friendStore.getAllFriendIds().size
+        var newCount = 0
+        
         for (message in messages) {
             val existing = messageStore.getMessage(message.messageId)
             if (existing != null) {
+                // Message exists - update trust if new value is higher
                 val newTrust = LegacyExchangeMath.newPriority(
                     message.trustScore,
                     existing.trustScore,
@@ -328,8 +338,15 @@ private class LegacyExchangeSession(
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
             } else if (message.text != null && message.text.isNotEmpty()) {
+                // New message - add to store
                 messageStore.addMessage(message)
+                newCount++
             }
+        }
+        
+        // Show notification for new messages
+        if (newCount > 0) {
+            NotificationHelper.showNewMessageNotification(context, newCount)
         }
     }
 }

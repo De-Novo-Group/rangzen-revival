@@ -140,13 +140,17 @@ public class RangzenApplication extends Application {
         serviceChannel.setShowBadge(false);
         notificationManager.createNotificationChannel(serviceChannel);
 
-        // Message notification channel (default importance - sound/vibrate)
+        // Message notification channel (HIGH importance for heads-up pop-ups)
+        // Note: If updating importance on existing install, user must clear app data
+        // or manually adjust notification settings for it to take effect.
         NotificationChannel messageChannel = new NotificationChannel(
                 CHANNEL_ID_MESSAGES,
                 "New Messages",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH  // HIGH = heads-up pop-up
         );
         messageChannel.setDescription("Notifications for new messages received");
+        messageChannel.enableVibration(true);
+        messageChannel.setVibrationPattern(new long[]{0, 250, 100, 250});  // Short double vibrate
         notificationManager.createNotificationChannel(messageChannel);
 
         Timber.d("Notification channels created");
