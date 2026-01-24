@@ -29,6 +29,10 @@ tmp_*_messages.db
 # Telemetry server (private, not for public repo)
 telemetry-server/
 
+# Deployment scripts and state (live in telemetry-server repo)
+scripts/
+.last-deployed-*
+
 # Local working files
 local-only/
 
