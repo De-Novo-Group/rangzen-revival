@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Murmur FAQ</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .hero {
+            text-align: center;
+            padding: 30px 20px;
+            color: white;
+        }
+        
+        .hero h1 {
+            font-size: 2em;
+            margin-bottom: 8px;
+        }
+        
+        .hero .subtitle {
+            opacity: 0.8;
+            font-size: 1em;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            color: #fff;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            padding-left: 4px;
+            opacity: 0.7;
+        }
+        
+        .faq-item {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .faq-question {
+            padding: 16px 20px;
+            font-weight: 600;
+            color: #1a1a2e;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        
+        .faq-question:hover {
+            background: #f8f9ff;
+        }
+        
+        .faq-question::after {
+            content: '+';
+            font-size: 1.5em;
+            color: #667eea;
+            transition: transform 0.3s;
+        }
+        
+        .faq-item.active .faq-question::after {
+            transform: rotate(45deg);
+        }
+        
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            background: #f8f9ff;
+        }
+        
+        .faq-item.active .faq-answer {
+            max-height: 500px;
+        }
+        
+        .faq-answer-content {
+            padding: 0 20px 20px;
+            color: #555;
+        }
+        
+        .faq-answer-content p {
+            margin-bottom: 12px;
+        }
+        
+        .faq-answer-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+        
+        .tag.yes {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .tag.no {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .tag.info {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        
+        ul {
+            margin: 12px 0 12px 20px;
+        }
+        
+        li {
+            margin-bottom: 6px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>❓ FAQ</h1>
+            <p class="subtitle">Frequently Asked Questions</p>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">General</div>
+            
+            <div class="faq-item active">
+                <div class="faq-question">What is Murmur?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Murmur is a <strong>delay-tolerant mesh messaging</strong> app. It lets people share short messages without internet access.</p>
+                        <p>Messages spread person-to-person via <span class="tag info">Bluetooth</span> and <span class="tag info">Wi-Fi</span> when devices come near each other.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Is it anonymous?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><span class="tag yes">YES</span></p>
+                        <p>You can use any name (pseudonym) or none at all. The app does <strong>not</strong> link messages to your phone number, email, or device hardware ID.</p>
+                        <p>Your "identity" is a cryptographic key generated on your phone.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Does it use the internet?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><span class="tag no">NO</span> Messaging works entirely offline.</p>
+                        <p><em>Note: If you enable "QA Mode" (for developers), it will use internet for telemetry. Do NOT enable in restricted environments.</em></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Features</div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What is "Import Contacts"?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>This helps you find friends who also use Murmur.</p>
+                        <ul>
+                            <li><strong>Privacy:</strong> It does NOT upload your contacts</li>
+                            <li><strong>How it works:</strong> Phone numbers are "hashed" (scrambled) and compared with other Murmur users you meet</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What does the Heart (❤️) do?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>It's a <strong>local bookmark</strong>. Tapping the heart saves the message to your device.</p>
+                        <p><em>Unlike social media, this "like" is NOT broadcast to the network. Other users don't see it.</em></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">What is the Trust indicator?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>The colored bar on the left of each message:</p>
+                        <ul>
+                            <li><strong style="color: #4caf50;">Green</strong> — From a Friend or Friend-of-Friend</li>
+                            <li><strong style="color: #ff9800;">Yellow</strong> — Neutral</li>
+                            <li><strong style="color: #f44336;">Red</strong> — Unknown source</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Technical</div>
+            
+            <div class="faq-item">
+                <div class="faq-question">How does it work offline?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <ul>
+                            <li><strong>Bluetooth (BLE)</strong> — Discover nearby users, exchange small data</li>
+                            <li><strong>Wi-Fi Direct</strong> — Move larger amounts quickly (~50-100m range)</li>
+                            <li><strong>LAN/Hotspot</strong> — Find peers on the same Wi-Fi network</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Why do I see a "Location" icon?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Android requires <strong>Location Permission</strong> to scan for Bluetooth and Wi-Fi devices.</p>
+                        <p>Murmur does <strong>NOT</strong> track your GPS location. We only use this permission to find nearby peers.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Security</div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Can the government see my messages?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><span class="tag no">NOT REMOTELY</span></p>
+                        <p>There is no central server to hack or subpoena. Messages move directly from phone to phone.</p>
+                        <p><em>Warning: If someone physically takes your unlocked phone, they can see your messages. Use a strong screen lock.</em></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">Can I delete a message?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>You can delete it from <strong>your phone</strong>, but you <strong>cannot</strong> recall it from the network.</p>
+                        <p>Once a message spreads, it's out of your control. This prevents censorship.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Murmur • Anonymous Mesh Messaging
+        </div>
+    </div>
+    
+    <script>
+        document.querySelectorAll('.faq-question').forEach(q => {
+            q.addEventListener('click', () => {
+                q.parentElement.classList.toggle('active');
+            });
+        });
+    </script>
+</body>
+</html>

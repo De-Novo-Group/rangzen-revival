@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>به مورمور خوش آمدید</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Vazir', 'Tahoma', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.8;
+            direction: rtl;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .hero {
+            text-align: center;
+            padding: 40px 20px;
+            color: white;
+            animation: fadeInDown 0.8s ease-out;
+        }
+        
+        .hero h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .hero .tagline {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            animation: fadeInUp 0.6s ease-out;
+            animation-fill-mode: both;
+        }
+        
+        .card:nth-child(2) { animation-delay: 0.1s; }
+        .card:nth-child(3) { animation-delay: 0.2s; }
+        .card:nth-child(4) { animation-delay: 0.3s; }
+        .card:nth-child(5) { animation-delay: 0.4s; }
+        
+        .card h2 {
+            color: #667eea;
+            font-size: 1.3em;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card h2 .icon {
+            font-size: 1.5em;
+        }
+        
+        .step-list {
+            list-style: none;
+            counter-reset: steps;
+        }
+        
+        .step-list li {
+            counter-increment: steps;
+            padding: 12px 50px 12px 0;
+            position: relative;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .step-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .step-list li::before {
+            content: counter(steps);
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .step-list li strong {
+            color: #667eea;
+        }
+        
+        .highlight-box {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+            border-right: 4px solid #667eea;
+            border-left: none;
+            padding: 16px;
+            border-radius: 8px 0 0 8px;
+            margin: 16px 0;
+        }
+        
+        .highlight-box.warning {
+            background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
+            border-right-color: #ffc107;
+        }
+        
+        .highlight-box.success {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border-right-color: #4caf50;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+        
+        .feature-item {
+            background: #f8f9ff;
+            padding: 16px;
+            border-radius: 12px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .feature-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+        
+        .feature-item .emoji {
+            font-size: 2em;
+            margin-bottom: 8px;
+        }
+        
+        .feature-item .label {
+            font-size: 0.85em;
+            color: #666;
+        }
+        
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px 20px;
+            color: rgba(255,255,255,0.8);
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>📡 مورمور</h1>
+            <p class="tagline">پیام‌رسانی ناشناس بدون اینترنت</p>
+        </div>
+        
+        <div class="card">
+            <h2><span class="icon">🌐</span> مورمور چیست؟</h2>
+            <p>مورمور یک برنامه پیام‌رسانی شبکه‌ای است برای زمانی که اینترنت مسدود یا در دسترس نیست. پیام‌ها مستقیماً از گوشی به گوشی با استفاده از <strong>بلوتوث</strong> و <strong>وای‌فای</strong> پخش می‌شوند.</p>
+            
+            <div class="highlight-box success">
+                <strong>نیازی به اینترنت یا داده تلفن همراه نیست!</strong>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2><span class="icon">✨</span> چگونه کار می‌کند</h2>
+            <ol class="step-list">
+                <li><strong>بنویسید</strong> — یک پیام کوتاه بنویسید (۱۴۰ کاراکتر)</li>
+                <li><strong>حرکت کنید</strong> — در شهر یا روستای خود قدم بزنید</li>
+                <li><strong>پخش شود</strong> — وقتی نزدیک کاربر دیگر مورمور هستید (۱۰-۱۰۰ متر)، گوشی‌ها خودکار پیام‌ها را رد و بدل می‌کنند</li>
+                <li><strong>تکرار شود</strong> — آن شخص پیام شما را با دیگرانی که ملاقات می‌کند به اشتراک می‌گذارد</li>
+            </ol>
+        </div>
+        
+        <div class="card">
+            <h2><span class="icon">🔒</span> حریم خصوصی و امنیت</h2>
+            
+            <div class="feature-grid">
+                <div class="feature-item">
+                    <div class="emoji">🎭</div>
+                    <div class="label">هویت ناشناس</div>
+                </div>
+                <div class="feature-item">
+                    <div class="emoji">🚫</div>
+                    <div class="label">بدون سرور مرکزی</div>
+                </div>
+                <div class="feature-item">
+                    <div class="emoji">✍️</div>
+                    <div class="label">پیام‌های امضاشده</div>
+                </div>
+                <div class="feature-item">
+                    <div class="emoji">📱</div>
+                    <div class="label">داده‌ها روی دستگاه می‌مانند</div>
+                </div>
+            </div>
+            
+            <div class="highlight-box warning">
+                <strong>مهم:</strong> از قفل صفحه استفاده کنید! اگر کسی گوشی باز شما را بگیرد، می‌تواند پیام‌هایتان را ببیند.
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2><span class="icon">📱</span> ویژگی‌های برنامه</h2>
+            
+            <p><strong>خوراک</strong> — پیام‌ها از کاربران نزدیک</p>
+            <p style="margin-top: 12px;"><strong>نوار اعتماد</strong> — سبز (دوست)، زرد (خنثی)، قرمز (ناشناس)</p>
+            <p style="margin-top: 12px;"><strong>قلب ❤️</strong> — پیام را به صورت محلی ذخیره می‌کند</p>
+            <p style="margin-top: 12px;"><strong>دوستان</strong> — کدهای QR را اسکن کنید تا شبکه مورد اعتماد خود را بسازید</p>
+            <p style="margin-top: 12px;"><strong>وارد کردن مخاطبین</strong> — دوستان را به صورت خصوصی پیدا کنید (بدون آپلود)</p>
+        </div>
+        
+        <div class="card">
+            <h2><span class="icon">🔧</span> عیب‌یابی</h2>
+            
+            <p><strong>«هیچ همتایی در نزدیکی نیست»</strong></p>
+            <ul style="margin: 8px 20px 16px 0; color: #666;">
+                <li>مطمئن شوید بلوتوث و وای‌فای روشن هستند</li>
+                <li>مجوز موقعیت مکانی را بدهید</li>
+                <li>«فعال‌سازی مورمور» را در تنظیمات بررسی کنید</li>
+            </ul>
+            
+            <p><strong>«پیام‌ها ارسال نمی‌شوند»</strong></p>
+            <ul style="margin: 8px 20px 0 0; color: #666;">
+                <li>صبور باشید! پیام‌ها با حرکت افراد پخش می‌شوند</li>
+                <li>ممکن است ساعت‌ها طول بکشد تا از یک شهر عبور کند</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            <p>در اصل «رنگزن» توسط گروه De Novo</p>
+            <p>متن‌باز • برای همیشه رایگان</p>
+        </div>
+    </div>
+</body>
+</html>

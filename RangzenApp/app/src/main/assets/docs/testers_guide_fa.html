@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>راهنمای تست مورمور</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Vazir', 'Tahoma', -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.8;
+            direction: rtl;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .hero {
+            text-align: center;
+            padding: 30px 20px;
+            color: white;
+        }
+        
+        .hero h1 {
+            font-size: 2em;
+            margin-bottom: 8px;
+        }
+        
+        .hero .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-top: 10px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-content {
+            padding: 20px;
+        }
+        
+        .checklist {
+            list-style: none;
+        }
+        
+        .checklist li {
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        
+        .checklist li:last-child {
+            border-bottom: none;
+        }
+        
+        .checklist .num {
+            min-width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        
+        .scenario {
+            background: #f8f9ff;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .scenario:last-child {
+            margin-bottom: 0;
+        }
+        
+        .scenario h4 {
+            color: #667eea;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .scenario-label {
+            font-size: 0.75em;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        
+        .scenario p {
+            color: #666;
+            font-size: 0.95em;
+            margin-bottom: 8px;
+        }
+        
+        .scenario .result {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            margin-top: 12px;
+        }
+        
+        .troubleshoot-item {
+            margin-bottom: 16px;
+        }
+        
+        .troubleshoot-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .troubleshoot-item h4 {
+            color: #d32f2f;
+            font-size: 0.95em;
+            margin-bottom: 8px;
+        }
+        
+        .troubleshoot-item ul {
+            margin-right: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .troubleshoot-item li {
+            margin-bottom: 4px;
+        }
+        
+        .bug-report {
+            background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        
+        .bug-report h4 {
+            color: #856404;
+            margin-bottom: 12px;
+        }
+        
+        .bug-report ol {
+            margin-right: 20px;
+            color: #666;
+        }
+        
+        .bug-report li {
+            margin-bottom: 6px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>🧪 راهنمای تستر</h1>
+            <div class="badge">برای تسترهای QA و بتا</div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>🚀</span> شروع کار
+            </div>
+            <div class="card-content">
+                <ol class="checklist">
+                    <li>
+                        <span class="num">۱</span>
+                        <div><strong>نصب:</strong> APK را از دانلود یا اشتراک برنامه بگیرید</div>
+                    </li>
+                    <li>
+                        <span class="num">۲</span>
+                        <div><strong>مجوزها:</strong> <em>موقعیت مکانی</em> و <em>بلوتوث/دستگاه‌های نزدیک</em> را اجازه دهید</div>
+                    </li>
+                    <li>
+                        <span class="num">۳</span>
+                        <div><strong>فعال‌سازی:</strong> «فعال‌سازی مورمور» را در تنظیمات روشن کنید</div>
+                    </li>
+                </ol>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>📋</span> خوراک
+            </div>
+            <div class="card-content">
+                <p><strong>کشیدن برای بروزرسانی</strong> — اسکن همتایان نزدیک را اجبار می‌کند</p>
+                <p style="margin-top: 12px;"><strong>نوار اعتماد</strong> — سبز = دوست، زرد = خنثی</p>
+                <p style="margin-top: 12px;"><strong>قلب ❤️</strong> — نشانک محلی (پیام را ذخیره می‌کند)</p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>🔬</span> سناریوهای تست
+            </div>
+            <div class="card-content">
+                <div class="scenario">
+                    <h4><span class="scenario-label">الف</span> تبادل پایه (بلوتوث)</h4>
+                    <p><strong>آماده‌سازی:</strong> دو گوشی با بلوتوث روشن</p>
+                    <p><strong>عمل:</strong> گوشی A پیام می‌فرستد ← گوشی‌ها را ۱-۵ متر نزدیک کنید ← ۳۰-۶۰ ثانیه صبر کنید</p>
+                    <div class="result">✓ گوشی B پیام را دریافت می‌کند</div>
+                </div>
+                
+                <div class="scenario">
+                    <h4><span class="scenario-label">ب</span> وای‌فای دایرکت (برد بلند)</h4>
+                    <p><strong>آماده‌سازی:</strong> دو گوشی با وای‌فای روشن</p>
+                    <p><strong>عمل:</strong> پیام بفرستید ← پاپ‌آپ «دعوت به اتصال» را قبول کنید</p>
+                    <div class="result">✓ همگام‌سازی سریع پیام‌های زیاد</div>
+                </div>
+                
+                <div class="scenario">
+                    <h4><span class="scenario-label">ج</span> اعتماد دوست</h4>
+                    <p><strong>آماده‌سازی:</strong> دو گوشی</p>
+                    <p><strong>عمل:</strong> گوشی A کد QR نشان می‌دهد ← B اسکن می‌کند ← A پیام می‌فرستد</p>
+                    <div class="result">✓ پیام با نوار اعتماد سبز در B نمایش داده می‌شود</div>
+                </div>
+                
+                <div class="scenario">
+                    <h4><span class="scenario-label">د</span> وارد کردن مخاطبین</h4>
+                    <p><strong>آماده‌سازی:</strong> گوشی A شماره B را در مخاطبین دارد</p>
+                    <p><strong>عمل:</strong> A ← دوستان ← وارد کردن مخاطبین</p>
+                    <div class="result">✓ B پس از تبادل به عنوان دوست ظاهر می‌شود</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>🔧</span> عیب‌یابی
+            </div>
+            <div class="card-content">
+                <div class="troubleshoot-item">
+                    <h4>«هیچ همتایی در نزدیکی نیست»</h4>
+                    <ul>
+                        <li>آیا «فعال‌سازی مورمور» روشن است؟</li>
+                        <li>آیا بلوتوث روشن است؟</li>
+                        <li>آیا مجوز موقعیت مکانی داده شده؟</li>
+                        <li>در محدوده هستید؟ (BLE ~۱۰ متر، وای‌فای ~۵۰ متر)</li>
+                    </ul>
+                </div>
+                
+                <div class="troubleshoot-item">
+                    <h4>«پیام‌ها نمی‌رسند»</h4>
+                    <ul>
+                        <li>صبور باشید — کشف به صورت دوره‌ای اجرا می‌شود</li>
+                        <li>برای اسکن اجباری بکشید و بروزرسانی کنید</li>
+                    </ul>
+                </div>
+                
+                <div class="troubleshoot-item">
+                    <h4>«برنامه کرش می‌کند»</h4>
+                    <ul>
+                        <li>امتحان کنید: تنظیمات ← برنامه‌ها ← مورمور ← پاک کردن داده</li>
+                        <li>ممکن است اگر طرح پایگاه داده تغییر کرده باشد لازم باشد</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>🐛</span> گزارش باگ
+            </div>
+            <div class="card-content">
+                <div class="bug-report">
+                    <h4>لطفاً شامل کنید:</h4>
+                    <ol>
+                        <li><strong>مدل گوشی</strong> (مثلاً Pixel 5, Samsung S21)</li>
+                        <li><strong>نسخه اندروید</strong> (مثلاً Android 13)</li>
+                        <li><strong>چه کار می‌کردید</strong> (مثلاً «کد QR اسکن کردم»)</li>
+                        <li><strong>چه اتفاقی افتاد</strong> (مثلاً «برنامه فریز شد»)</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            ممنون از تست کردن! 🙏
+        </div>
+    </div>
+</body>
+</html>

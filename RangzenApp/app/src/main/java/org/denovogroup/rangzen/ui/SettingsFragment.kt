@@ -11,7 +11,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.fragment.app.Fragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,8 +23,6 @@ import org.denovogroup.rangzen.backend.update.UpdateClient
 import org.denovogroup.rangzen.backend.update.UpdateState
 import org.denovogroup.rangzen.databinding.FragmentSettingsBinding
 import timber.log.Timber
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 /**
  * Fragment for app settings.
@@ -55,38 +52,17 @@ class SettingsFragment : Fragment() {
     }
 
     private fun setupHelp() {
-        // Help & FAQ row - shows help dialog
+        // Help & FAQ row - opens Help Activity with tutorial
         binding.rowHelp.setOnClickListener {
-            showHelpDialog()
+            openHelpActivity(HelpActivity.DOC_TUTORIAL)
         }
     }
 
-    private fun showHelpDialog() {
-        // Load help content from assets
-        val helpText = try {
-            requireContext().assets.open("help_content.txt").use { inputStream ->
-                BufferedReader(InputStreamReader(inputStream)).readText()
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to load help content")
-            "Help content not available."
+    private fun openHelpActivity(docType: String) {
+        val intent = Intent(requireContext(), HelpActivity::class.java).apply {
+            putExtra(HelpActivity.EXTRA_DOC_TYPE, docType)
         }
-
-        // Create a scrollable TextView for the dialog
-        val scrollView = android.widget.ScrollView(requireContext())
-        val textView = TextView(requireContext()).apply {
-            text = helpText
-            setPadding(50, 40, 50, 40)
-            setTextIsSelectable(true)
-            textSize = 14f
-        }
-        scrollView.addView(textView)
-
-        AlertDialog.Builder(requireContext())
-            .setTitle("Help & FAQ")
-            .setView(scrollView)
-            .setPositiveButton("OK", null)
-            .show()
+        startActivity(intent)
     }
 
     private fun setupShareApp() {

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سوالات متداول مورمور</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Vazir', 'Tahoma', -apple-system, sans-serif;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.8;
+            direction: rtl;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .hero {
+            text-align: center;
+            padding: 30px 20px;
+            color: white;
+        }
+        
+        .hero h1 {
+            font-size: 2em;
+            margin-bottom: 8px;
+        }
+        
+        .hero .subtitle {
+            opacity: 0.8;
+            font-size: 1em;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            color: #fff;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            padding-right: 4px;
+            opacity: 0.7;
+        }
+        
+        .faq-item {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .faq-question {
+            padding: 16px 20px;
+            font-weight: 600;
+            color: #1a1a2e;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        
+        .faq-question:hover {
+            background: #f8f9ff;
+        }
+        
+        .faq-question::after {
+            content: '+';
+            font-size: 1.5em;
+            color: #667eea;
+            transition: transform 0.3s;
+        }
+        
+        .faq-item.active .faq-question::after {
+            transform: rotate(45deg);
+        }
+        
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            background: #f8f9ff;
+        }
+        
+        .faq-item.active .faq-answer {
+            max-height: 500px;
+        }
+        
+        .faq-answer-content {
+            padding: 0 20px 20px;
+            color: #555;
+        }
+        
+        .faq-answer-content p {
+            margin-bottom: 12px;
+        }
+        
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+        
+        .tag.yes {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .tag.no {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .tag.info {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+        
+        ul {
+            margin: 12px 20px 12px 0;
+        }
+        
+        li {
+            margin-bottom: 6px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>❓ سوالات متداول</h1>
+            <p class="subtitle">پاسخ به سوالات رایج</p>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">عمومی</div>
+            
+            <div class="faq-item active">
+                <div class="faq-question">مورمور چیست؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>مورمور یک برنامه <strong>پیام‌رسانی شبکه‌ای با تحمل تأخیر</strong> است. به افراد امکان می‌دهد پیام‌های کوتاه را بدون اینترنت به اشتراک بگذارند.</p>
+                        <p>پیام‌ها از طریق <span class="tag info">بلوتوث</span> و <span class="tag info">وای‌فای</span> وقتی دستگاه‌ها به هم نزدیک می‌شوند پخش می‌شوند.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">آیا ناشناس است؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><span class="tag yes">بله</span></p>
+                        <p>می‌توانید از هر نامی (نام مستعار) استفاده کنید یا اصلاً نامی نگذارید. برنامه پیام‌ها را به شماره تلفن، ایمیل یا شناسه سخت‌افزاری شما <strong>مرتبط نمی‌کند</strong>.</p>
+                        <p>«هویت» شما یک کلید رمزنگاری است که روی گوشی شما تولید می‌شود.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">آیا از اینترنت استفاده می‌کند؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><span class="tag no">خیر</span> پیام‌رسانی کاملاً آفلاین کار می‌کند.</p>
+                        <p><em>توجه: اگر «حالت QA» (برای توسعه‌دهندگان) را فعال کنید، از اینترنت برای تله‌متری استفاده می‌کند. در محیط‌های محدود فعال نکنید.</em></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">ویژگی‌ها</div>
+            
+            <div class="faq-item">
+                <div class="faq-question">«وارد کردن مخاطبین» چیست؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>این به شما کمک می‌کند دوستانی را پیدا کنید که از مورمور استفاده می‌کنند.</p>
+                        <ul>
+                            <li><strong>حریم خصوصی:</strong> مخاطبین شما آپلود نمی‌شوند</li>
+                            <li><strong>نحوه کار:</strong> شماره تلفن‌ها «هش» (درهم) می‌شوند و با کاربران دیگر مورمور که ملاقات می‌کنید مقایسه می‌شوند</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">دکمه قلب (❤️) چه کار می‌کند؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>یک <strong>نشانک محلی</strong> است. با زدن قلب، پیام در دستگاه شما ذخیره می‌شود.</p>
+                        <p><em>برخلاف شبکه‌های اجتماعی، این «لایک» به شبکه پخش نمی‌شود. کاربران دیگر آن را نمی‌بینند.</em></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">نشانگر اعتماد چیست؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>نوار رنگی در سمت چپ هر پیام:</p>
+                        <ul>
+                            <li><strong style="color: #4caf50;">سبز</strong> — از دوست یا دوستِ دوست</li>
+                            <li><strong style="color: #ff9800;">زرد</strong> — خنثی</li>
+                            <li><strong style="color: #f44336;">قرمز</strong> — منبع ناشناس</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">فنی</div>
+            
+            <div class="faq-item">
+                <div class="faq-question">چگونه آفلاین کار می‌کند؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <ul>
+                            <li><strong>بلوتوث (BLE)</strong> — کشف کاربران نزدیک، تبادل داده کم</li>
+                            <li><strong>وای‌فای دایرکت</strong> — انتقال سریع حجم بیشتر (~۵۰-۱۰۰ متر برد)</li>
+                            <li><strong>LAN/هات‌اسپات</strong> — یافتن همتایان در همان شبکه وای‌فای</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">چرا آیکون «موقعیت مکانی» می‌بینم؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>اندروید برای اسکن دستگاه‌های بلوتوث و وای‌فای به <strong>مجوز موقعیت مکانی</strong> نیاز دارد.</p>
+                        <p>مورمور موقعیت GPS شما را <strong>ردیابی نمی‌کند</strong>. ما فقط از این مجوز برای یافتن همتایان نزدیک استفاده می‌کنیم.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">امنیت</div>
+            
+            <div class="faq-item">
+                <div class="faq-question">آیا دولت می‌تواند پیام‌هایم را ببیند؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><span class="tag no">از راه دور خیر</span></p>
+                        <p>هیچ سرور مرکزی برای هک یا احضار وجود ندارد. پیام‌ها مستقیماً از گوشی به گوشی منتقل می‌شوند.</p>
+                        <p><em>هشدار: اگر کسی گوشی باز شما را بگیرد، می‌تواند پیام‌هایتان را ببیند. از قفل صفحه قوی استفاده کنید.</em></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="faq-item">
+                <div class="faq-question">آیا می‌توانم پیامی را حذف کنم؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>می‌توانید از <strong>گوشی خودتان</strong> حذف کنید، اما <strong>نمی‌توانید</strong> آن را از شبکه پس بگیرید.</p>
+                        <p>وقتی پیامی پخش شود، از کنترل شما خارج است. این مانع سانسور می‌شود.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            مورمور • پیام‌رسانی شبکه‌ای ناشناس
+        </div>
+    </div>
+    
+    <script>
+        document.querySelectorAll('.faq-question').forEach(q => {
+            q.addEventListener('click', () => {
+                q.parentElement.classList.toggle('active');
+            });
+        });
+    </script>
+</body>
+</html>

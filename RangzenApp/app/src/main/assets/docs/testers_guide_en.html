@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Murmur Tester's Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .hero {
+            text-align: center;
+            padding: 30px 20px;
+            color: white;
+        }
+        
+        .hero h1 {
+            font-size: 2em;
+            margin-bottom: 8px;
+        }
+        
+        .hero .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-top: 10px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
+            font-size: 1.1em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-content {
+            padding: 20px;
+        }
+        
+        .checklist {
+            list-style: none;
+        }
+        
+        .checklist li {
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        
+        .checklist li:last-child {
+            border-bottom: none;
+        }
+        
+        .checklist .num {
+            min-width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        
+        .scenario {
+            background: #f8f9ff;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .scenario:last-child {
+            margin-bottom: 0;
+        }
+        
+        .scenario h4 {
+            color: #667eea;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .scenario-label {
+            font-size: 0.75em;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        
+        .scenario p {
+            color: #666;
+            font-size: 0.95em;
+            margin-bottom: 8px;
+        }
+        
+        .scenario .result {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            margin-top: 12px;
+        }
+        
+        .troubleshoot-item {
+            margin-bottom: 16px;
+        }
+        
+        .troubleshoot-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .troubleshoot-item h4 {
+            color: #d32f2f;
+            font-size: 0.95em;
+            margin-bottom: 8px;
+        }
+        
+        .troubleshoot-item ul {
+            margin-left: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .troubleshoot-item li {
+            margin-bottom: 4px;
+        }
+        
+        .bug-report {
+            background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        
+        .bug-report h4 {
+            color: #856404;
+            margin-bottom: 12px;
+        }
+        
+        .bug-report ol {
+            margin-left: 20px;
+            color: #666;
+        }
+        
+        .bug-report li {
+            margin-bottom: 6px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.85em;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .live-indicator {
+            width: 8px;
+            height: 8px;
+            background: #4caf50;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>🧪 Tester's Guide</h1>
+            <div class="badge">For QA & Beta Testers</div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>🚀</span> Getting Started
+            </div>
+            <div class="card-content">
+                <ol class="checklist">
+                    <li>
+                        <span class="num">1</span>
+                        <div><strong>Install:</strong> Get APK via download or Share App</div>
+                    </li>
+                    <li>
+                        <span class="num">2</span>
+                        <div><strong>Permissions:</strong> Grant <em>Location</em> and <em>Bluetooth/Nearby Devices</em></div>
+                    </li>
+                    <li>
+                        <span class="num">3</span>
+                        <div><strong>Enable:</strong> Turn ON "Enable Murmur" in Settings</div>
+                    </li>
+                </ol>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>📋</span> The Feed
+            </div>
+            <div class="card-content">
+                <p><strong>Pull to Refresh</strong> — Forces scan for nearby peers</p>
+                <p style="margin-top: 12px;"><strong>Trust Bar</strong> — Green = Friend, Yellow = Neutral</p>
+                <p style="margin-top: 12px;"><strong>Heart ❤️</strong> — Local bookmark (saves message)</p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>🔬</span> Test Scenarios
+            </div>
+            <div class="card-content">
+                <div class="scenario">
+                    <h4><span class="scenario-label">A</span> Basic Exchange (Bluetooth)</h4>
+                    <p><strong>Setup:</strong> Two phones with Bluetooth ON</p>
+                    <p><strong>Action:</strong> Phone A posts message → Place phones 1-5m apart → Wait 30-60 sec</p>
+                    <div class="result">✓ Phone B receives the message</div>
+                </div>
+                
+                <div class="scenario">
+                    <h4><span class="scenario-label">B</span> Wi-Fi Direct (Long Range)</h4>
+                    <p><strong>Setup:</strong> Two phones with Wi-Fi ON</p>
+                    <p><strong>Action:</strong> Post message → Accept "Invitation to connect" popup</p>
+                    <div class="result">✓ High-speed sync of many messages</div>
+                </div>
+                
+                <div class="scenario">
+                    <h4><span class="scenario-label">C</span> Friend Trust</h4>
+                    <p><strong>Setup:</strong> Two phones</p>
+                    <p><strong>Action:</strong> Phone A shows QR → Phone B scans → A posts message</p>
+                    <div class="result">✓ Message shows GREEN trust bar on B</div>
+                </div>
+                
+                <div class="scenario">
+                    <h4><span class="scenario-label">D</span> Import Contacts</h4>
+                    <p><strong>Setup:</strong> Phone A has B's number in contacts</p>
+                    <p><strong>Action:</strong> A → Friends → Import Contacts</p>
+                    <div class="result">✓ B appears as Friend after exchange</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>🔧</span> Troubleshooting
+            </div>
+            <div class="card-content">
+                <div class="troubleshoot-item">
+                    <h4>"No peers nearby"</h4>
+                    <ul>
+                        <li>Is "Enable Murmur" ON?</li>
+                        <li>Is Bluetooth ON?</li>
+                        <li>Is Location Permission granted?</li>
+                        <li>Within range? (BLE ~10m, Wi-Fi ~50m)</li>
+                    </ul>
+                </div>
+                
+                <div class="troubleshoot-item">
+                    <h4>"Messages not arriving"</h4>
+                    <ul>
+                        <li>Be patient — discovery runs periodically</li>
+                        <li>Pull-to-refresh to force scan</li>
+                    </ul>
+                </div>
+                
+                <div class="troubleshoot-item">
+                    <h4>"App crashes"</h4>
+                    <ul>
+                        <li>Try: Settings → Apps → Murmur → Clear Data</li>
+                        <li>May be needed if database schema changed</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <span>🐛</span> Reporting Bugs
+            </div>
+            <div class="card-content">
+                <div class="bug-report">
+                    <h4>Please include:</h4>
+                    <ol>
+                        <li><strong>Phone Model</strong> (e.g., Pixel 5, Samsung S21)</li>
+                        <li><strong>Android Version</strong> (e.g., Android 13)</li>
+                        <li><strong>What you were doing</strong> (e.g., "Scanned QR code")</li>
+                        <li><strong>What happened</strong> (e.g., "App froze")</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Thank you for testing! 🙏
+        </div>
+    </div>
+</body>
+</html>
