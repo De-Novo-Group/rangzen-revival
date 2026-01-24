@@ -71,12 +71,23 @@
                 android:layout_height="1dp"
                 android:layout_weight="1" />
 
-            <!-- Show hidden/swiped messages -->
+            <!-- Sort toggle: Recent / Most hearted -->
+            <TextView
+                android:id="@+id/btn_sort"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Recent ▼"
+                android:textSize="12sp"
+                android:textColor="@color/primary"
+                android:padding="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+
+            <!-- Restore swiped/hidden messages -->
             <TextView
                 android:id="@+id/btn_show_hidden"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Show all"
+                android:text="Restore swiped"
                 android:textSize="12sp"
                 android:textColor="@color/primary"
                 android:padding="8dp"

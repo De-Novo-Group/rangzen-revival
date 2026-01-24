@@ -28,14 +28,18 @@ public class RangzenMessage {
     /** Trust/connection score - higher means more trusted source */
     private double trustScore;
     
-    /** Number of endorsements (likes) this message has received */
-    private int likes;
-    
-    /** Whether the current user has endorsed this message */
-    private boolean liked;
-    
-    /** Message priority for ordering (wire format compatibility with Casific) */
+    /**
+     * Heart count (Casific's "endorsement" / priority).
+     * This is the single source of truth for hearts - used for both UI display
+     * and wire propagation via PRIORITY_KEY.
+     * 
+     * NOTE: In Casific, COL_LIKES stores "Endorsements" which equals priority.
+     * We unify these: hearts == priority == what propagates on the wire.
+     */
     private int priority;
+    
+    /** Whether the current user has hearted this message */
+    private boolean liked;
     
     /** Anonymous pseudonym of the sender */
     private String pseudonym;
@@ -107,8 +111,9 @@ public class RangzenMessage {
         this.minContactsForHop = 0;
         this.read = false;
         this.liked = false;
-        this.likes = 0;
-        this.priority = 0; // Casific DEFAULT_PRIORITY = 0
+        // Hearts (Casific's "endorsement") start at 0.
+        // priority is the single source of truth for heart count.
+        this.priority = 0;
     }
 
     /**
@@ -155,26 +160,50 @@ public class RangzenMessage {
         this.trustScore = Math.max(0.0, Math.min(1.0, trustScore));
     }
 
+    /**
+     * Get heart count (Casific's "endorsement").
+     * Hearts are stored as priority - this is for UI display and backward compatibility.
+     */
     public int getLikes() {
-        return likes;
+        // Hearts == priority (unified per Casific design)
+        return priority;
     }
 
+    /**
+     * Set heart count (Casific's "endorsement").
+     * This updates priority - the single source of truth that propagates on the wire.
+     */
     public void setLikes(int likes) {
-        this.likes = Math.max(0, likes);
+        // Hearts == priority (unified per Casific design)
+        this.priority = Math.max(0, likes);
     }
 
+    /**
+     * Get priority (heart count) for wire serialization.
+     * In Casific, priority == endorsements == hearts.
+     */
     public int getPriority() {
         return priority;
     }
 
+    /**
+     * Set priority (heart count).
+     * This is the authoritative value that propagates via PRIORITY_KEY.
+     */
     public void setPriority(int priority) {
         this.priority = Math.max(0, priority);
     }
 
+    /**
+     * Check if the current user has hearted this message.
+     */
     public boolean isLiked() {
         return liked;
     }
 
+    /**
+     * Set whether the current user has hearted this message.
+     */
     public void setLiked(boolean liked) {
         this.liked = liked;
     }
@@ -281,13 +310,14 @@ public class RangzenMessage {
     }
 
     /**
-     * Calculate the priority of this message for propagation.
+     * Calculate the propagation priority of this message.
      * Higher priority messages are sent first when bandwidth is limited.
      * 
-     * Priority is based on:
+     * NOTE: This is separate from the heart count (stored in `priority` field).
+     * This method computes a normalized 0-1 score for message ordering based on:
      * - Trust score (higher = more priority)
      * - Recency (newer = more priority)
-     * - Endorsements (more = more priority)
+     * - Hearts (Casific's "endorsement") (more = more priority)
      * 
      * @return Priority value between 0 and 1
      */
@@ -295,7 +325,7 @@ public class RangzenMessage {
         // Weight factors
         final double TRUST_WEIGHT = 0.5;
         final double RECENCY_WEIGHT = 0.3;
-        final double LIKES_WEIGHT = 0.2;
+        final double HEARTS_WEIGHT = 0.2;
         
         // Trust component (already 0-1)
         double trustComponent = trustScore * TRUST_WEIGHT;
@@ -305,10 +335,11 @@ public class RangzenMessage {
         long hourMillis = 60 * 60 * 1000;
         double recencyComponent = Math.max(0, 1.0 - (double) ageMillis / (24 * hourMillis)) * RECENCY_WEIGHT;
         
-        // Likes component - logarithmic scale
-        double likesComponent = Math.min(1.0, Math.log10(likes + 1) / 3) * LIKES_WEIGHT;
+        // Hearts (Casific's "endorsement") component - logarithmic scale
+        // Uses priority field which holds the heart count
+        double heartsComponent = Math.min(1.0, Math.log10(priority + 1) / 3) * HEARTS_WEIGHT;
         
-        return trustComponent + recencyComponent + likesComponent;
+        return trustComponent + recencyComponent + heartsComponent;
     }
 
     // Casific trust model constants (MurmurMessage.java app design).

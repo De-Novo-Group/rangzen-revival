@@ -46,10 +46,12 @@ class FeedFragment : Fragment() {
     private var isServiceBound = false
     // Cache the latest message list for filter toggling.
     private var cachedMessages: List<RangzenMessage> = emptyList()
-    // Track whether the feed should show only liked messages.
+    // Track whether the feed should show only liked (hearted) messages.
     private var onlyLiked = false
     // Track whether to hide user's own messages (default: true)
     private var hideMine = true
+    // Track current sort mode: false = Recent (by time), true = Most hearted
+    private var sortByHearts = false
     // Shared preferences for UI-only hidden messages.
     private lateinit var feedPrefs: SharedPreferences
     // Local cache of hidden message IDs.
@@ -204,9 +206,19 @@ class FeedFragment : Fragment() {
             updateUI(applyFilters(cachedMessages))
         }
         
-        // Wire up the "show all" button to clear hidden messages.
+        // Wire up the "Restore swiped" button to clear hidden messages.
         binding.btnShowHidden.setOnClickListener {
             clearHiddenMessages()
+            updateUI(applyFilters(cachedMessages))
+        }
+        
+        // Wire up the sort toggle button.
+        // Cycles between "Recent" (by time) and "Most hearted" (by heart count).
+        binding.btnSort.setOnClickListener {
+            sortByHearts = !sortByHearts
+            // Update button text to reflect current sort mode
+            binding.btnSort.text = if (sortByHearts) "♥ Hearts ▼" else "Recent ▼"
+            // Re-apply filters with new sort order
             updateUI(applyFilters(cachedMessages))
         }
     }
@@ -248,7 +260,7 @@ class FeedFragment : Fragment() {
     private fun applyFilters(messages: List<RangzenMessage>): List<RangzenMessage> {
         var result = messages
         
-        // Filter by liked if enabled.
+        // Filter by liked (hearted) if enabled.
         if (onlyLiked) {
             result = result.filter { it.isLiked }
         }
@@ -260,6 +272,19 @@ class FeedFragment : Fragment() {
         
         // Filter out swiped/hidden messages.
         result = result.filter { !hiddenMessageIds.contains(it.messageId) }
+        
+        // Apply sort order.
+        // Default: sorted by time descending (newest first) - already from DB.
+        // When sortByHearts is true, sort by heart count (Casific's "endorsement") descending.
+        result = if (sortByHearts) {
+            // Sort by hearts descending, then by time descending as tiebreaker
+            result.sortedWith(compareByDescending<RangzenMessage> { it.likes }
+                .thenByDescending { it.timestamp })
+        } else {
+            // Sort by time descending (default) - messages from DB are already sorted this way
+            // but re-sort to ensure consistency after filtering
+            result.sortedByDescending { it.timestamp }
+        }
         
         return result
     }

@@ -123,16 +123,42 @@ class MessageStore private constructor(context: Context) :
     }
 
     /**
-     * Add a new message to the store.
-     * Returns true if added, false if already exists.
+     * Add a new message to the store, or merge hearts if it already exists.
+     * 
+     * When the message already exists, we merge the heart count (Casific's "endorsement")
+     * by taking max(local, received) to preserve the highest count from either source.
+     * This follows Casific's behavior in computeNewPriority.
+     * 
+     * Returns true if added or merged, false on error.
      */
     fun addMessage(message: RangzenMessage): Boolean {
-        // Check for duplicate
-        if (getMessage(message.messageId) != null) {
-            Timber.d("Message already exists: ${message.messageId}")
+        // Check for existing message to handle merge case
+        val existing = getMessage(message.messageId)
+        if (existing != null) {
+            // Message exists - merge hearts by taking max(local, received)
+            // This ensures endorsements propagate and we don't lose hearts.
+            val mergedHearts = maxOf(existing.likes, message.likes)
+            if (mergedHearts > existing.likes) {
+                // Received message has more hearts - update local copy
+                Timber.d("Merging hearts for ${message.messageId}: local=${existing.likes}, received=${message.likes}, merged=$mergedHearts")
+                val values = ContentValues().apply {
+                    put(COL_LIKES, mergedHearts)
+                }
+                writableDatabase.update(
+                    TABLE_MESSAGES,
+                    values,
+                    "$COL_MESSAGE_ID = ?",
+                    arrayOf(message.messageId)
+                )
+                refreshMessages()
+                return true
+            }
+            // Local has equal or more hearts - no update needed
+            Timber.d("Message exists with equal/higher hearts: ${message.messageId} (local=${existing.likes}, received=${message.likes})")
             return false
         }
 
+        // New message - insert it
         // Capture the local receipt time for this insert.
         val receivedAt = System.currentTimeMillis()
         val values = ContentValues().apply {
@@ -140,6 +166,7 @@ class MessageStore private constructor(context: Context) :
             put(COL_TEXT, message.text)
             // Clamp trust to legacy bounds to avoid invalid values.
             put(COL_TRUST_SCORE, clampTrust(message.trustScore))
+            // Hearts (Casific's "endorsement") - stored in COL_LIKES, comes from priority
             put(COL_LIKES, message.likes)
             put(COL_LIKED, if (message.isLiked) 1 else 0)
             put(COL_PSEUDONYM, message.pseudonym)
@@ -255,16 +282,40 @@ class MessageStore private constructor(context: Context) :
     }
 
     /**
-     * Update a message's like status.
+     * Update a message's heart (Casific's "endorsement") status.
+     * 
+     * This is idempotent: only changes the count (+1/-1) when the liked state
+     * actually changes. Repeated taps do not inflate the count.
+     * 
+     * This matches Casific's MessageStore.likeMessage() behavior.
+     * 
+     * @param messageId The message to heart/unheart
+     * @param liked True to heart, false to unheart
+     * @return True if state changed, false if already in target state or error
      */
     fun likeMessage(messageId: String, liked: Boolean): Boolean {
+        // Get current message state
+        val message = getMessage(messageId) ?: return false
+        
+        // Check if message is already in the target state (idempotent)
+        // Only update if the state is actually changing
+        if (message.isLiked == liked) {
+            // Already in target state - no change needed (prevents inflation)
+            Timber.d("Heart already in target state for ${messageId}: liked=$liked")
+            return false
+        }
+        
+        // State is changing - update liked flag and adjust heart count
+        val newHearts = if (liked) {
+            message.likes + 1
+        } else {
+            maxOf(0, message.likes - 1)
+        }
+        
         val values = ContentValues().apply {
             put(COL_LIKED, if (liked) 1 else 0)
+            put(COL_LIKES, newHearts)
         }
-
-        // Also increment/decrement likes count
-        val message = getMessage(messageId) ?: return false
-        values.put(COL_LIKES, if (liked) message.likes + 1 else maxOf(0, message.likes - 1))
 
         val rows = writableDatabase.update(
             TABLE_MESSAGES,
@@ -274,6 +325,7 @@ class MessageStore private constructor(context: Context) :
         )
 
         if (rows > 0) {
+            Timber.d("Heart toggled for ${messageId}: liked=$liked, hearts=$newHearts")
             refreshMessages()
             return true
         }
