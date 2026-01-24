@@ -1,34 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Primary colors - Rangzen blue -->
-    <color name="primary">#2563EB</color>
-    <color name="primary_dark">#1D4ED8</color>
+    <!-- ============================================ -->
+    <!-- DARK THEME - Murmur UI Redesign             -->
+    <!-- ============================================ -->
+    
+    <!-- Primary colors - Blue accent -->
+    <color name="primary">#3B82F6</color>
+    <color name="primary_dark">#2563EB</color>
     <color name="primary_light">#60A5FA</color>
     
-    <!-- Secondary colors - Teal accent -->
-    <color name="secondary">#14B8A6</color>
-    <color name="secondary_dark">#0D9488</color>
-    <color name="secondary_light">#5EEAD4</color>
+    <!-- Secondary colors - kept for compatibility -->
+    <color name="secondary">#8B5CF6</color>
+    <color name="secondary_dark">#7C3AED</color>
+    <color name="secondary_light">#A78BFA</color>
     
-    <!-- Neutral colors -->
+    <!-- Core dark theme colors -->
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="background">#F9FAFB</color>
-    <color name="surface">#FFFFFF</color>
-    <color name="surface_variant">#F3F4F6</color>
+    <color name="background">#09090B</color>          <!-- Near black - main background -->
+    <color name="surface">#18181B</color>             <!-- Dark gray - cards, headers -->
+    <color name="surface_variant">#27272A</color>     <!-- Slightly lighter - borders, dividers -->
     
-    <!-- Text colors -->
-    <color name="text_primary">#111827</color>
-    <color name="text_secondary">#6B7280</color>
-    <color name="text_hint">#9CA3AF</color>
+    <!-- Text colors for dark theme -->
+    <color name="text_primary">#FAFAFA</color>        <!-- Bright white - main text -->
+    <color name="text_secondary">#A1A1AA</color>      <!-- Medium gray - pseudonyms, labels -->
+    <color name="text_hint">#52525B</color>           <!-- Dark gray - timestamps, hints -->
     
-    <!-- Status colors -->
-    <color name="success">#10B981</color>
-    <color name="warning">#F59E0B</color>
+    <!-- Status colors - slightly brighter for dark bg -->
+    <color name="success">#22C55E</color>
+    <color name="warning">#EAB308</color>
     <color name="error">#EF4444</color>
     
-    <!-- Trust score colors -->
-    <color name="trust_high">#10B981</color>
-    <color name="trust_medium">#F59E0B</color>
-    <color name="trust_low">#EF4444</color>
+    <!-- Trust score colors - same as status but named for clarity -->
+    <color name="trust_high">#22C55E</color>          <!-- Green - trusted/friend -->
+    <color name="trust_medium">#EAB308</color>        <!-- Yellow/amber - known -->
+    <color name="trust_low">#EF4444</color>           <!-- Red - unknown/new -->
+    
+    <!-- Like/heart colors -->
+    <color name="like_active">#F43F5E</color>         <!-- Pink/red when liked -->
+    <color name="like_inactive">#52525B</color>       <!-- Gray when not liked -->
+    
+    <!-- Peer status dot -->
+    <color name="peer_active">#22C55E</color>         <!-- Green dot for active peers -->
 </resources>

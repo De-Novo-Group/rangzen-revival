@@ -318,12 +318,69 @@ class FeedFragment : Fragment() {
     }
 
     private fun updateStatusText(peerCount: Int) {
-        // Show peer count. Currently only BLE peers are tracked.
-        // TODO: Add transport breakdown when unified registry is exposed.
+        // Show peer count and update status dot color.
+        // Status dot: green when peers found, gray otherwise.
+        binding.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            resources.getColor(
+                if (peerCount > 0) R.color.peer_active else R.color.text_hint,
+                null
+            )
+        )
+        
         binding.statusText.text = if (peerCount > 0) {
             "$peerCount peers nearby"
         } else {
             getString(R.string.status_discovering)
+        }
+        
+        // Update transport breakdown icons.
+        // TODO: Wire to real transport counts from unified peer registry.
+        // For now, show placeholder breakdown when peers are found.
+        updateTransportBreakdown(peerCount)
+    }
+    
+    /**
+     * Update the transport breakdown icons (BT, WD, LAN).
+     * Shows small icons with counts for each transport type.
+     * 
+     * Currently uses placeholder logic - will be wired to real
+     * DiscoveredPeerRegistry data later.
+     */
+    private fun updateTransportBreakdown(totalPeers: Int) {
+        // Placeholder: distribute peers across transports for demo.
+        // TODO: Replace with real data from DiscoveredPeerRegistry.getTransportCounts()
+        val btCount = if (totalPeers > 0) totalPeers else 0  // BLE is primary
+        val wdCount = 0  // WiFi Direct count (placeholder)
+        val lanCount = 0  // LAN count (placeholder)
+        
+        // Show BT icon and count if peers found via Bluetooth.
+        if (btCount > 0) {
+            binding.iconBt.visibility = View.VISIBLE
+            binding.countBt.visibility = View.VISIBLE
+            binding.countBt.text = btCount.toString()
+        } else {
+            binding.iconBt.visibility = View.GONE
+            binding.countBt.visibility = View.GONE
+        }
+        
+        // Show WD icon and count if peers found via WiFi Direct.
+        if (wdCount > 0) {
+            binding.iconWd.visibility = View.VISIBLE
+            binding.countWd.visibility = View.VISIBLE
+            binding.countWd.text = wdCount.toString()
+        } else {
+            binding.iconWd.visibility = View.GONE
+            binding.countWd.visibility = View.GONE
+        }
+        
+        // Show LAN icon and count if peers found via LAN/hotspot.
+        if (lanCount > 0) {
+            binding.iconLan.visibility = View.VISIBLE
+            binding.countLan.visibility = View.VISIBLE
+            binding.countLan.text = lanCount.toString()
+        } else {
+            binding.iconLan.visibility = View.GONE
+            binding.countLan.visibility = View.GONE
         }
     }
 

@@ -23,13 +23,92 @@
         app:layout_constraintEnd_toEndOf="parent">
 
         <!-- Row 1: Peer status with transport breakdown -->
-        <TextView
-            android:id="@+id/status_text"
-            android:layout_width="wrap_content"
+        <!-- Shows: [green dot] X peers nearby [BT icon]2 [WD icon]1 [WiFi icon]1 -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/status_discovering"
-            android:textSize="13sp"
-            android:textColor="@color/text_secondary" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            
+            <!-- Status dot (green when peers found) -->
+            <View
+                android:id="@+id/status_dot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/circle_avatar"
+                android:backgroundTint="@color/peer_active" />
+            
+            <!-- Main status text -->
+            <TextView
+                android:id="@+id/status_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="@string/status_discovering"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary" />
+            
+            <!-- Spacer -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+            
+            <!-- Transport breakdown: BT count -->
+            <!-- These will be wired to real data later -->
+            <ImageView
+                android:id="@+id/icon_bt"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_bluetooth"
+                android:visibility="gone"
+                app:tint="@color/text_hint" />
+            <TextView
+                android:id="@+id/count_bt"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:layout_marginEnd="8dp"
+                android:textSize="11sp"
+                android:textColor="@color/text_hint"
+                android:visibility="gone" />
+            
+            <!-- Transport breakdown: WiFi Direct count -->
+            <ImageView
+                android:id="@+id/icon_wd"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_wifi_direct"
+                android:visibility="gone"
+                app:tint="@color/text_hint" />
+            <TextView
+                android:id="@+id/count_wd"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:layout_marginEnd="8dp"
+                android:textSize="11sp"
+                android:textColor="@color/text_hint"
+                android:visibility="gone" />
+            
+            <!-- Transport breakdown: LAN/WiFi count -->
+            <ImageView
+                android:id="@+id/icon_lan"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_wifi"
+                android:visibility="gone"
+                app:tint="@color/text_hint" />
+            <TextView
+                android:id="@+id/count_lan"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:textSize="11sp"
+                android:textColor="@color/text_hint"
+                android:visibility="gone" />
+                
+        </LinearLayout>
 
         <!-- Row 2: Filter controls (compact horizontal layout) -->
         <LinearLayout

@@ -129,7 +129,7 @@
 
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Share App -->
+        <!-- Share App - uses standard card styling like other cards -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/card_share_app"
             android:layout_width="match_parent"
@@ -137,11 +137,10 @@
             android:layout_marginHorizontal="16dp"
             android:layout_marginBottom="16dp"
             app:cardCornerRadius="12dp"
-            app:cardElevation="4dp"
+            app:cardElevation="2dp"
             android:clickable="true"
             android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            app:cardBackgroundColor="@color/primary">
+            android:foreground="?attr/selectableItemBackground">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -152,19 +151,18 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Share Murmur"
+                    android:text="@string/share_murmur"
                     android:textSize="18sp"
-                    android:textColor="@android:color/white"
+                    android:textColor="@color/text_primary"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="Send or receive the app offline"
+                    android:text="@string/share_murmur_desc"
                     android:textSize="14sp"
-                    android:textColor="@android:color/white"
-                    android:alpha="0.9" />
+                    android:textColor="@color/text_secondary" />
 
             </LinearLayout>
 

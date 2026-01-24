@@ -1,26 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Rangzen" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Primary brand color -->
+    <!-- ============================================ -->
+    <!-- DARK THEME - Murmur UI Redesign             -->
+    <!-- Force dark theme (no day/night switching)   -->
+    <!-- ============================================ -->
+    <style name="Theme.Rangzen" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- Primary brand color - blue accent -->
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">@color/primary_dark</item>
         <item name="colorOnPrimary">@color/white</item>
         
-        <!-- Secondary brand color -->
+        <!-- Secondary brand color - purple accent -->
         <item name="colorSecondary">@color/secondary</item>
         <item name="colorSecondaryVariant">@color/secondary_dark</item>
         <item name="colorOnSecondary">@color/white</item>
         
-        <!-- Status bar: dark background with light icons -->
-        <item name="android:statusBarColor">@color/primary_dark</item>
+        <!-- Status bar: matches background (near black) -->
+        <item name="android:statusBarColor">@color/background</item>
         <item name="android:windowLightStatusBar">false</item>
         
-        <!-- Navigation bar -->
+        <!-- Navigation bar: matches surface (dark gray) -->
         <item name="android:navigationBarColor">@color/surface</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightNavigationBar">false</item>
         
         <!-- Background colors -->
         <item name="android:colorBackground">@color/background</item>
         <item name="colorSurface">@color/surface</item>
+        <item name="colorSurfaceVariant">@color/surface_variant</item>
+        
+        <!-- Text colors -->
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorHint">@color/text_hint</item>
+        
+        <!-- Card styling -->
+        <item name="materialCardViewStyle">@style/Widget.Rangzen.CardView</item>
+    </style>
+    
+    <!-- Card style for dark theme -->
+    <style name="Widget.Rangzen.CardView" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">@color/surface</item>
+        <item name="strokeColor">@color/surface_variant</item>
+        <item name="strokeWidth">1dp</item>
     </style>
 </resources>

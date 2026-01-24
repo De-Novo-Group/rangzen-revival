@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#1a1a2e">
+    android:background="@color/background">
 
     <!-- Header with back button -->
     <LinearLayout
@@ -15,7 +15,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:padding="12dp"
-        android:background="#1a1a2e">
+        android:background="@color/background">
 
         <ImageButton
             android:id="@+id/btn_back"

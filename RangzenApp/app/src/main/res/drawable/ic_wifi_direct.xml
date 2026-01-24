@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WiFi Direct icon for transport status display -->
+<!-- Using a WiFi icon with a small "D" indicator concept -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="@color/text_hint">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,3C7.46,3 3.34,4.78 0.29,7.67L12,21 23.71,7.67C20.66,4.78 16.54,3 12,3zM12,18.27L3.04,8.39C5.48,6.36 8.58,5 12,5s6.52,1.36 8.96,3.39L12,18.27z"/>
+</vector>

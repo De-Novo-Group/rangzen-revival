@@ -60,6 +60,21 @@ class FriendStore private constructor(context: Context) :
 
     private val _friends = MutableStateFlow<List<Friend>>(emptyList())
     val friends: StateFlow<List<Friend>> = _friends.asStateFlow()
+    
+    // Initialize friends list on startup.
+    // Without this, the StateFlow starts empty and the UI shows "No friends"
+    // until something triggers refreshFriends() (like adding a new friend).
+    init {
+        // Load existing friends from database when FriendStore is created.
+        // This ensures the friends list is populated immediately on app start.
+        try {
+            _friends.value = getAllFriends()
+            Timber.d("FriendStore: Loaded ${_friends.value.size} friends on startup")
+        } catch (e: Exception) {
+            // Database might not be ready yet - that's okay, it will be empty.
+            Timber.w(e, "FriendStore: Could not load friends on init (database may not exist yet)")
+        }
+    }
 
     override fun onCreate(db: SQLiteDatabase) {
         // Friends table
