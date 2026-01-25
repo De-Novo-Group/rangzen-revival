@@ -23,7 +23,7 @@
   "inboundSessionGraceMs": 4000,
   "telemetryEnabled": false,
   "telemetryServerUrl": "https://murmur-telemetry.denovogroup.org",
-  "telemetryApiToken": "cbe9cc17515a095059e461d685bf9a49f002d7ad2621423ec45e7f11ec053ff6",
+  "telemetryApiToken": "d08f6782cf0193d80b4e4af990ca9bcb4eb26d57296adc0cb0ee16459650a8f4",
   "telemetryBatchSize": 50,
   "telemetryFlushIntervalMs": 60000,
   "otaEnabled": true,
