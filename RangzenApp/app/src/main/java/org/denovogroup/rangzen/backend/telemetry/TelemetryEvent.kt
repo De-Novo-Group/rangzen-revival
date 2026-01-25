@@ -80,3 +80,115 @@ data class TelemetryBatch(
 data class TelemetryResponse(
     val accepted: Int
 )
+
+/**
+ * Bug report to submit to the server.
+ */
+data class BugReport(
+    @SerializedName("device_id_hash")
+    val deviceIdHash: String,
+
+    @SerializedName("category")
+    val category: String,
+
+    @SerializedName("description")
+    val description: String,
+
+    @SerializedName("app_version")
+    val appVersion: String? = null,
+
+    @SerializedName("os_version")
+    val osVersion: String? = null,
+
+    @SerializedName("device_model")
+    val deviceModel: String? = null,
+
+    @SerializedName("transport_state")
+    val transportState: String? = null,
+
+    @SerializedName("last_exchange_id")
+    val lastExchangeId: String? = null,
+
+    @SerializedName("battery_level")
+    val batteryLevel: Int? = null,
+
+    @SerializedName("is_power_save")
+    val isPowerSave: Boolean? = null,
+
+    @SerializedName("display_name")
+    val displayName: String? = null,
+
+    @SerializedName("latitude")
+    val latitude: Double? = null,
+
+    @SerializedName("longitude")
+    val longitude: Double? = null,
+
+    @SerializedName("location_accuracy")
+    val locationAccuracy: Float? = null,
+
+    @SerializedName("recent_events")
+    val recentEvents: List<TelemetryEvent>? = null
+)
+
+/**
+ * Response after submitting a bug report.
+ */
+data class BugReportResponse(
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("status")
+    val status: String
+)
+
+/**
+ * A broadcast message from the server.
+ */
+data class Broadcast(
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("title")
+    val title: String,
+
+    @SerializedName("body")
+    val body: String,
+
+    @SerializedName("highlight_color")
+    val highlightColor: String? = null,
+
+    @SerializedName("created_at")
+    val createdAt: String,
+
+    @SerializedName("expires_at")
+    val expiresAt: String? = null
+)
+
+/**
+ * A device-specific message from the server (replies to bug reports).
+ */
+data class DeviceMessage(
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("message")
+    val message: String,
+
+    @SerializedName("report_id")
+    val reportId: String? = null,
+
+    @SerializedName("created_at")
+    val createdAt: String
+)
+
+/**
+ * Response from the sync endpoint.
+ */
+data class SyncResponse(
+    @SerializedName("broadcasts")
+    val broadcasts: List<Broadcast>? = null,
+
+    @SerializedName("messages")
+    val messages: List<DeviceMessage>? = null
+)

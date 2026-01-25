@@ -42,4 +42,8 @@
     
     <!-- Peer status dot -->
     <color name="peer_active">#22C55E</color>         <!-- Green dot for active peers -->
+
+    <!-- Broadcast colors - distinctive orange for team messages -->
+    <color name="broadcast_orange">#F97316</color>    <!-- Vivid orange for broadcasts -->
+    <color name="broadcast_bg">#1C1510</color>        <!-- Dark orange-tinted background -->
 </resources>

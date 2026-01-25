@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026, De Novo Group
- * Feed Fragment - displays messages from the mesh network
+ * Feed Fragment - displays messages from the mesh network and broadcasts
  */
 package org.denovogroup.rangzen.ui
 
@@ -20,12 +20,15 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.ItemTouchHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.NotificationHelper
 import org.denovogroup.rangzen.backend.RangzenService
+import org.denovogroup.rangzen.backend.telemetry.Broadcast
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.databinding.FragmentFeedBinding
 import org.denovogroup.rangzen.objects.RangzenMessage
 import java.text.SimpleDateFormat
@@ -41,12 +44,14 @@ class FeedFragment : Fragment() {
     private var _binding: FragmentFeedBinding? = null
     private val binding get() = _binding!!
 
-    private lateinit var messageAdapter: MessageAdapter
+    private lateinit var feedAdapter: FeedAdapter
     private lateinit var messageStore: MessageStore
     private var rangzenService: RangzenService? = null
     private var isServiceBound = false
     // Cache the latest message list for filter toggling.
     private var cachedMessages: List<RangzenMessage> = emptyList()
+    // Cache the latest broadcast list.
+    private var cachedBroadcasts: List<Broadcast> = emptyList()
     // Track whether the feed should show only liked (hearted) messages.
     private var onlyLiked = false
     // Track whether to hide user's own messages (default: true)
@@ -128,29 +133,35 @@ class FeedFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
-        messageAdapter = MessageAdapter(
+        feedAdapter = FeedAdapter(
             onLikeClick = { message ->
                 // Compute the new liked state for instant UI feedback.
                 val newLiked = !message.isLiked
                 // Update the adapter immediately to avoid perceived lag.
-                messageAdapter.updateLikeState(message.messageId, newLiked)
+                feedAdapter.updateLikeState(message.messageId, newLiked)
                 // Persist the like in the local store.
                 messageStore.likeMessage(message.messageId, newLiked)
                 // Re-apply filters so unliked messages can disappear instantly.
-                updateUI(applyFilters(cachedMessages))
+                updateUI(buildFeedItems())
             },
             onMessageClick = { message ->
                 // Mark the message read in the store.
                 messageStore.markAsRead(message.messageId)
+            },
+            onBroadcastClick = { broadcast ->
+                // Mark broadcast as read via telemetry client.
+                viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                    TelemetryClient.getInstance()?.markBroadcastRead(broadcast.id)
+                }
             }
         )
 
         binding.recyclerMessages.apply {
             layoutManager = LinearLayoutManager(context)
-            adapter = messageAdapter
+            adapter = feedAdapter
         }
 
-        // Attach swipe handling to hide messages locally.
+        // Attach swipe handling to hide items locally.
         val swipeCallback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
             override fun onMove(
                 recyclerView: RecyclerView,
@@ -162,16 +173,16 @@ class FeedFragment : Fragment() {
             }
 
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                // Look up the swiped message by adapter position.
-                val message = messageAdapter.getMessageAt(viewHolder.adapterPosition)
+                // Look up the swiped item by adapter position.
+                val item = feedAdapter.getItemAt(viewHolder.adapterPosition)
                 // Guard against missing items.
-                if (message == null) {
+                if (item == null) {
                     // Re-render the list to reset any swiped state.
-                    updateUI(applyFilters(cachedMessages))
+                    updateUI(buildFeedItems())
                     return
                 }
-                // Hide the message in the local UI only.
-                hideMessage(message.messageId)
+                // Hide the item in the local UI only.
+                hideMessage(item.id)
             }
         }
         // Attach the swipe helper to the recycler view.
@@ -182,8 +193,16 @@ class FeedFragment : Fragment() {
         binding.swipeRefresh.setOnRefreshListener {
             // Force refresh to pull latest DB state.
             refreshFeedFromDb()
+            // Sync broadcasts from telemetry server.
+            syncBroadcasts()
             // Trigger a soft force exchange (respects active inbound sessions).
             triggerSoftExchange()
+        }
+    }
+
+    private fun syncBroadcasts() {
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            TelemetryClient.getInstance()?.sync()
         }
     }
 
@@ -208,21 +227,21 @@ class FeedFragment : Fragment() {
         // Update the feed when liked filter is toggled.
         binding.switchOnlyLiked.setOnCheckedChangeListener { _, isChecked ->
             onlyLiked = isChecked
-            updateUI(applyFilters(cachedMessages))
+            updateUI(buildFeedItems())
         }
-        
+
         // Update the feed when "hide mine" filter is toggled.
         binding.checkHideMine.setOnCheckedChangeListener { _, isChecked ->
             hideMine = isChecked
-            updateUI(applyFilters(cachedMessages))
+            updateUI(buildFeedItems())
         }
-        
+
         // Wire up the "Restore swiped" button to clear hidden messages.
         binding.btnShowHidden.setOnClickListener {
             clearHiddenMessages()
-            updateUI(applyFilters(cachedMessages))
+            updateUI(buildFeedItems())
         }
-        
+
         // Wire up the sort toggle button.
         // Cycles between "Recent" (by time) and "Most hearted" (by heart count).
         binding.btnSort.setOnClickListener {
@@ -230,18 +249,71 @@ class FeedFragment : Fragment() {
             // Update button text to reflect current sort mode
             binding.btnSort.text = if (sortByHearts) "♥ Hearts ▼" else "Recent ▼"
             // Re-apply filters with new sort order
-            updateUI(applyFilters(cachedMessages))
+            updateUI(buildFeedItems())
         }
     }
 
     private fun observeMessages() {
         viewLifecycleOwner.lifecycleScope.launch {
-            messageStore.messages.collectLatest { messages ->
-                // Cache the latest list for filtering.
+            // Combine message store flow with telemetry broadcasts flow.
+            val broadcastsFlow = TelemetryClient.getInstance()?.broadcasts
+                ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+            messageStore.messages.combine(broadcastsFlow) { messages, broadcasts ->
+                Pair(messages, broadcasts)
+            }.collectLatest { (messages, broadcasts) ->
+                // Cache the latest lists for filtering.
                 cachedMessages = messages
-                // Apply filters before rendering.
-                updateUI(applyFilters(messages))
+                cachedBroadcasts = broadcasts
+                // Build combined feed and render.
+                updateUI(buildFeedItems())
             }
+        }
+    }
+
+    /**
+     * Build the combined feed item list from messages and broadcasts.
+     * Applies filters and sorting.
+     */
+    private fun buildFeedItems(): List<FeedItem> {
+        // Filter messages.
+        var filteredMessages = cachedMessages
+
+        // Filter by liked (hearted) if enabled.
+        if (onlyLiked) {
+            filteredMessages = filteredMessages.filter { it.isLiked }
+        }
+
+        // Filter out own messages if "hide mine" is checked.
+        if (hideMine && myPseudonym != null) {
+            filteredMessages = filteredMessages.filter { it.pseudonym != myPseudonym }
+        }
+
+        // Filter out swiped/hidden messages.
+        filteredMessages = filteredMessages.filter { !hiddenMessageIds.contains(it.messageId) }
+
+        // Convert to FeedItems.
+        val messageItems = filteredMessages.map { FeedItem.MessageItem(it) }
+
+        // Filter out hidden broadcasts.
+        val filteredBroadcasts = cachedBroadcasts.filter { !hiddenMessageIds.contains(it.id) }
+        val broadcastItems = filteredBroadcasts.map { FeedItem.BroadcastItem(it) }
+
+        // Combine all items.
+        val allItems = messageItems + broadcastItems
+
+        // Apply sort order.
+        return if (sortByHearts) {
+            // Sort by hearts descending (broadcasts have 0 hearts, will appear after hearted messages)
+            allItems.sortedWith(compareByDescending<FeedItem> {
+                when (it) {
+                    is FeedItem.MessageItem -> it.message.likes
+                    is FeedItem.BroadcastItem -> 0
+                }
+            }.thenByDescending { it.sortTimestamp })
+        } else {
+            // Sort by time descending (newest first)
+            allItems.sortedByDescending { it.sortTimestamp }
         }
     }
 
@@ -255,58 +327,26 @@ class FeedFragment : Fragment() {
         }
     }
 
-    private fun updateUI(messages: List<RangzenMessage>) {
+    private fun updateUI(items: List<FeedItem>) {
         binding.swipeRefresh.isRefreshing = false
-        
-        if (messages.isEmpty()) {
+
+        if (items.isEmpty()) {
             binding.emptyState.visibility = View.VISIBLE
             binding.recyclerMessages.visibility = View.GONE
         } else {
             binding.emptyState.visibility = View.GONE
             binding.recyclerMessages.visibility = View.VISIBLE
-            messageAdapter.submitList(messages)
+            feedAdapter.submitList(items)
         }
     }
 
-    private fun applyFilters(messages: List<RangzenMessage>): List<RangzenMessage> {
-        var result = messages
-        
-        // Filter by liked (hearted) if enabled.
-        if (onlyLiked) {
-            result = result.filter { it.isLiked }
-        }
-        
-        // Filter out own messages if "hide mine" is checked.
-        if (hideMine && myPseudonym != null) {
-            result = result.filter { it.pseudonym != myPseudonym }
-        }
-        
-        // Filter out swiped/hidden messages.
-        result = result.filter { !hiddenMessageIds.contains(it.messageId) }
-        
-        // Apply sort order.
-        // Default: sorted by time descending (newest first) - already from DB.
-        // When sortByHearts is true, sort by heart count (Casific's "endorsement") descending.
-        result = if (sortByHearts) {
-            // Sort by hearts descending, then by time descending as tiebreaker
-            result.sortedWith(compareByDescending<RangzenMessage> { it.likes }
-                .thenByDescending { it.timestamp })
-        } else {
-            // Sort by time descending (default) - messages from DB are already sorted this way
-            // but re-sort to ensure consistency after filtering
-            result.sortedByDescending { it.timestamp }
-        }
-        
-        return result
-    }
-
-    private fun hideMessage(messageId: String) {
-        // Add the message to the hidden list.
-        hiddenMessageIds.add(messageId)
+    private fun hideMessage(itemId: String) {
+        // Add the item to the hidden list.
+        hiddenMessageIds.add(itemId)
         // Persist the hidden list to preferences.
         saveHiddenMessageIds(hiddenMessageIds)
         // Refresh the UI without altering the DB.
-        updateUI(applyFilters(cachedMessages))
+        updateUI(buildFeedItems())
     }
 
     private fun clearHiddenMessages() {
@@ -413,55 +453,80 @@ class FeedFragment : Fragment() {
     }
 }
 
-class MessageAdapter(
+/**
+ * Unified adapter for displaying both messages and broadcasts in the feed.
+ */
+class FeedAdapter(
     private val onLikeClick: (RangzenMessage) -> Unit,
-    private val onMessageClick: (RangzenMessage) -> Unit
-) : RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
+    private val onMessageClick: (RangzenMessage) -> Unit,
+    private val onBroadcastClick: (Broadcast) -> Unit
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-    private var messages = listOf<RangzenMessage>()
+    companion object {
+        private const val VIEW_TYPE_MESSAGE = 0
+        private const val VIEW_TYPE_BROADCAST = 1
+    }
 
-    fun submitList(newMessages: List<RangzenMessage>) {
-        messages = newMessages
+    private var items = listOf<FeedItem>()
+
+    fun submitList(newItems: List<FeedItem>) {
+        items = newItems
         notifyDataSetChanged()
     }
 
     fun updateLikeState(messageId: String, liked: Boolean) {
         // Find the message in the current list.
-        val index = messages.indexOfFirst { it.messageId == messageId }
-        if (index == -1) {
-            // Nothing to update when the message is missing.
-            return
+        val index = items.indexOfFirst {
+            it is FeedItem.MessageItem && it.message.messageId == messageId
         }
-        val message = messages[index]
+        if (index == -1) return
+
+        val item = items[index] as? FeedItem.MessageItem ?: return
         // Update liked state immediately for the UI.
-        message.isLiked = liked
+        item.message.isLiked = liked
         // Adjust the like count locally for instant feedback.
         val delta = if (liked) 1 else -1
-        message.likes = kotlin.math.max(0, message.likes + delta)
+        item.message.likes = kotlin.math.max(0, item.message.likes + delta)
         // Rebind just this item for a smooth update.
         notifyItemChanged(index)
     }
 
-    fun getMessageAt(position: Int): RangzenMessage? {
-        // Guard against invalid indices.
-        if (position < 0 || position >= messages.size) {
-            return null
+    fun getItemAt(position: Int): FeedItem? {
+        if (position < 0 || position >= items.size) return null
+        return items[position]
+    }
+
+    override fun getItemViewType(position: Int): Int {
+        return when (items[position]) {
+            is FeedItem.MessageItem -> VIEW_TYPE_MESSAGE
+            is FeedItem.BroadcastItem -> VIEW_TYPE_BROADCAST
         }
-        // Return the message at the requested position.
-        return messages[position]
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_message, parent, false)
-        return MessageViewHolder(view)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        return when (viewType) {
+            VIEW_TYPE_MESSAGE -> {
+                val view = LayoutInflater.from(parent.context)
+                    .inflate(R.layout.item_message, parent, false)
+                MessageViewHolder(view)
+            }
+            VIEW_TYPE_BROADCAST -> {
+                val view = LayoutInflater.from(parent.context)
+                    .inflate(R.layout.item_broadcast, parent, false)
+                BroadcastViewHolder(view)
+            }
+            else -> throw IllegalArgumentException("Unknown view type: $viewType")
+        }
     }
 
-    override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
-        holder.bind(messages[position])
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (val item = items[position]) {
+            is FeedItem.MessageItem -> (holder as MessageViewHolder).bind(item.message)
+            is FeedItem.BroadcastItem -> (holder as BroadcastViewHolder).bind(item.broadcast)
+        }
     }
 
-    override fun getItemCount(): Int = messages.size
+    override fun getItemCount(): Int = items.size
 
     inner class MessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val textMessage: android.widget.TextView = itemView.findViewById(R.id.text_message)
@@ -472,55 +537,68 @@ class MessageAdapter(
         private val trustIndicator: View = itemView.findViewById(R.id.trust_indicator)
 
         fun bind(message: RangzenMessage) {
-            // Render the main message body.
             textMessage.text = message.text
-            // Show sender pseudonym or a safe fallback.
             textPseudonym.text = message.pseudonym ?: "Anonymous"
-            // Format composed/received timestamps for the header row.
             textTimestamp.text = formatHeaderTimes(
                 composedAt = message.timestamp,
                 receivedAt = message.receivedTimestamp
             )
-            // Render the like count for the action row.
             textLikes.text = message.likes.toString()
-            // Swap the like icon based on user state.
             btnLike.setImageResource(
                 if (message.isLiked) R.drawable.ic_liked else R.drawable.ic_like
             )
-            // Map trust to a visual indicator color.
             val trustColor = when {
                 message.trustScore >= 0.7 -> R.color.trust_high
                 message.trustScore >= 0.4 -> R.color.trust_medium
                 else -> R.color.trust_low
             }
-            // Apply the trust indicator color to the bar.
-            trustIndicator.setBackgroundColor(
-                itemView.context.getColor(trustColor)
-            )
-            // Wire up like taps.
+            trustIndicator.setBackgroundColor(itemView.context.getColor(trustColor))
             btnLike.setOnClickListener { onLikeClick(message) }
-            // Wire up message taps to mark as read.
             itemView.setOnClickListener { onMessageClick(message) }
-            // Reduce alpha for unread messages to make them stand out.
             itemView.alpha = if (message.isRead) 1.0f else 0.9f
         }
 
         private fun formatHeaderTimes(composedAt: Long, receivedAt: Long): String {
-            // Choose a usable received time fallback if not set.
             val safeReceived = if (receivedAt > 0) receivedAt else composedAt
-            // Format the composed time for display.
             val composedText = formatClockTime(composedAt)
-            // Format the received time for display.
             val receivedText = formatClockTime(safeReceived)
-            // Build a compact header string.
             return "C $composedText · R $receivedText"
         }
 
         private fun formatClockTime(timestamp: Long): String {
-            // Use a stable locale-aware time formatter.
             val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-            // Convert to a displayable time string.
             return formatter.format(Date(timestamp))
+        }
+    }
+
+    inner class BroadcastViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val textTitle: android.widget.TextView = itemView.findViewById(R.id.text_title)
+        private val textBody: android.widget.TextView = itemView.findViewById(R.id.text_body)
+        private val textTimestamp: android.widget.TextView = itemView.findViewById(R.id.text_timestamp)
+
+        fun bind(broadcast: Broadcast) {
+            textTitle.text = broadcast.title
+            textBody.text = broadcast.body
+            textTimestamp.text = formatBroadcastTime(broadcast.createdAt)
+            itemView.setOnClickListener { onBroadcastClick(broadcast) }
+        }
+
+        private fun formatBroadcastTime(isoTimestamp: String): String {
+            val timestamp = FeedItem.parseIsoTimestamp(isoTimestamp)
+            val now = System.currentTimeMillis()
+            val diff = now - timestamp
+            val hours = diff / (1000 * 60 * 60)
+            val days = hours / 24
+
+            return when {
+                hours < 1 -> "Just now"
+                hours < 24 -> "${hours}h ago"
+                days < 7 -> "${days}d ago"
+                else -> {
+                    val formatter = SimpleDateFormat("MMM d", Locale.getDefault())
+                    formatter.format(Date(timestamp))
+                }
+            }
         }
     }
 }

@@ -5,11 +5,22 @@
 package org.denovogroup.rangzen.backend.telemetry
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.os.BatteryManager
+import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import org.denovogroup.rangzen.BuildConfig
 import timber.log.Timber
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -70,13 +81,25 @@ class TelemetryClient private constructor(
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
     private val eventQueue = ConcurrentLinkedQueue<TelemetryEvent>()
+    private val recentEvents = mutableListOf<TelemetryEvent>()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private var currentBackoffMs = INITIAL_BACKOFF_MS
     private var flushJob: Job? = null
 
+    /** Broadcasts from the server */
+    private val _broadcasts = MutableStateFlow<List<Broadcast>>(emptyList())
+    val broadcasts: StateFlow<List<Broadcast>> = _broadcasts
+
+    /** Device messages (replies to bug reports) */
+    private val _messages = MutableStateFlow<List<DeviceMessage>>(emptyList())
+    val messages: StateFlow<List<DeviceMessage>> = _messages
+
+    /** Last sync timestamp */
+    private var lastSyncTime: Long = 0
+
     /** Cached device ID hash for this device */
-    private val deviceIdHash: String by lazy {
+    private val _deviceIdHash: String by lazy {
         prefs.getString(PREF_DEVICE_ID_HASH, null) ?: run {
             val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
             val hash = sha256(androidId ?: "unknown")
@@ -84,6 +107,9 @@ class TelemetryClient private constructor(
             hash
         }
     }
+
+    /** Public read-only access to device ID hash */
+    val deviceIdHash: String get() = _deviceIdHash
 
     init {
         startFlushTimer()
@@ -130,6 +156,14 @@ class TelemetryClient private constructor(
         }
 
         eventQueue.offer(event)
+
+        // Keep track of recent events for bug reports
+        synchronized(recentEvents) {
+            recentEvents.add(event)
+            while (recentEvents.size > 10) {
+                recentEvents.removeAt(0)
+            }
+        }
 
         // Flush immediately if we have a full batch
         if (eventQueue.size >= BATCH_SIZE) {
@@ -347,6 +381,196 @@ class TelemetryClient private constructor(
     }
 
     /**
+     * Submit a bug report to the server.
+     *
+     * @param category Bug category (connectivity, exchange, discovery, qr, performance, other)
+     * @param description User's description of the issue
+     * @param displayName User's chosen display name (if set)
+     * @param transportState Current transport state
+     * @param lastExchangeId Last exchange ID
+     * @param location Current location (if available)
+     * @return Bug report ID if successful, null otherwise
+     */
+    suspend fun submitBugReport(
+        category: String,
+        description: String,
+        displayName: String? = null,
+        transportState: String? = null,
+        lastExchangeId: String? = null,
+        location: LocationHelper.LocationData? = null
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val report = BugReport(
+                deviceIdHash = deviceIdHash,
+                category = category,
+                description = description,
+                appVersion = BuildConfig.VERSION_NAME,
+                osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+                deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
+                transportState = transportState,
+                lastExchangeId = lastExchangeId,
+                batteryLevel = getBatteryLevel(),
+                isPowerSave = isPowerSaveMode(),
+                displayName = displayName,
+                latitude = location?.latitude,
+                longitude = location?.longitude,
+                locationAccuracy = location?.accuracyMeters,
+                recentEvents = synchronized(recentEvents) { recentEvents.toList() }
+            )
+
+            val url = URL("$serverUrl/v1/bug-reports")
+            val connection = url.openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Authorization", "Bearer $apiToken")
+                connection.connectTimeout = CONNECTION_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
+                connection.doOutput = true
+                connection.doInput = true
+
+                OutputStreamWriter(connection.outputStream).use { writer ->
+                    writer.write(gson.toJson(report))
+                    writer.flush()
+                }
+
+                val responseCode = connection.responseCode
+                if (responseCode in 200..299) {
+                    val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                    val response = gson.fromJson(reader.readText(), BugReportResponse::class.java)
+                    Timber.i("Bug report submitted: ${response.id}")
+                    response.id
+                } else {
+                    Timber.w("Bug report submission failed: $responseCode")
+                    null
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to submit bug report")
+            null
+        }
+    }
+
+    /**
+     * Sync broadcasts and device messages from the server.
+     * Called after telemetry flush to piggyback on existing connection.
+     */
+    suspend fun sync(): SyncResponse? = withContext(Dispatchers.IO) {
+        if (!isEnabled()) return@withContext null
+
+        try {
+            val url = URL("$serverUrl/v1/sync?device_id_hash=$deviceIdHash")
+            val connection = url.openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("Authorization", "Bearer $apiToken")
+                connection.connectTimeout = CONNECTION_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
+
+                val responseCode = connection.responseCode
+                if (responseCode in 200..299) {
+                    val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                    val response = gson.fromJson(reader.readText(), SyncResponse::class.java)
+
+                    // Update cached broadcasts and messages
+                    response.broadcasts?.let { _broadcasts.value = it }
+                    response.messages?.let { _messages.value = it }
+
+                    lastSyncTime = System.currentTimeMillis()
+                    Timber.d("Sync complete: ${response.broadcasts?.size ?: 0} broadcasts, ${response.messages?.size ?: 0} messages")
+                    response
+                } else {
+                    Timber.w("Sync failed: $responseCode")
+                    null
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (e: Exception) {
+            Timber.w("Sync failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Mark a broadcast as read on the server.
+     */
+    suspend fun markBroadcastRead(broadcastId: String) = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$serverUrl/v1/broadcasts/$broadcastId/read?device_id_hash=$deviceIdHash")
+            val connection = url.openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Authorization", "Bearer $apiToken")
+                connection.connectTimeout = CONNECTION_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
+
+                val responseCode = connection.responseCode
+                if (responseCode !in 200..299) {
+                    Timber.w("Failed to mark broadcast read: $responseCode")
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (e: Exception) {
+            Timber.w("Failed to mark broadcast read: ${e.message}")
+        }
+    }
+
+    /**
+     * Mark a device message as read on the server.
+     */
+    suspend fun markMessageRead(messageId: String) = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$serverUrl/v1/messages/$messageId/read?device_id_hash=$deviceIdHash")
+            val connection = url.openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Authorization", "Bearer $apiToken")
+                connection.connectTimeout = CONNECTION_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
+
+                val responseCode = connection.responseCode
+                if (responseCode !in 200..299) {
+                    Timber.w("Failed to mark message read: $responseCode")
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (e: Exception) {
+            Timber.w("Failed to mark message read: ${e.message}")
+        }
+    }
+
+    private fun getBatteryLevel(): Int? {
+        return try {
+            val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            batteryIntent?.let {
+                val level = it.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                val scale = it.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                if (level >= 0 && scale > 0) (level * 100 / scale) else null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun isPowerSaveMode(): Boolean {
+        return try {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            powerManager.isPowerSaveMode
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Trigger an immediate flush of queued events.
      */
     fun flush() {
@@ -391,6 +615,11 @@ class TelemetryClient private constructor(
             // Reset backoff on success
             currentBackoffMs = INITIAL_BACKOFF_MS
             Timber.d("Sent ${batch.size} telemetry events")
+
+            // Piggyback sync on successful flush (every 5 minutes)
+            if (System.currentTimeMillis() - lastSyncTime > 5 * 60 * 1000) {
+                sync()
+            }
         } catch (e: Exception) {
             Timber.w("Failed to send telemetry: ${e.message}")
             // Re-queue events on failure (at front)

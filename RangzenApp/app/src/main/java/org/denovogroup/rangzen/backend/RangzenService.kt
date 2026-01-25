@@ -53,6 +53,14 @@ class RangzenService : Service() {
         const val ACTION_FORCE_EXCHANGE = "org.denovogroup.rangzen.action.FORCE_EXCHANGE"
         const val ACTION_SOFT_FORCE_EXCHANGE = "org.denovogroup.rangzen.action.SOFT_FORCE_EXCHANGE"
         private const val EXCHANGE_INTERVAL_MS = 15_000L // Exchange every 15 seconds
+
+        @Volatile
+        private var instance: RangzenService? = null
+
+        /**
+         * Get the running service instance, if any.
+         */
+        fun getServiceInstance(): RangzenService? = instance
     }
 
     private val binder = LocalBinder()
@@ -100,12 +108,34 @@ class RangzenService : Service() {
 
     enum class ServiceStatus { STOPPED, STARTING, DISCOVERING, EXCHANGING, IDLE }
 
+    /** Last exchange ID for bug reports */
+    private var lastExchangeId: String? = null
+
     inner class LocalBinder : Binder() {
         fun getService(): RangzenService = this@RangzenService
     }
 
+    /**
+     * Get current transport state for bug reports.
+     */
+    fun getTransportState(): String {
+        return when (_status.value) {
+            ServiceStatus.STOPPED -> "stopped"
+            ServiceStatus.STARTING -> "starting"
+            ServiceStatus.DISCOVERING -> "discovering"
+            ServiceStatus.EXCHANGING -> "exchanging"
+            ServiceStatus.IDLE -> "idle"
+        }
+    }
+
+    /**
+     * Get the last exchange ID for bug reports.
+     */
+    fun getLastExchangeId(): String? = lastExchangeId
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
         bleScanner = BleScanner(this)
         bleAdvertiser = BleAdvertiser(this)
         friendStore = FriendStore.getInstance(this)
@@ -1117,6 +1147,7 @@ class RangzenService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
+        instance = null
         stopAllOperations()
         serviceScope.cancel()
         super.onDestroy()

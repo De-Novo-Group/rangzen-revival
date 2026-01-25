@@ -72,6 +72,7 @@ class SettingsFragment : Fragment() {
 
         setupSettings()
         setupQaHelpIcon()
+        setupQaTools()
         loadStats()
         checkForPendingUpdate()
         setupShareApp()
@@ -214,6 +215,74 @@ class SettingsFragment : Fragment() {
         val qaEnabled = prefs.getBoolean("qa_mode", false)
         // Show help icon only when QA mode is ON
         binding.btnQaHelp.visibility = if (qaEnabled) View.VISIBLE else View.GONE
+        // Also update QA tools visibility
+        binding.cardQaTools.visibility = if (qaEnabled) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Sets up the QA tools section (bug report, inbox).
+     */
+    private fun setupQaTools() {
+        // Report Bug button
+        binding.btnReportBug.setOnClickListener {
+            startActivity(Intent(requireContext(), BugReportActivity::class.java))
+        }
+
+        // QA Inbox button - shows broadcasts and messages
+        binding.btnQaInbox.setOnClickListener {
+            showQaInbox()
+        }
+
+        // Update inbox count badge
+        updateInboxBadge()
+    }
+
+    private fun showQaInbox() {
+        val telemetry = TelemetryClient.getInstance() ?: return
+
+        // Trigger a sync to get latest messages
+        CoroutineScope(Dispatchers.IO).launch {
+            telemetry.sync()
+
+            activity?.runOnUiThread {
+                // Only show device messages (replies to bug reports) here.
+                // Broadcasts now appear in the main feed.
+                val messages = telemetry.messages.value
+
+                if (messages.isEmpty()) {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Bug Report Replies")
+                        .setMessage("No replies to your bug reports yet.\n\nBroadcasts now appear in the main feed.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                } else {
+                    val items = messages.map { "[Reply] ${it.message}" }.toTypedArray()
+
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Bug Report Replies (${messages.size})")
+                        .setItems(items) { _, index ->
+                            // Mark as read when tapped
+                            CoroutineScope(Dispatchers.IO).launch {
+                                telemetry.markMessageRead(messages[index].id)
+                            }
+                        }
+                        .setPositiveButton("Close", null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun updateInboxBadge() {
+        val telemetry = TelemetryClient.getInstance() ?: return
+        // Only count device messages (replies), not broadcasts
+        val count = telemetry.messages.value.size
+        if (count > 0) {
+            binding.textInboxCount.text = "$count replies"
+            binding.textInboxCount.visibility = View.VISIBLE
+        } else {
+            binding.textInboxCount.visibility = View.GONE
+        }
     }
 
     private fun loadStats() {

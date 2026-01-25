@@ -81,6 +81,12 @@
             android:exported="false"
             android:theme="@style/Theme.Rangzen" />
 
+        <!-- Bug Report Activity for QA testers -->
+        <activity
+            android:name=".ui.BugReportActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Rangzen" />
+
         <!-- Rangzen background service -->
         <service
             android:name=".backend.RangzenService"
