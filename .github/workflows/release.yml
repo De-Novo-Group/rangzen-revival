@@ -1,0 +1,57 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on v0.2.35, v1.0.0, etc.
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v3
+
+      - name: Build debug APK
+        working-directory: ./RangzenApp
+        run: ./gradlew assembleDebug
+
+      - name: Get version info
+        id: version
+        run: |
+          VERSION_NAME=$(grep "versionName" RangzenApp/app/build.gradle | grep -o '"[^"]*"' | tr -d '"' | head -1)
+          VERSION_CODE=$(grep "versionCode" RangzenApp/app/build.gradle | grep -oE '[0-9]+' | head -1)
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Murmur ${{ steps.version.outputs.version_name }}
+          body: |
+            ## Murmur ${{ steps.version.outputs.version_name }} (build ${{ steps.version.outputs.version_code }})
+
+            ### Installation
+            1. Download the APK below
+            2. Enable "Install from unknown sources" in Android settings
+            3. Open the APK to install
+
+            ### Requirements
+            - Android 8.0 (Oreo) or higher
+            - Bluetooth and WiFi permissions
+
+            ### Changes
+            See commit history for detailed changes.
+          files: |
+            RangzenApp/app/build/outputs/apk/debug/app-debug.apk
+          generate_release_notes: true
