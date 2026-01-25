@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Speech bubble shape - white fill -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,20 C32,20 24,32 24,48 C24,64 32,72 48,72 L48,72 L38,84 L56,72 C76,72 84,64 84,48 C84,32 76,20 54,20 Z"/>
+
+    <!-- Letter "m" in purple/blue gradient color -->
+    <path
+        android:fillColor="#667eea"
+        android:pathData="M36,58 L36,42 L40,42 L40,44 C41,42.5 43,41 46,41 C49,41 51,42.5 52,44.5 C53.5,42.5 56,41 59,41 C63,41 66,44 66,48 L66,58 L62,58 L62,49 C62,46.5 60.5,45 58,45 C55.5,45 54,46.5 54,49 L54,58 L50,58 L50,49 C50,46.5 48.5,45 46,45 C43.5,45 42,46.5 42,49 L42,58 Z"/>
+</vector>
