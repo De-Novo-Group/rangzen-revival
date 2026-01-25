@@ -87,6 +87,15 @@
             android:exported="false"
             android:theme="@style/Theme.Rangzen" />
 
+        <!-- QR Scanner Activity locked to portrait mode -->
+        <activity
+            android:name=".ui.PortraitCaptureActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:stateNotNeeded="true"
+            android:theme="@style/zxing_CaptureTheme"
+            android:windowSoftInputMode="stateAlwaysHidden" />
+
         <!-- Rangzen background service -->
         <service
             android:name=".backend.RangzenService"

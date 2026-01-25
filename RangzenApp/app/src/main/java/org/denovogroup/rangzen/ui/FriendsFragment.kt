@@ -122,11 +122,12 @@ class FriendsFragment : Fragment() {
     }
 
     private fun scanFriendQR() {
-        // Use ZXing scanner
+        // Use ZXing scanner with portrait-locked activity
         IntentIntegrator.forSupportFragment(this)
             .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
             .setPrompt("Scan your friend's Murmur QR code")
             .setBeepEnabled(false)
+            .setCaptureActivity(PortraitCaptureActivity::class.java)
             .initiateScan()
     }
 
