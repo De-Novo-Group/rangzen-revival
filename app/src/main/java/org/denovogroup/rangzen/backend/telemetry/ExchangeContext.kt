@@ -1,6 +1,7 @@
 package org.denovogroup.rangzen.backend.telemetry
 
 import android.content.Context
+import java.util.UUID
 
 /**
  * Tracks state throughout an exchange for rich telemetry.
@@ -11,10 +12,17 @@ class ExchangeContext(
     val peerIdHash: String,
     private val appContext: Context
 ) {
+    /** Unique ID for this exchange */
+    val exchangeId: String = UUID.randomUUID().toString()
+
     var currentStage: ExchangeStage = ExchangeStage.DISCOVERY
         private set
 
     val startTime: Long = System.currentTimeMillis()
+
+    // Phase timing - recorded when stages are reached
+    private var connectTime: Long? = null      // When CONNECTED reached
+    private var transferStartTime: Long? = null // When SENDING_MESSAGES reached
 
     // Signal quality
     var rssi: Int? = null
@@ -34,10 +42,18 @@ class ExchangeContext(
     var retryCount: Int = 0
 
     /**
-     * Advance to the next stage.
+     * Advance to the next stage and record timing for key phases.
      */
     fun advanceStage(stage: ExchangeStage) {
         currentStage = stage
+        val now = System.currentTimeMillis()
+
+        // Record timing for key phases
+        when (stage) {
+            ExchangeStage.CONNECTED -> connectTime = now
+            ExchangeStage.SENDING_MESSAGES -> transferStartTime = now
+            else -> { /* No timing for other stages */ }
+        }
     }
 
     /**
@@ -49,13 +65,24 @@ class ExchangeContext(
      * Build the payload for a successful exchange.
      */
     fun buildSuccessPayload(): Map<String, Any> {
+        val endTime = System.currentTimeMillis()
         val payload = mutableMapOf<String, Any>(
-            "duration_ms" to getDurationMs(),
+            "exchange_id" to exchangeId,
+            "duration_total_ms" to (endTime - startTime),
             "final_stage" to currentStage.code,
             "messages_sent" to messagesSent,
             "messages_received" to messagesReceived,
             "mutual_friends" to mutualFriends
         )
+
+        // Add phase timing breakdown if available
+        connectTime?.let { ct ->
+            payload["duration_discovery_ms"] = ct - startTime
+            transferStartTime?.let { tst ->
+                payload["duration_connect_ms"] = tst - ct
+                payload["duration_transfer_ms"] = endTime - tst
+            }
+        }
 
         // Add bytes if tracked
         if (bytesSent > 0) payload["bytes_sent"] = bytesSent
@@ -91,12 +118,23 @@ class ExchangeContext(
      * Build the payload for a failed exchange with explicit category.
      */
     fun buildFailurePayload(category: ErrorCategory, errorMessage: String): Map<String, Any> {
+        val endTime = System.currentTimeMillis()
         val payload = mutableMapOf<String, Any>(
-            "duration_ms" to getDurationMs(),
+            "exchange_id" to exchangeId,
+            "duration_total_ms" to (endTime - startTime),
             "failed_stage" to currentStage.code,
             "error_category" to category.code,
-            "error_message" to errorMessage.take(500) // Allow longer messages than before
+            "error_message" to errorMessage.take(500)
         )
+
+        // Add phase timing breakdown if available
+        connectTime?.let { ct ->
+            payload["duration_discovery_ms"] = ct - startTime
+            transferStartTime?.let { tst ->
+                payload["duration_connect_ms"] = tst - ct
+                payload["duration_transfer_ms"] = endTime - tst
+            }
+        }
 
         // Add retry count if retried
         if (retryCount > 0) payload["retry_count"] = retryCount
