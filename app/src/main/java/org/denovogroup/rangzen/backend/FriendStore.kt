@@ -347,6 +347,23 @@ class FriendStore private constructor(context: Context) :
     }
 
     /**
+     * Get a friend's nickname by their public ID.
+     * Returns null if friend not found or has no nickname.
+     */
+    fun getFriendNickname(publicIdBase64: String): String? {
+        val cursor = readableDatabase.query(
+            TABLE_FRIENDS,
+            arrayOf(COL_NICKNAME),
+            "$COL_PUBLIC_ID = ?",
+            arrayOf(publicIdBase64),
+            null, null, null
+        )
+        return cursor.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        }
+    }
+
+    /**
      * Get friend count.
      */
     fun getFriendCount(): Int {

@@ -729,7 +729,10 @@ class BlePairingFragment : Fragment() {
         // Check if already friends - skip nickname prompt if so
         if (friendStore.hasFriend(session.peerPublicId!!)) {
             Timber.i("$TAG: Already friends with ${session.peerShortId}")
-            binding.textFriendName.text = getString(R.string.pairing_already_friends_format, session.peerShortId)
+            // Show their nickname if they have one, otherwise show shortId
+            val displayName = friendStore.getFriendNickname(session.peerPublicId!!)
+                ?: session.peerShortId ?: "this person"
+            binding.textFriendName.text = getString(R.string.pairing_already_friends_format, displayName)
             showState(State.SUCCESS)
             return
         }

@@ -100,7 +100,7 @@
     <string name="pairing_show_code_hint">Show this code to your friend.\nThey\'ll enter it on their phone.</string>
     <string name="pairing_see_nearby">See Nearby Devices</string>
 
-    <string name="pairing_select_device">Select the device showing your code:</string>
+    <string name="pairing_select_device">Select your friend\'s device:</string>
     <string name="pairing_searching">Searching for nearby devices\u2026</string>
     <string name="pairing_device_format">Device %1$s</string>
     <string name="pairing_code_format">Code: %1$s</string>
