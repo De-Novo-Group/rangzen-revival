@@ -72,6 +72,11 @@ OLD-rangzen-production-old/
 # Archive folder (internal docs, proposals, etc.)
 archive/
 
+# Agent instructions (internal)
+AGENTS.md
+*.md
+!RangzenApp/**/*.md
+
 # OTA APK storage (local builds)
 ota-apks/
 
