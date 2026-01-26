@@ -106,6 +106,15 @@ jobs:
           SHA256=$(sha256sum "$APK_PATH" | cut -d' ' -f1)
           SIZE=$(stat -c%s "$APK_PATH")
 
+          # Extract release notes from commit message (skip first line which is the title)
+          RELEASE_NOTES=$(git log -1 --format=%b)
+          if [ -z "$RELEASE_NOTES" ]; then
+            RELEASE_NOTES="Release $VERSION_NAME"
+          fi
+          # Escape for JSON
+          RELEASE_NOTES_ESCAPED=$(echo "$RELEASE_NOTES" | jq -Rs .)
+          echo "release_notes=$RELEASE_NOTES_ESCAPED" >> $GITHUB_OUTPUT
+
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
@@ -192,7 +201,8 @@ jobs:
               "apk_url": "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/murmur-${{ steps.version.outputs.version_name }}.apk",
               "docs_url": "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/docs.zip",
               "tag": "${{ github.ref_name }}",
-              "run_id": "${{ github.run_id }}"
+              "run_id": "${{ github.run_id }}",
+              "release_notes": ${{ steps.version.outputs.release_notes }}
             }
 
       - name: Summary
