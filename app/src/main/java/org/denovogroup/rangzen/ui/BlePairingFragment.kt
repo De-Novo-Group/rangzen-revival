@@ -36,6 +36,7 @@ import org.denovogroup.rangzen.backend.ble.BleScanner
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
 import org.denovogroup.rangzen.databinding.FragmentBlePairingBinding
 import timber.log.Timber
+import java.util.Locale
 
 /**
  * Fragment for BLE-based mutual-code friend pairing.
@@ -46,6 +47,14 @@ class BlePairingFragment : Fragment() {
         private const val TAG = "BlePairingFragment"
 
         fun newInstance(): BlePairingFragment = BlePairingFragment()
+
+        /**
+         * Apply Western locale to a TextView to ensure digits display as 0-9.
+         * This forces the system to use Western numerals regardless of device locale.
+         */
+        fun applyWesternLocale(textView: TextView) {
+            textView.textLocale = Locale.US
+        }
     }
 
     private var _binding: FragmentBlePairingBinding? = null
@@ -105,9 +114,21 @@ class BlePairingFragment : Fragment() {
         friendStore = FriendStore.getInstance(requireContext())
         bleScanner = BleScanner(requireContext())
 
+        setupCodeTextViews()
         setupListeners()
         setupDeviceList()
         startPairingSession()
+    }
+
+    /**
+     * Apply Western locale to all code-displaying TextViews.
+     * This ensures digits are displayed as 0-9 regardless of device locale.
+     */
+    private fun setupCodeTextViews() {
+        applyWesternLocale(binding.textMyCode)
+        applyWesternLocale(binding.textMyCodeSmall)
+        applyWesternLocale(binding.textMyCodeEnterScreen)
+        applyWesternLocale(binding.textMyCodeVerifying)
     }
 
     override fun onDestroyView() {
@@ -812,6 +833,11 @@ class NearbyDeviceAdapter(
         private val textDeviceId: TextView = itemView.findViewById(R.id.text_device_id)
         private val textDeviceCode: TextView = itemView.findViewById(R.id.text_device_code)
         private val textRssi: TextView = itemView.findViewById(R.id.text_rssi)
+
+        init {
+            // Ensure code displays with Western numerals (0-9) regardless of device locale
+            textDeviceCode.textLocale = Locale.US
+        }
 
         fun bind(peer: DisplayPeer) {
             textDeviceId.text = peer.shortId  // Just the hex ID, small and subtle
