@@ -230,6 +230,12 @@ class LocationHelper(private val context: Context) {
         val source: String
     ) {
         /**
+         * Heuristic for indoor detection based on accuracy.
+         * Poor accuracy (>50m) often indicates indoor/obstructed GPS.
+         */
+        val isIndoor: Boolean get() = accuracyMeters > 50f
+
+        /**
          * Convert to a map for telemetry payload.
          */
         fun toTelemetryMap(): Map<String, Any> {
@@ -237,8 +243,7 @@ class LocationHelper(private val context: Context) {
                 KEY_LATITUDE to latitude,
                 KEY_LONGITUDE to longitude,
                 KEY_ACCURACY to accuracyMeters,
-                KEY_LOCATION_AGE_MS to ageMs,
-                KEY_LOCATION_SOURCE to source
+                "is_indoor" to isIndoor
             )
         }
     }

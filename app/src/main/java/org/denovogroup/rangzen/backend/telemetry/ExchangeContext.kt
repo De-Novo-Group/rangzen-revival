@@ -41,6 +41,9 @@ class ExchangeContext(
     // Retry tracking
     var retryCount: Int = 0
 
+    // Location (if permission granted)
+    var location: LocationHelper.LocationData? = null
+
     /**
      * Advance to the next stage and record timing for key phases.
      */
@@ -90,6 +93,9 @@ class ExchangeContext(
 
         // Add trust score if computed
         trustScore?.let { payload["trust_score"] = it }
+
+        // Add location if available (only when permission granted)
+        location?.let { payload["location"] = it.toTelemetryMap() }
 
         // Add signal quality
         val signalQuality = buildSignalQualityMap()
