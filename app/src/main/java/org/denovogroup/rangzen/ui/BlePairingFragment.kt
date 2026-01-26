@@ -454,26 +454,35 @@ class BlePairingFragment : Fragment() {
                 Timber.i("$TAG: Received VERIFY from $address")
                 val parsed = BlePairingProtocol.parseVerifyMessage(data)
                 if (parsed != null) {
-                    val (theirCode, theirShortId, enteredCode) = parsed
-                    Timber.i("$TAG: VERIFY parsed - theirCode=$theirCode, theirShortId=$theirShortId, enteredCode=$enteredCode, myCode=${session.myCode}")
+                    Timber.i("$TAG: VERIFY parsed - theirCode=${parsed.theirCode}, theirShortId=${parsed.theirShortId}, enteredCode=${parsed.enteredCode}, myCode=${session.myCode}")
 
                     // Check if they entered our code correctly
-                    if (enteredCode == session.myCode) {
+                    if (parsed.enteredCode == session.myCode) {
                         // They verified us correctly! Remember this
-                        peersWhoVerifiedUs[address] = theirCode
-                        Timber.i("$TAG: Peer $address verified us correctly, their code is $theirCode")
+                        peersWhoVerifiedUs[address] = parsed.theirCode
+                        Timber.i("$TAG: Peer $address verified us correctly, their code is ${parsed.theirCode}")
 
                         // Check if we've verified them (either through UI or they're the selected peer)
-                        val weVerifiedThem = session.peerCode == theirCode ||
-                            (selectedPairingPeer?.code == theirCode && selectedPeer?.address == address)
+                        val weVerifiedThem = session.peerCode == parsed.theirCode ||
+                            (selectedPairingPeer?.code == parsed.theirCode)
                         Timber.i("$TAG: weVerifiedThem=$weVerifiedThem, session.peerCode=${session.peerCode}, selectedPairingPeer?.code=${selectedPairingPeer?.code}")
 
                         if (weVerifiedThem) {
                             // Both verified! Send confirmation with our public ID
                             session.verified = true
-                            session.peerShortId = theirShortId
-                            session.peerCode = theirCode
-                            Timber.i("$TAG: Mutual verification complete! Sending CONFIRM")
+                            session.peerShortId = parsed.theirShortId
+                            session.peerCode = parsed.theirCode
+
+                            // If their VERIFY includes their public ID, we can complete locally!
+                            if (parsed.theirPublicId != null) {
+                                session.peerPublicId = parsed.theirPublicId
+                                Timber.i("$TAG: Mutual verification complete with public ID! Completing locally.")
+                                activity?.runOnUiThread {
+                                    onPairingComplete()
+                                }
+                            } else {
+                                Timber.i("$TAG: Mutual verification complete (no public ID in VERIFY). Sending CONFIRM.")
+                            }
                             BlePairingProtocol.createConfirmMessage(session)
                         } else {
                             // We haven't verified them yet, send announce so they know we're active
@@ -482,7 +491,7 @@ class BlePairingFragment : Fragment() {
                         }
                     } else {
                         // Wrong code
-                        Timber.w("$TAG: Peer entered wrong code: $enteredCode vs ${session.myCode}")
+                        Timber.w("$TAG: Peer entered wrong code: ${parsed.enteredCode} vs ${session.myCode}")
                         BlePairingProtocol.createRejectMessage("invalid_code")
                     }
                 } else {

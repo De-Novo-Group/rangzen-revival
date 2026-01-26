@@ -145,6 +145,7 @@ object BlePairingProtocol {
     /**
      * Create a pairing verification message.
      * Sent when user has entered the code from the other device.
+     * Includes our public ID so the receiver can complete immediately upon sending CONFIRM.
      */
     fun createVerifyMessage(session: PairingSession, enteredCode: String): ByteArray {
         val json = JSONObject().apply {
@@ -152,6 +153,7 @@ object BlePairingProtocol {
             put("type", MSG_PAIRING_VERIFY)
             put("my_code", session.myCode)
             put("my_short_id", session.myShortId)
+            put("my_public_id", session.myPublicId)  // Include public ID for immediate completion
             put("entered_code", enteredCode)  // Code we entered (should match their myCode)
             put("ts", System.currentTimeMillis())
         }
@@ -159,19 +161,30 @@ object BlePairingProtocol {
     }
 
     /**
-     * Parse a verification message and check if codes match.
-     * Returns (theirCode, theirShortId, enteredCode) or null if invalid.
+     * Data class for parsed VERIFY message.
      */
-    fun parseVerifyMessage(data: ByteArray): Triple<String, String, String>? {
+    data class VerifyMessageData(
+        val theirCode: String,
+        val theirShortId: String,
+        val theirPublicId: String?,  // May be null for older clients
+        val enteredCode: String
+    )
+
+    /**
+     * Parse a verification message and check if codes match.
+     * Returns VerifyMessageData or null if invalid.
+     */
+    fun parseVerifyMessage(data: ByteArray): VerifyMessageData? {
         return try {
             val json = JSONObject(String(data, Charsets.UTF_8))
             if (json.optString("type") != MSG_PAIRING_VERIFY) return null
 
             val theirCode = json.getString("my_code")
             val theirShortId = json.getString("my_short_id")
+            val theirPublicId = json.optString("my_public_id").ifEmpty { null }
             val enteredCode = json.getString("entered_code")
 
-            Triple(theirCode, theirShortId, enteredCode)
+            VerifyMessageData(theirCode, theirShortId, theirPublicId, enteredCode)
         } catch (e: Exception) {
             Timber.e(e, "Failed to parse verify message")
             null
