@@ -9,7 +9,12 @@ package org.denovogroup.rangzen.backend.wifi
 import kotlinx.coroutines.*
 import org.denovogroup.rangzen.backend.discovery.PeerHandshake
 import org.denovogroup.rangzen.backend.discovery.TransportType
+import org.denovogroup.rangzen.backend.telemetry.ErrorCategory
+import org.denovogroup.rangzen.backend.telemetry.ErrorClassifier
+import org.denovogroup.rangzen.backend.telemetry.ExchangeContext
+import org.denovogroup.rangzen.backend.telemetry.ExchangeStage
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import timber.log.Timber
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -141,92 +146,120 @@ class WifiDirectTransport {
     /**
      * Connect to a peer's server as a client.
      * Call this when we're not the group owner and want to exchange with the GO.
-     * 
+     *
      * @param groupOwnerAddress IP address of the WiFi Direct group owner
      * @param localPublicId Our public identifier
      * @param data Data to send for exchange
+     * @param context Android context for telemetry (optional)
      * @return Response data from the peer, or null on failure
      */
     suspend fun connectAndExchange(
         groupOwnerAddress: InetAddress,
         localPublicId: String,
-        data: ByteArray
+        data: ByteArray,
+        context: android.content.Context? = null
     ): ExchangeResult? = withContext(Dispatchers.IO) {
         var socket: Socket? = null
+        val peerIdHash = groupOwnerAddress.hostAddress?.take(16) ?: "unknown"
+        val exchangeCtx = context?.let { ExchangeContext.create("wifi_direct", peerIdHash, it) }
+
         try {
             Timber.i("$TAG: Connecting to ${groupOwnerAddress.hostAddress}:$TRANSPORT_PORT")
+            exchangeCtx?.advanceStage(ExchangeStage.CONNECTING)
             trackTelemetry("client_connecting", "address" to groupOwnerAddress.hostAddress.orEmpty())
-            
+
             socket = Socket()
             socket.connect(
                 InetSocketAddress(groupOwnerAddress, TRANSPORT_PORT),
                 CONNECT_TIMEOUT_MS
             )
             socket.soTimeout = READ_TIMEOUT_MS
-            
+            exchangeCtx?.advanceStage(ExchangeStage.CONNECTED)
+
             Timber.i("$TAG: Connected, performing handshake")
-            
+
             val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
             val output = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
-            
+
+            exchangeCtx?.advanceStage(ExchangeStage.PROTOCOL_VERSION)
+
             // Send handshake
             val handshake = PeerHandshake.createHandshake(
                 publicId = localPublicId,
                 availableTransports = listOf(TransportType.WIFI_DIRECT, TransportType.BLE)
             )
             sendMessage(output, MSG_HANDSHAKE, PeerHandshake.encode(handshake))
-            
+
             // Receive handshake response
             val (peerMsgType, peerHandshakeBytes) = receiveMessage(input)
             if (peerMsgType != MSG_HANDSHAKE) {
                 Timber.e("$TAG: Expected handshake, got type $peerMsgType")
+                exchangeCtx?.let {
+                    TelemetryClient.getInstance()?.trackExchangeFailure(it, ErrorCategory.UNEXPECTED_RESPONSE, "Expected handshake, got type $peerMsgType")
+                }
                 return@withContext null
             }
-            
+
             val peerHandshake = PeerHandshake.decode(peerHandshakeBytes)
             if (peerHandshake == null) {
                 Timber.e("$TAG: Failed to decode peer handshake")
+                exchangeCtx?.let {
+                    TelemetryClient.getInstance()?.trackExchangeFailure(it, ErrorCategory.MESSAGE_PARSE_ERROR, "Failed to decode peer handshake")
+                }
                 return@withContext null
             }
-            
+
             Timber.i("$TAG: Handshake complete with peer: ${peerHandshake.publicId}")
             trackTelemetry("handshake_complete", "peer_id" to peerHandshake.publicId)
-            
+
+            exchangeCtx?.advanceStage(ExchangeStage.SENDING_MESSAGES)
+            exchangeCtx?.bytesSent = data.size.toLong()
+
             // Send data
             sendMessage(output, MSG_DATA, data)
             Timber.i("$TAG: Sent ${data.size} bytes")
-            
+
+            exchangeCtx?.advanceStage(ExchangeStage.RECEIVING_MESSAGES)
+
             // Receive response
             val (responseMsgType, responseData) = receiveMessage(input)
             if (responseMsgType == MSG_ERROR) {
                 Timber.e("$TAG: Peer returned error: ${String(responseData)}")
+                exchangeCtx?.let {
+                    TelemetryClient.getInstance()?.trackExchangeFailure(it, ErrorCategory.UNEXPECTED_RESPONSE, "Peer error: ${String(responseData).take(100)}")
+                }
                 return@withContext null
             }
             if (responseMsgType != MSG_DATA) {
                 Timber.e("$TAG: Expected data response, got type $responseMsgType")
+                exchangeCtx?.let {
+                    TelemetryClient.getInstance()?.trackExchangeFailure(it, ErrorCategory.UNEXPECTED_RESPONSE, "Expected data, got type $responseMsgType")
+                }
                 return@withContext null
             }
-            
+
+            exchangeCtx?.bytesReceived = responseData.size.toLong()
+            exchangeCtx?.advanceStage(ExchangeStage.COMPLETE)
+
             Timber.i("$TAG: Received ${responseData.size} bytes response")
-            trackTelemetry(
-                "exchange_complete",
-                "peer_id" to peerHandshake.publicId,
-                "sent_bytes" to data.size.toString(),
-                "received_bytes" to responseData.size.toString()
-            )
-            
+
+            // Track success with rich context
+            exchangeCtx?.let { TelemetryClient.getInstance()?.trackExchangeSuccess(it) }
+
             ExchangeResult(
                 peerPublicId = peerHandshake.publicId,
                 responseData = responseData
             )
-            
+
         } catch (e: SocketTimeoutException) {
             Timber.e(e, "$TAG: Connection timed out")
-            trackTelemetry("client_timeout")
+            exchangeCtx?.let { TelemetryClient.getInstance()?.trackExchangeFailure(it, e) }
+                ?: trackTelemetry("client_timeout")
             null
         } catch (e: IOException) {
             Timber.e(e, "$TAG: Connection error")
-            trackTelemetry("client_error", "error" to e.message.orEmpty())
+            exchangeCtx?.let { TelemetryClient.getInstance()?.trackExchangeFailure(it, e) }
+                ?: trackTelemetry("client_error", "error" to e.message.orEmpty())
             null
         } finally {
             socket?.close()

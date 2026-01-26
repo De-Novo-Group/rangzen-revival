@@ -43,6 +43,12 @@
     <!-- Peer status dot -->
     <color name="peer_active">#22C55E</color>         <!-- Green dot for active peers -->
 
+    <!-- Transport indicator colors -->
+    <color name="transport_bt">#3B82F6</color>        <!-- Blue - Bluetooth -->
+    <color name="transport_wd">#F97316</color>        <!-- Orange - WiFi Direct -->
+    <color name="transport_lan">#22C55E</color>       <!-- Green - LAN/WiFi -->
+    <color name="transport_count">#A1A1AA</color>     <!-- Medium gray - peer counts -->
+
     <!-- Broadcast colors - distinctive orange for team messages -->
     <color name="broadcast_orange">#F97316</color>    <!-- Vivid orange for broadcasts -->
     <color name="broadcast_bg">#1C1510</color>        <!-- Dark orange-tinted background -->

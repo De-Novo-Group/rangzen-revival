@@ -27,6 +27,8 @@ import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.NotificationHelper
 import org.denovogroup.rangzen.backend.RangzenService
+import org.denovogroup.rangzen.backend.discovery.TransportType
+import org.denovogroup.rangzen.backend.discovery.UnifiedPeer
 import org.denovogroup.rangzen.backend.telemetry.Broadcast
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.databinding.FragmentFeedBinding
@@ -319,10 +321,9 @@ class FeedFragment : Fragment() {
 
     private fun observeServiceStatus() {
         viewLifecycleOwner.lifecycleScope.launch {
-            rangzenService?.peers?.collectLatest { peers ->
-                // Currently only BLE peers are tracked in this flow.
-                // TODO: Expose unified peer registry to show LAN/WD counts.
-                updateStatusText(peers.size)
+            rangzenService?.unifiedPeers?.collectLatest { unifiedPeers ->
+                // Real transport counts from unified peer registry.
+                updateStatusText(unifiedPeers)
             }
         }
     }
@@ -368,7 +369,9 @@ class FeedFragment : Fragment() {
         feedPrefs.edit().putStringSet("hidden_message_ids", ids.toSet()).apply()
     }
 
-    private fun updateStatusText(peerCount: Int) {
+    private fun updateStatusText(unifiedPeers: List<UnifiedPeer>) {
+        val peerCount = unifiedPeers.size
+
         // Show peer count and update status dot color.
         // Status dot: green when peers found, gray otherwise.
         binding.statusDot.backgroundTintList = android.content.res.ColorStateList.valueOf(
@@ -377,33 +380,31 @@ class FeedFragment : Fragment() {
                 null
             )
         )
-        
+
         binding.statusText.text = if (peerCount > 0) {
             "$peerCount peers nearby"
         } else {
             getString(R.string.status_discovering)
         }
-        
-        // Update transport breakdown icons.
-        // TODO: Wire to real transport counts from unified peer registry.
-        // For now, show placeholder breakdown when peers are found.
-        updateTransportBreakdown(peerCount)
+
+        // Update transport breakdown icons with real counts.
+        updateTransportBreakdown(unifiedPeers)
     }
-    
+
     /**
      * Update the transport breakdown icons (BT, WD, LAN).
-     * Shows small icons with counts for each transport type.
-     * 
-     * Currently uses placeholder logic - will be wired to real
-     * DiscoveredPeerRegistry data later.
+     * Shows small icons with counts for each active transport type.
+     *
+     * Calculates real counts from the unified peer list - each peer may
+     * be reachable via multiple transports simultaneously.
      */
-    private fun updateTransportBreakdown(totalPeers: Int) {
-        // Placeholder: distribute peers across transports for demo.
-        // TODO: Replace with real data from DiscoveredPeerRegistry.getTransportCounts()
-        val btCount = if (totalPeers > 0) totalPeers else 0  // BLE is primary
-        val wdCount = 0  // WiFi Direct count (placeholder)
-        val lanCount = 0  // LAN count (placeholder)
-        
+    private fun updateTransportBreakdown(unifiedPeers: List<UnifiedPeer>) {
+        // Count peers reachable via each transport type.
+        // A peer can be counted in multiple transports if reachable via both.
+        val btCount = unifiedPeers.count { it.hasTransport(TransportType.BLE) }
+        val wdCount = unifiedPeers.count { it.hasTransport(TransportType.WIFI_DIRECT) }
+        val lanCount = unifiedPeers.count { it.hasTransport(TransportType.LAN) }
+
         // Show BT icon and count if peers found via Bluetooth.
         if (btCount > 0) {
             binding.iconBt.visibility = View.VISIBLE
@@ -413,7 +414,7 @@ class FeedFragment : Fragment() {
             binding.iconBt.visibility = View.GONE
             binding.countBt.visibility = View.GONE
         }
-        
+
         // Show WD icon and count if peers found via WiFi Direct.
         if (wdCount > 0) {
             binding.iconWd.visibility = View.VISIBLE
@@ -423,7 +424,7 @@ class FeedFragment : Fragment() {
             binding.iconWd.visibility = View.GONE
             binding.countWd.visibility = View.GONE
         }
-        
+
         // Show LAN icon and count if peers found via LAN/hotspot.
         if (lanCount > 0) {
             binding.iconLan.visibility = View.VISIBLE

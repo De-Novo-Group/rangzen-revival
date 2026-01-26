@@ -30,7 +30,12 @@ import org.denovogroup.rangzen.backend.NotificationHelper
 import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeCodec
 import org.denovogroup.rangzen.backend.legacy.LegacyExchangeMath
+import org.denovogroup.rangzen.backend.telemetry.ErrorCategory
+import org.denovogroup.rangzen.backend.telemetry.ErrorClassifier
+import org.denovogroup.rangzen.backend.telemetry.ExchangeContext
+import org.denovogroup.rangzen.backend.telemetry.ExchangeStage
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.denovogroup.rangzen.objects.RangzenMessage
 import org.json.JSONArray
 import org.json.JSONObject
@@ -357,20 +362,27 @@ class LanTransport {
         messageStore: MessageStore,
         friendStore: FriendStore
     ): ExchangeResult = withContext(Dispatchers.IO) {
-        val startTime = System.currentTimeMillis()
+        val peerIdHash = peer.deviceId.take(16)
+        val exchangeCtx = ExchangeContext.create("lan", peerIdHash, context)
         var socket: Socket? = null
-        
+
         try {
             Timber.i("Starting LAN exchange (PSI) with ${peer.deviceId.take(8)}... at ${peer.ipAddress.hostAddress}")
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.CONNECTING)
+
             // Connect to peer
             socket = Socket()
             socket.connect(InetSocketAddress(peer.ipAddress, peer.port), HANDSHAKE_TIMEOUT_MS)
             socket.soTimeout = EXCHANGE_TIMEOUT_MS
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.CONNECTED)
+
             val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
             val output = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.PROTOCOL_VERSION)
+
             // Step 1: Send handshake
             val nonce = generateNonce()
             val handshake = JSONObject().apply {
@@ -379,36 +391,40 @@ class LanTransport {
                 put("version", PROTOCOL_VERSION)
             }
             writeFrame(output, handshake.toString().toByteArray(Charsets.UTF_8))
-            
+
             // Step 2: Read handshake response
             val responseFrame = readFrame(input)
             val response = JSONObject(String(responseFrame, Charsets.UTF_8))
             val peerDeviceId = response.optString("device_id")
             val echoedNonce = response.optString("nonce")
-            
+
             if (echoedNonce != nonce) {
                 throw IOException("Nonce mismatch - possible MITM")
             }
-            
+
             Timber.d("LAN handshake verified with peer: ${peerDeviceId.take(8)}...")
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.PSI_INIT)
+
             // Step 3: PSI - Send our blinded friends
             val useTrust = SecurityManager.useTrust(context)
             val localFriends = friendStore.getAllFriendIds()
             val clientPSI = Crypto.PrivateSetIntersection(localFriends)
             val serverPSI = Crypto.PrivateSetIntersection(localFriends)
-            
+
             val ourBlindedFriends = if (useTrust) {
                 clientPSI.encodeBlindedItems()
             } else {
                 emptyList()
             }
-            
+
             val clientFriendsJson = JSONObject().apply {
                 put("blinded_friends", encodeBlindedFriends(ourBlindedFriends))
             }
             writeFrame(output, clientFriendsJson.toString().toByteArray(Charsets.UTF_8))
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.PSI_EXCHANGE)
+
             // Step 4: Read server's blinded friends
             val serverFriendsFrame = readFrame(input)
             val serverFriendsJson = JSONObject(String(serverFriendsFrame, Charsets.UTF_8))
@@ -417,13 +433,13 @@ class LanTransport {
             } else {
                 emptyList()
             }
-            
+
             // Step 5: Read server's reply
             val serverReplyFrame = readFrame(input)
             val serverReplyJson = JSONObject(String(serverReplyFrame, Charsets.UTF_8))
             val remoteDoubleBlinded = decodeBlindedFriends(serverReplyJson.optJSONArray("double_blinded"))
             val remoteHashedBlinded = decodeBlindedFriends(serverReplyJson.optJSONArray("hashed_blinded"))
-            
+
             // Step 6: Compute and send our reply
             val clientReply = serverPSI.replyToBlindedItems(ArrayList(remoteBlindedFriends))
             val clientReplyJson = JSONObject().apply {
@@ -431,7 +447,9 @@ class LanTransport {
                 put("hashed_blinded", encodeBlindedFriends(clientReply.hashedBlindedItems))
             }
             writeFrame(output, clientReplyJson.toString().toByteArray(Charsets.UTF_8))
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.PSI_COMPLETE)
+
             // Step 7: Compute common friends
             val commonFriends = if (useTrust) {
                 clientPSI.getCardinality(
@@ -443,28 +461,42 @@ class LanTransport {
             } else {
                 0
             }
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.TRUST_COMPUTED)
+            exchangeCtx.mutualFriends = commonFriends
+            exchangeCtx.trustScore = if (localFriends.isNotEmpty()) commonFriends.toDouble() / localFriends.size else 0.0
+
             Timber.d("LAN PSI complete: $commonFriends common friends with ${peerDeviceId.take(8)}...")
-            
+
             // Step 8: Check minimum shared contacts
             val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)
             if (useTrust && commonFriends < minSharedContacts) {
                 Timber.w("LAN exchange rejected: sharedContacts=$commonFriends minRequired=$minSharedContacts")
+                TelemetryClient.getInstance()?.trackExchangeFailure(
+                    exchangeCtx,
+                    ErrorCategory.PSI_TRUST_REJECTED,
+                    "Trust rejected: $commonFriends shared < $minSharedContacts required"
+                )
                 return@withContext ExchangeResult(
                     false, 0, 0,
                     "Insufficient trust: $commonFriends < $minSharedContacts shared contacts"
                 )
             }
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.SENDING_MESSAGES)
+
             // Step 9: Send our messages
             val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends)
             val messagesSent = try {
                 val json = JSONObject(outgoingData)
                 json.optInt("message_count", 0)
             } catch (e: Exception) { 0 }
-            
+            exchangeCtx.messagesSent = messagesSent
+
             writeFrame(output, outgoingData.toByteArray(Charsets.UTF_8))
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.RECEIVING_MESSAGES)
+
             // Step 10: Read server's messages
             val serverMessagesFrame = readFrame(input)
             val receivedMessages = processIncomingMessages(
@@ -473,37 +505,28 @@ class LanTransport {
                 friendStore,
                 commonFriends
             )
-            
+            exchangeCtx.messagesReceived = receivedMessages.size
+
             // Show notification for new messages received via LAN
             if (receivedMessages.isNotEmpty()) {
                 Timber.i("LAN client: ${receivedMessages.size} new messages, triggering notification")
                 NotificationHelper.showNewMessageNotification(context, receivedMessages.size)
             }
-            
-            val duration = System.currentTimeMillis() - startTime
-            Timber.i("LAN exchange (client) complete in ${duration}ms: sent $messagesSent, received ${receivedMessages.size}, commonFriends=$commonFriends")
-            
-            trackTelemetry(
-                "exchange_complete_client",
-                "peer" to peerDeviceId.take(8),
-                "sent" to messagesSent.toString(),
-                "received" to receivedMessages.size.toString(),
-                "common_friends" to commonFriends.toString(),
-                "duration_ms" to duration.toString()
-            )
-            
+
+            exchangeCtx.advanceStage(ExchangeStage.COMPLETE)
+
+            Timber.i("LAN exchange (client) complete in ${exchangeCtx.getDurationMs()}ms: sent $messagesSent, received ${receivedMessages.size}, commonFriends=$commonFriends")
+
+            // Track with rich context
+            TelemetryClient.getInstance()?.trackExchangeSuccess(exchangeCtx)
+
             onExchangeComplete?.invoke(true, messagesSent, receivedMessages.size)
-            
+
             return@withContext ExchangeResult(true, messagesSent, receivedMessages.size, null)
-            
+
         } catch (e: Exception) {
-            val duration = System.currentTimeMillis() - startTime
-            Timber.e(e, "LAN exchange failed with ${peer.ipAddress.hostAddress} after ${duration}ms")
-            trackTelemetry(
-                "exchange_error_client",
-                "error" to e.message.toString(),
-                "duration_ms" to duration.toString()
-            )
+            Timber.e(e, "LAN exchange failed with ${peer.ipAddress.hostAddress} after ${exchangeCtx.getDurationMs()}ms")
+            TelemetryClient.getInstance()?.trackExchangeFailure(exchangeCtx, e)
             onExchangeComplete?.invoke(false, 0, 0)
             return@withContext ExchangeResult(false, 0, 0, e.message)
         } finally {

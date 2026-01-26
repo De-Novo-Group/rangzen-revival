@@ -55,14 +55,13 @@
                 android:layout_weight="1" />
             
             <!-- Transport breakdown: BT count -->
-            <!-- These will be wired to real data later -->
             <ImageView
                 android:id="@+id/icon_bt"
                 android:layout_width="14dp"
                 android:layout_height="14dp"
                 android:src="@drawable/ic_bluetooth"
                 android:visibility="gone"
-                app:tint="@color/text_hint" />
+                app:tint="@color/transport_bt" />
             <TextView
                 android:id="@+id/count_bt"
                 android:layout_width="wrap_content"
@@ -70,9 +69,9 @@
                 android:layout_marginStart="2dp"
                 android:layout_marginEnd="8dp"
                 android:textSize="11sp"
-                android:textColor="@color/text_hint"
+                android:textColor="@color/transport_count"
                 android:visibility="gone" />
-            
+
             <!-- Transport breakdown: WiFi Direct count -->
             <ImageView
                 android:id="@+id/icon_wd"
@@ -80,7 +79,7 @@
                 android:layout_height="14dp"
                 android:src="@drawable/ic_wifi_direct"
                 android:visibility="gone"
-                app:tint="@color/text_hint" />
+                app:tint="@color/transport_wd" />
             <TextView
                 android:id="@+id/count_wd"
                 android:layout_width="wrap_content"
@@ -88,9 +87,9 @@
                 android:layout_marginStart="2dp"
                 android:layout_marginEnd="8dp"
                 android:textSize="11sp"
-                android:textColor="@color/text_hint"
+                android:textColor="@color/transport_count"
                 android:visibility="gone" />
-            
+
             <!-- Transport breakdown: LAN/WiFi count -->
             <ImageView
                 android:id="@+id/icon_lan"
@@ -98,14 +97,14 @@
                 android:layout_height="14dp"
                 android:src="@drawable/ic_wifi"
                 android:visibility="gone"
-                app:tint="@color/text_hint" />
+                app:tint="@color/transport_lan" />
             <TextView
                 android:id="@+id/count_lan"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="2dp"
                 android:textSize="11sp"
-                android:textColor="@color/text_hint"
+                android:textColor="@color/transport_count"
                 android:visibility="gone" />
                 
         </LinearLayout>

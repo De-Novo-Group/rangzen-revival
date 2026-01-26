@@ -16,6 +16,9 @@ import org.denovogroup.rangzen.backend.NotificationHelper
 import org.denovogroup.rangzen.backend.SecurityManager
 import org.denovogroup.rangzen.backend.ble.BleScanner
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
+import org.denovogroup.rangzen.backend.telemetry.ErrorCategory
+import org.denovogroup.rangzen.backend.telemetry.ExchangeContext
+import org.denovogroup.rangzen.backend.telemetry.ExchangeStage
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.denovogroup.rangzen.objects.RangzenMessage
@@ -30,24 +33,36 @@ class LegacyExchangeClient(
 ) {
 
     suspend fun exchangeWithPeer(bleScanner: BleScanner, peer: DiscoveredPeer): LegacyExchangeResult? {
-        val startTime = System.currentTimeMillis()
         val peerIdHash = sha256(peer.address)
+        val exchangeCtx = ExchangeContext.create(TelemetryEvent.TRANSPORT_BLE, peerIdHash, context)
+
+        // Capture RSSI if available
+        exchangeCtx.rssi = peer.rssi
 
         // Track exchange start
         TelemetryClient.getInstance()?.trackExchangeStart(peerIdHash, TelemetryEvent.TRANSPORT_BLE)
 
         return withTimeout(AppConfig.exchangeSessionTimeoutMs(context)) {
             try {
+                exchangeCtx.advanceStage(ExchangeStage.CONNECTED)
+
                 // Decide whether to use the trust/PSI pipeline (from SecurityManager profile).
                 val useTrust = SecurityManager.useTrust(context)
                 val localFriends = friendStore.getAllFriendIds()
                 val clientPSI = Crypto.PrivateSetIntersection(localFriends)
                 val serverPSI = Crypto.PrivateSetIntersection(localFriends)
 
+                exchangeCtx.advanceStage(ExchangeStage.PSI_INIT)
+
                 // Only send blinded friends when trust is enabled.
                 val blindedFriends = if (useTrust) clientPSI.encodeBlindedItems() else emptyList()
                 val friendsRequest = LegacyExchangeCodec.encodeClientMessage(emptyList(), blindedFriends)
-                val friendsResponse = sendFrame(bleScanner, peer, friendsRequest) ?: return@withTimeout null
+                val friendsResponse = sendFrame(bleScanner, peer, friendsRequest) ?: run {
+                    TelemetryClient.getInstance()?.trackExchangeFailure(
+                        exchangeCtx, ErrorCategory.CONNECTION_RESET, "No response to PSI init"
+                    )
+                    return@withTimeout null
+                }
                 // Only parse remote friends when trust is enabled.
                 val remoteFriends = if (useTrust) {
                     LegacyExchangeCodec.decodeClientMessage(friendsResponse).blindedFriends
@@ -55,14 +70,24 @@ class LegacyExchangeClient(
                     emptyList()
                 }
 
+                exchangeCtx.advanceStage(ExchangeStage.PSI_EXCHANGE)
+
                 // Reply to the remote blinded set (empty when trust is disabled).
                 val serverReply = serverPSI.replyToBlindedItems(ArrayList(remoteFriends))
                 val serverRequest = LegacyExchangeCodec.encodeServerMessage(
                     serverReply.doubleBlindedItems,
                     serverReply.hashedBlindedItems
                 )
-                val serverResponse = sendFrame(bleScanner, peer, serverRequest) ?: return@withTimeout null
+                val serverResponse = sendFrame(bleScanner, peer, serverRequest) ?: run {
+                    TelemetryClient.getInstance()?.trackExchangeFailure(
+                        exchangeCtx, ErrorCategory.CONNECTION_RESET, "No response to PSI exchange"
+                    )
+                    return@withTimeout null
+                }
                 val remoteServerMessage = LegacyExchangeCodec.decodeServerMessage(serverResponse)
+
+                exchangeCtx.advanceStage(ExchangeStage.PSI_COMPLETE)
+
                 // Compute cardinality only when trust is enabled.
                 val commonFriends = if (useTrust) {
                     clientPSI.getCardinality(
@@ -75,6 +100,10 @@ class LegacyExchangeClient(
                     0
                 }
 
+                exchangeCtx.advanceStage(ExchangeStage.TRUST_COMPUTED)
+                exchangeCtx.mutualFriends = commonFriends
+                exchangeCtx.trustScore = if (localFriends.isNotEmpty()) commonFriends.toDouble() / localFriends.size else 0.0
+
                 // Enforce minimum shared contacts when trust is enabled (from SecurityManager profile).
                 val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)
                 if (useTrust && commonFriends < minSharedContacts) {
@@ -82,13 +111,25 @@ class LegacyExchangeClient(
                         "Exchange rejected: sharedContacts=$commonFriends " +
                             "minRequired=$minSharedContacts peer=${peer.address}"
                     )
+                    TelemetryClient.getInstance()?.trackExchangeFailure(
+                        exchangeCtx,
+                        ErrorCategory.PSI_TRUST_REJECTED,
+                        "Trust rejected: $commonFriends shared < $minSharedContacts required"
+                    )
                     return@withTimeout null
                 }
+
+                exchangeCtx.advanceStage(ExchangeStage.SENDING_MESSAGES)
 
                 val maxMessages = SecurityManager.maxMessagesPerExchange(context)
                 val outboundMessages = messageStore.getMessagesForExchange(commonFriends, maxMessages)
                 val countRequest = LegacyExchangeCodec.encodeExchangeInfo(outboundMessages.size)
-                val countResponse = sendFrame(bleScanner, peer, countRequest) ?: return@withTimeout null
+                val countResponse = sendFrame(bleScanner, peer, countRequest) ?: run {
+                    TelemetryClient.getInstance()?.trackExchangeFailure(
+                        exchangeCtx, ErrorCategory.CONNECTION_RESET, "No response to message count"
+                    )
+                    return@withTimeout null
+                }
                 val inboundCount = minOf(LegacyExchangeCodec.decodeExchangeInfo(countResponse), maxMessages)
 
                 val rounds = maxOf(outboundMessages.size, inboundCount)
@@ -109,11 +150,15 @@ class LegacyExchangeClient(
                             priority = msg.priority,
                             ageMs = System.currentTimeMillis() - msg.timestamp
                         )
+                        exchangeCtx.messagesSent++
                         // Pass shared friend context for per-peer trust computation.
                         listOf(LegacyExchangeCodec.encodeMessage(context, msg, commonFriends, myFriends))
                     } else {
                         emptyList()
                     }
+
+                    exchangeCtx.advanceStage(ExchangeStage.RECEIVING_MESSAGES)
+
                     val messageRequest = LegacyExchangeCodec.encodeClientMessage(outbound, emptyList())
                     val messageResponse = sendFrame(bleScanner, peer, messageRequest) ?: continue
                     val remoteClient = LegacyExchangeCodec.decodeClientMessage(messageResponse)
@@ -130,22 +175,17 @@ class LegacyExchangeClient(
                             priority = msg.priority,
                             isNew = isNew
                         )
+                        exchangeCtx.messagesReceived++
                         receivedMessages.add(msg)
                     }
                 }
 
                 mergeIncomingMessages(receivedMessages, commonFriends)
 
-                // Track exchange success
-                val durationMs = System.currentTimeMillis() - startTime
-                TelemetryClient.getInstance()?.trackExchangeSuccess(
-                    peerIdHash = peerIdHash,
-                    transport = TelemetryEvent.TRANSPORT_BLE,
-                    durationMs = durationMs,
-                    messagesSent = outboundMessages.size,
-                    messagesReceived = receivedMessages.size,
-                    mutualFriends = commonFriends
-                )
+                exchangeCtx.advanceStage(ExchangeStage.COMPLETE)
+
+                // Track exchange success with rich context
+                TelemetryClient.getInstance()?.trackExchangeSuccess(exchangeCtx)
 
                 LegacyExchangeResult(
                     commonFriends = commonFriends,
@@ -154,14 +194,8 @@ class LegacyExchangeClient(
                 )
             } catch (e: Exception) {
                 Timber.e(e, "Legacy exchange failed with ${peer.address}")
-                // Track exchange failure
-                val durationMs = System.currentTimeMillis() - startTime
-                TelemetryClient.getInstance()?.trackExchangeFailure(
-                    peerIdHash = peerIdHash,
-                    transport = TelemetryEvent.TRANSPORT_BLE,
-                    error = e.message ?: "Unknown error",
-                    durationMs = durationMs
-                )
+                // Track exchange failure with rich context
+                TelemetryClient.getInstance()?.trackExchangeFailure(exchangeCtx, e)
                 null
             }
         }

@@ -203,7 +203,7 @@ class TelemetryClient private constructor(
     }
 
     /**
-     * Track an exchange failure event.
+     * Track an exchange failure event (legacy - use ExchangeContext version for richer data).
      */
     fun trackExchangeFailure(peerIdHash: String, transport: String, error: String, durationMs: Long) {
         track(
@@ -214,6 +214,42 @@ class TelemetryClient private constructor(
                 "error" to error.take(200), // Truncate long errors
                 "duration_ms" to durationMs
             )
+        )
+    }
+
+    /**
+     * Track an exchange success using ExchangeContext for rich telemetry.
+     */
+    fun trackExchangeSuccess(ctx: ExchangeContext) {
+        track(
+            TelemetryEvent.TYPE_EXCHANGE_SUCCESS,
+            ctx.peerIdHash,
+            ctx.transport,
+            ctx.buildSuccessPayload()
+        )
+    }
+
+    /**
+     * Track an exchange failure using ExchangeContext for rich telemetry.
+     */
+    fun trackExchangeFailure(ctx: ExchangeContext, error: Throwable) {
+        track(
+            TelemetryEvent.TYPE_EXCHANGE_FAILURE,
+            ctx.peerIdHash,
+            ctx.transport,
+            ctx.buildFailurePayload(error)
+        )
+    }
+
+    /**
+     * Track an exchange failure with explicit error category.
+     */
+    fun trackExchangeFailure(ctx: ExchangeContext, category: ErrorCategory, message: String) {
+        track(
+            TelemetryEvent.TYPE_EXCHANGE_FAILURE,
+            ctx.peerIdHash,
+            ctx.transport,
+            ctx.buildFailurePayload(category, message)
         )
     }
 
