@@ -77,6 +77,10 @@ class BlePairingFragment : Fragment() {
     // Maps address -> their code
     private var peersWhoVerifiedUs = mutableMapOf<String, String>()
 
+    // Flag to pause announcements during verification (avoid BLE resource contention)
+    @Volatile
+    private var verificationInProgress = false
+
     // Friend store
     private lateinit var friendStore: FriendStore
 
@@ -309,6 +313,12 @@ class BlePairingFragment : Fragment() {
     }
 
     private fun sendPairingAnnouncement() {
+        // Skip announcements during verification to avoid BLE resource contention
+        if (verificationInProgress) {
+            Timber.d("$TAG: Skipping announcement - verification in progress")
+            return
+        }
+
         val session = pairingSession ?: return
         if (session.isExpired()) {
             // Generate a new code if expired
@@ -559,16 +569,33 @@ class BlePairingFragment : Fragment() {
 
         showState(State.VERIFYING)
 
-        // Send verification message
+        // Pause announcements during verification to avoid BLE resource contention
+        verificationInProgress = true
+
+        // Send verification message with retry logic
         scope.launch {
             try {
                 val verifyMessage = BlePairingProtocol.createVerifyMessage(session, enteredCode)
                 Timber.i("$TAG: Sending VERIFY to ${peer.address}, message size=${verifyMessage.size}")
                 Timber.i("$TAG: bleScanner is ${if (bleScanner != null) "available" else "NULL"}")
-                val response = withContext(Dispatchers.IO) {
-                    val result = bleScanner?.exchange(peer, verifyMessage)
-                    Timber.i("$TAG: exchange() returned ${result?.size ?: "null"} bytes")
-                    result
+
+                // Wait a moment for any in-flight BLE operations to complete
+                delay(500)
+
+                // Try up to 3 times with increasing delays
+                var response: ByteArray? = null
+                for (attempt in 1..3) {
+                    Timber.i("$TAG: VERIFY attempt $attempt/3")
+                    response = withContext(Dispatchers.IO) {
+                        val result = bleScanner?.exchange(peer, verifyMessage)
+                        Timber.i("$TAG: exchange() returned ${result?.size ?: "null"} bytes")
+                        result
+                    }
+                    if (response != null) break
+                    if (attempt < 3) {
+                        Timber.i("$TAG: Retrying after ${attempt * 500}ms delay")
+                        delay(attempt * 500L)
+                    }
                 }
 
                 if (response != null) {
@@ -583,13 +610,16 @@ class BlePairingFragment : Fragment() {
                                 session.peerPublicId = parsed.first
                                 session.peerShortId = parsed.second
                                 session.verified = true
+                                verificationInProgress = false
                                 onPairingComplete()
                             } else {
+                                verificationInProgress = false
                                 showError(getString(R.string.pairing_error_invalid_response))
                             }
                         }
 
                         BlePairingProtocol.MSG_PAIRING_REJECT -> {
+                            verificationInProgress = false
                             showError(getString(R.string.pairing_error_rejected))
                         }
 
@@ -602,10 +632,12 @@ class BlePairingFragment : Fragment() {
                         }
                     }
                 } else {
+                    verificationInProgress = false
                     showError(getString(R.string.pairing_error_no_response))
                 }
             } catch (e: Exception) {
                 Timber.e(e, "$TAG: Verification failed")
+                verificationInProgress = false
                 showError(getString(R.string.pairing_error_connection))
             }
         }
@@ -613,6 +645,7 @@ class BlePairingFragment : Fragment() {
 
     private suspend fun retryVerification(enteredCode: String, attemptsLeft: Int) {
         if (attemptsLeft <= 0) {
+            verificationInProgress = false
             showError(getString(R.string.pairing_error_timeout))
             return
         }
@@ -634,12 +667,14 @@ class BlePairingFragment : Fragment() {
                         session.peerPublicId = parsed.first
                         session.peerShortId = parsed.second
                         session.verified = true
+                        verificationInProgress = false
                         withContext(Dispatchers.Main) {
                             onPairingComplete()
                         }
                         return
                     }
                 } else if (messageType == BlePairingProtocol.MSG_PAIRING_REJECT) {
+                    verificationInProgress = false
                     withContext(Dispatchers.Main) {
                         showError(getString(R.string.pairing_error_rejected))
                     }
@@ -652,6 +687,7 @@ class BlePairingFragment : Fragment() {
             retryVerification(enteredCode, attemptsLeft - 1)
         } catch (e: Exception) {
             Timber.e(e, "$TAG: Retry verification failed")
+            verificationInProgress = false
             withContext(Dispatchers.Main) {
                 showError(getString(R.string.pairing_error_connection))
             }
