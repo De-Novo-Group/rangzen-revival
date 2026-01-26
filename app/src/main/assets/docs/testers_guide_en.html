@@ -270,7 +270,7 @@
                 <p>Murmur doesn’t work in isolation. For meaningful tests, grow a nearby cluster:</p>
                 <ul>
                     <li>Use <strong>Quick Share</strong> or Bluetooth to share the APK with friends.</li>
-                    <li>Share the download link or QR with people in the same area.</li>
+                    <li>Share the download link with people in the same area.</li>
                     <li>Try to get several people in the same neighborhood or workplace.</li>
                 </ul>
             </div>
@@ -285,7 +285,7 @@
                 <ul>
                     <li>Post at least one message per day.</li>
                     <li>Walk/commute as usual so messages can propagate naturally.</li>
-                    <li>Scan QR codes with trusted contacts when possible.</li>
+                    <li>Add friends nearby using BLE pairing when possible.</li>
                 </ul>
             </div>
         </div>
@@ -310,9 +310,10 @@
                 </div>
                 
                 <div class="scenario">
-                    <h4><span class="scenario-label">C</span> Friend Trust</h4>
-                    <p><strong>Setup:</strong> Two phones</p>
-                    <p><strong>Action:</strong> Phone A shows QR → Phone B scans → A posts message</p>
+                    <h4><span class="scenario-label">C</span> Friend Trust (BLE Pairing)</h4>
+                    <p><strong>Setup:</strong> Two phones within Bluetooth range (~10m)</p>
+                    <p><strong>Action:</strong> Both tap "Add Friend Nearby" → Each sees the other's 6-digit code → Both enter each other's code → A posts message</p>
+                    <p><strong>Security:</strong> Requires physical proximity (Bluetooth) AND visual verification of codes. Cannot be spoofed remotely.</p>
                     <div class="result">✓ Message shows GREEN trust bar on B</div>
                 </div>
             </div>
@@ -421,7 +422,7 @@
                     <ol>
                         <li><strong>Phone Model</strong> (e.g., Pixel 5, Samsung S21)</li>
                         <li><strong>Android Version</strong> (e.g., Android 13)</li>
-                        <li><strong>What you were doing</strong> (e.g., "Scanned QR code")</li>
+                        <li><strong>What you were doing</strong> (e.g., "Adding a friend via BLE pairing")</li>
                         <li><strong>What happened</strong> (e.g., "App froze")</li>
                     </ol>
                 </div>
