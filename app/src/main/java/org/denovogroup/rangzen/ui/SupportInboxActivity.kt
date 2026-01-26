@@ -167,13 +167,14 @@ class MessagesListFragment : Fragment() {
 
     private fun loadMessages() {
         val supportStore = SupportStore.getInstance(requireContext())
-        val messages = supportStore.getStandaloneMessages()
+        // Show ALL messages (not just standalone) so replies always appear
+        val messages = supportStore.getAllMessages()
 
         if (messages.isEmpty()) {
             binding.recyclerView.visibility = View.GONE
             binding.emptyState.root.visibility = View.VISIBLE
             binding.emptyState.root.findViewById<TextView>(R.id.text_empty).text =
-                "No support messages.\n\nMessages not related to bug reports will appear here."
+                "No messages yet.\n\nReplies to your bug reports will appear here."
         } else {
             binding.recyclerView.visibility = View.VISIBLE
             binding.emptyState.root.visibility = View.GONE
