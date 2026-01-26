@@ -32,6 +32,7 @@
     <!-- Empty states -->
     <string name="empty_feed">No messages yet.\nMessages from nearby Murmur users will appear here.</string>
     <string name="empty_friends">No friends added.\nScan a friend\'s QR code to add them.</string>
+    <string name="empty_friends_ble">No friends yet.\nTap the button above to add a friend nearby.</string>
     
     <!-- Actions -->
     <string name="action_like">Like</string>

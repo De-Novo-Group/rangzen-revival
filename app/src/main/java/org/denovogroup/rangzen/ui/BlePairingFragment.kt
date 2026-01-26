@@ -66,7 +66,6 @@ class BlePairingFragment : Fragment() {
 
     // BLE components
     private var bleScanner: BleScanner? = null
-    private var bleAdvertiser: BleAdvertiser? = null
 
     // Pairing session
     private var pairingSession: BlePairingProtocol.PairingSession? = null
@@ -97,7 +96,6 @@ class BlePairingFragment : Fragment() {
 
         friendStore = FriendStore.getInstance(requireContext())
         bleScanner = BleScanner(requireContext())
-        bleAdvertiser = BleAdvertiser(requireContext())
 
         setupListeners()
         setupDeviceList()
@@ -261,26 +259,23 @@ class BlePairingFragment : Fragment() {
         // Start BLE advertising and scanning
         startBle()
 
-        // Show initial state
-        showState(State.SHOW_CODE)
+        // Go directly to nearby devices screen
+        showState(State.NEARBY_DEVICES)
     }
 
     private fun startBle() {
         // Check permissions
-        if (bleScanner?.hasPermissions() != true || bleAdvertiser?.hasPermissions() != true) {
+        if (bleScanner?.hasPermissions() != true) {
             showError(getString(R.string.pairing_error_no_bluetooth))
             return
         }
 
-        // Set up exchange callback for pairing protocol
-        bleAdvertiser?.setExchangeCallback { device, data ->
+        // Set global pairing callback - this takes priority over the service's callback
+        BleAdvertiser.pairingModeCallback = { device, data ->
             handleIncomingPairingMessage(device.address, data)
         }
 
-        // Start advertising our presence
-        bleAdvertiser?.startAdvertising()
-
-        // Start scanning for other devices
+        // Start scanning for other devices (advertising is handled by the service)
         bleScanner?.startScanning()
 
         // Observe discovered peers
@@ -303,7 +298,8 @@ class BlePairingFragment : Fragment() {
 
     private fun stopBle() {
         bleScanner?.stopScanning()
-        bleAdvertiser?.stopAdvertising()
+        // Clear global pairing callback so service handles messages again
+        BleAdvertiser.pairingModeCallback = null
         Timber.i("$TAG: BLE pairing mode stopped")
     }
 
@@ -315,12 +311,33 @@ class BlePairingFragment : Fragment() {
             return
         }
 
-        // Send announcement to all discovered peers
+        // Send announcement to all discovered peers and parse responses
         val announcement = BlePairingProtocol.createAnnounceMessage(session)
         scope.launch(Dispatchers.IO) {
             bleScanner?.peers?.value?.forEach { peer ->
                 try {
-                    bleScanner?.exchange(peer, announcement)
+                    val response = bleScanner?.exchange(peer, announcement)
+                    // Parse the response - if they're in pairing mode, they'll respond with their announcement
+                    if (response != null) {
+                        val parsed = BlePairingProtocol.parseAnnounceMessage(response)
+                        if (parsed != null) {
+                            val (code, shortId, _) = parsed
+                            val pairingPeer = BlePairingProtocol.PairingPeer(
+                                address = peer.address,
+                                shortId = shortId,
+                                code = code,
+                                rssi = peer.rssi,
+                                lastSeen = System.currentTimeMillis()
+                            )
+                            discoveredPairingPeers[peer.address] = pairingPeer
+
+                            withContext(Dispatchers.Main) {
+                                if (currentState == State.NEARBY_DEVICES) {
+                                    updateDeviceList()
+                                }
+                            }
+                        }
+                    }
                 } catch (e: Exception) {
                     Timber.e(e, "$TAG: Failed to send announcement to ${peer.address}")
                 }
@@ -414,7 +431,7 @@ class BlePairingFragment : Fragment() {
     private fun updateDeviceList() {
         val blePeers = bleScanner?.peers?.value ?: emptyList()
 
-        // Combine BLE peers with pairing info
+        // Only show devices that are in pairing mode (sent a pairing announcement)
         val displayPeers = blePeers.mapNotNull { blePeer ->
             val pairingInfo = discoveredPairingPeers[blePeer.address]
             if (pairingInfo != null) {
@@ -424,12 +441,7 @@ class BlePairingFragment : Fragment() {
                     code = pairingInfo.code
                 )
             } else {
-                // Show BLE peer even without pairing info, with placeholder
-                DisplayPeer(
-                    blePeer = blePeer,
-                    shortId = blePeer.address.takeLast(4),
-                    code = "------"
-                )
+                null  // Don't show devices not in pairing mode
             }
         }
 

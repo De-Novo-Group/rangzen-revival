@@ -4,7 +4,6 @@
  */
 package org.denovogroup.rangzen.ui
 
-import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -15,9 +14,6 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.integration.android.IntentIntegrator
-import com.journeyapps.barcodescanner.BarcodeEncoder
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.denovogroup.rangzen.R
@@ -27,6 +23,7 @@ import org.denovogroup.rangzen.databinding.FragmentFriendsBinding
 
 /**
  * Fragment for managing friends (social trust graph).
+ * Friends are added via BLE mutual-code pairing.
  */
 class FriendsFragment : Fragment() {
 
@@ -53,7 +50,6 @@ class FriendsFragment : Fragment() {
         setupRecyclerView()
         setupButtons()
         observeFriends()
-        showMyQRCode()
     }
 
     private fun setupRecyclerView() {
@@ -70,14 +66,6 @@ class FriendsFragment : Fragment() {
     }
 
     private fun setupButtons() {
-        binding.btnShowQr.setOnClickListener {
-            showMyQRCode()
-        }
-
-        binding.btnScanQr.setOnClickListener {
-            scanFriendQR()
-        }
-
         binding.btnAddNearby.setOnClickListener {
             openBlePairing()
         }
@@ -108,55 +96,6 @@ class FriendsFragment : Fragment() {
             binding.emptyState.visibility = View.GONE
             binding.recyclerFriends.visibility = View.VISIBLE
             friendAdapter.submitList(friends)
-        }
-    }
-
-    private fun showMyQRCode() {
-        val publicId = friendStore.getMyPublicIdString()
-        if (publicId == null) {
-            Toast.makeText(context, "Identity not initialized", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        try {
-            val barcodeEncoder = BarcodeEncoder()
-            val bitmap: Bitmap = barcodeEncoder.encodeBitmap(
-                publicId,
-                BarcodeFormat.QR_CODE,
-                400,
-                400
-            )
-            binding.qrCode.setImageBitmap(bitmap)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Failed to generate QR code", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun scanFriendQR() {
-        // Use ZXing scanner with portrait-locked activity
-        IntentIntegrator.forSupportFragment(this)
-            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
-            .setPrompt("Scan your friend's Murmur QR code")
-            .setBeepEnabled(false)
-            .setCaptureActivity(PortraitCaptureActivity::class.java)
-            .initiateScan()
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
-        val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
-        if (result != null) {
-            if (result.contents != null) {
-                // Got a QR code - try to add as friend
-                val success = friendStore.addFriendFromString(result.contents)
-                if (success) {
-                    Toast.makeText(context, "Friend added!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(context, "Already friends or invalid code", Toast.LENGTH_SHORT).show()
-                }
-            }
-        } else {
-            super.onActivityResult(requestCode, resultCode, data)
         }
     }
 

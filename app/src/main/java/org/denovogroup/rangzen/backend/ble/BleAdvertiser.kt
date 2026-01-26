@@ -42,6 +42,10 @@ class BleAdvertiser(private val context: Context) {
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
         // Tag for Android Log fallback in case Timber is filtered.
         private const val LOG_TAG = "BleAdvertiser"
+
+        // Global pairing callback - takes priority over instance callbacks when set
+        @Volatile
+        var pairingModeCallback: ((BluetoothDevice, ByteArray) -> ByteArray?)? = null
     }
 
     private val bluetoothManager: BluetoothManager? =
@@ -294,8 +298,9 @@ class BleAdvertiser(private val context: Context) {
                         }
                         // Build the full request payload.
                         val requestPayload = session.requestBuffer.toByteArray()
-                        // Process the request using the legacy handler.
-                        val responsePayload = onDataReceived?.invoke(device, requestPayload)
+                        // Process the request - pairing mode callback takes priority
+                        val responsePayload = pairingModeCallback?.invoke(device, requestPayload)
+                            ?: onDataReceived?.invoke(device, requestPayload)
                         if (responsePayload == null) {
                             Timber.e("No response generated for ${device.address}; rejecting request")
                             clearSession(device)
