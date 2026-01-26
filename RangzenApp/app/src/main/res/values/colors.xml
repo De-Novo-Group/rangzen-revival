@@ -46,6 +46,7 @@
     <!-- Transport indicator colors -->
     <color name="transport_bt">#3B82F6</color>        <!-- Blue - Bluetooth -->
     <color name="transport_wd">#F97316</color>        <!-- Orange - WiFi Direct -->
+    <color name="transport_nan">#8B5CF6</color>       <!-- Purple - WiFi Aware (NAN) -->
     <color name="transport_lan">#22C55E</color>       <!-- Green - LAN/WiFi -->
     <color name="transport_count">#A1A1AA</color>     <!-- Medium gray - peer counts -->
 

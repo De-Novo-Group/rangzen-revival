@@ -98,18 +98,22 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         // Handle edge-to-edge display properly on all Android versions
-        // On Android 15+, edge-to-edge is enforced, so we need to handle insets
-        
-        // Make status bar icons DARK (visible on light background)
+        // On Android 15+, edge-to-edge is enforced by the system
+
+        // Enable edge-to-edge drawing - content extends behind system bars
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Status bar icons should be LIGHT on our DARK background
         val windowInsetsController = WindowInsetsControllerCompat(window, binding.root)
-        windowInsetsController.isAppearanceLightStatusBars = true  // Dark icons on light background
-        windowInsetsController.isAppearanceLightNavigationBars = true  // Dark icons on nav bar
-        
-        // Apply window insets padding to prevent content overlap with status bar
+        windowInsetsController.isAppearanceLightStatusBars = false  // Light icons on dark background
+        windowInsetsController.isAppearanceLightNavigationBars = false  // Light icons on dark nav bar
+
+        // Handle window insets to add padding so content doesn't overlap system bars
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            // Add padding for status bar at top, but NOT bottom (BottomNav handles itself)
             view.updatePadding(top = insets.top)
-            windowInsets  // Don't consume - let children also receive insets
+            windowInsets
         }
 
         // Initialize stores

@@ -392,7 +392,7 @@ class FeedFragment : Fragment() {
     }
 
     /**
-     * Update the transport breakdown icons (BT, WD, LAN).
+     * Update the transport breakdown icons (BT, WD, NAN, LAN).
      * Shows small icons with counts for each active transport type.
      *
      * Calculates real counts from the unified peer list - each peer may
@@ -403,6 +403,7 @@ class FeedFragment : Fragment() {
         // A peer can be counted in multiple transports if reachable via both.
         val btCount = unifiedPeers.count { it.hasTransport(TransportType.BLE) }
         val wdCount = unifiedPeers.count { it.hasTransport(TransportType.WIFI_DIRECT) }
+        val nanCount = unifiedPeers.count { it.hasTransport(TransportType.WIFI_AWARE) }
         val lanCount = unifiedPeers.count { it.hasTransport(TransportType.LAN) }
 
         // Show BT icon and count if peers found via Bluetooth.
@@ -423,6 +424,16 @@ class FeedFragment : Fragment() {
         } else {
             binding.iconWd.visibility = View.GONE
             binding.countWd.visibility = View.GONE
+        }
+
+        // Show NAN icon and count if peers found via WiFi Aware.
+        if (nanCount > 0) {
+            binding.iconNan.visibility = View.VISIBLE
+            binding.countNan.visibility = View.VISIBLE
+            binding.countNan.text = nanCount.toString()
+        } else {
+            binding.iconNan.visibility = View.GONE
+            binding.countNan.visibility = View.GONE
         }
 
         // Show LAN icon and count if peers found via LAN/hotspot.

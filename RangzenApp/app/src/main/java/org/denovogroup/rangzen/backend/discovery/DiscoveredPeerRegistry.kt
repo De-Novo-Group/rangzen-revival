@@ -228,7 +228,7 @@ class DiscoveredPeerRegistry {
     
     /**
      * Report a peer discovered via LAN (mDNS/UDP broadcast).
-     * 
+     *
      * @param ipAddress IP address
      * @param port Port number for connection
      * @param publicId Public ID advertised via mDNS TXT record or broadcast
@@ -240,14 +240,14 @@ class DiscoveredPeerRegistry {
     ) {
         val transportKey = "lan:$ipAddress:$port"
         val existingPeerId = addressToPeerId[transportKey]
-        
+
         val transportInfo = PeerTransportInfo(
             transport = TransportType.LAN,
             lastSeen = System.currentTimeMillis(),
             lanAddress = ipAddress,
             lanPort = port
         )
-        
+
         if (existingPeerId != null) {
             // Update existing peer
             peers[existingPeerId]?.let { peer ->
@@ -267,11 +267,105 @@ class DiscoveredPeerRegistry {
             )
             peers[peerId] = peer
             addressToPeerId[transportKey] = peerId
-            
+
             Timber.i("$TAG: New LAN peer discovered: $ipAddress:$port")
             onPeerDiscovered?.invoke(peer)
         }
-        
+
+        updatePeerList()
+    }
+
+    /**
+     * Report a peer discovered via WiFi Aware (NAN).
+     *
+     * WiFi Aware provides identity via service info BEFORE connection,
+     * similar to WiFi Direct DNS-SD but without requiring user confirmation.
+     *
+     * @param sessionId Unique session identifier for this WiFi Aware connection
+     * @param peerHandleHash Hash of the opaque PeerHandle (for identification)
+     * @param publicId Public ID from service info (if available)
+     * @param port Port for socket connection after NAN pairing
+     * @param rssi Signal strength if available
+     */
+    fun reportWifiAwarePeer(
+        sessionId: String,
+        peerHandleHash: Int,
+        publicId: String? = null,
+        port: Int? = null,
+        rssi: Int? = null
+    ) {
+        val transportKey = "nan:$sessionId"
+        var existingPeerId = addressToPeerId[transportKey]
+
+        // Check if this public ID is already known via another transport
+        if (existingPeerId == null && publicId != null) {
+            if (peers.containsKey(publicId)) {
+                existingPeerId = publicId
+                Timber.d("$TAG: WiFi Aware peer correlates with known peer $publicId")
+            }
+
+            val idKey = "id:$publicId"
+            addressToPeerId[idKey]?.let { mappedPeerId ->
+                existingPeerId = mappedPeerId
+            }
+        }
+
+        val transportInfo = PeerTransportInfo(
+            transport = TransportType.WIFI_AWARE,
+            lastSeen = System.currentTimeMillis(),
+            signalStrength = rssi,
+            wifiAwarePeerHandle = peerHandleHash,
+            wifiAwareSessionId = sessionId,
+            wifiAwarePort = port
+        )
+
+        val foundPeerId = existingPeerId
+
+        if (foundPeerId != null) {
+            // Update existing peer
+            peers[foundPeerId]?.let { peer ->
+                val isNewTransport = !peer.hasTransport(TransportType.WIFI_AWARE)
+                peer.updateTransport(transportInfo)
+
+                addressToPeerId[transportKey] = foundPeerId
+
+                // Upgrade to verified ID if we now have one
+                if (publicId != null && !peer.handshakeCompleted) {
+                    peers.remove(peer.publicId)
+                    val updatedPeer = peer.copy(
+                        publicId = publicId,
+                        handshakeCompleted = true
+                    )
+                    peers[publicId] = updatedPeer
+                    addressToPeerId[transportKey] = publicId
+                    addressToPeerId["id:$publicId"] = publicId
+                    Timber.i("$TAG: Peer upgraded to verified ID via WiFi Aware: $publicId")
+                }
+
+                if (isNewTransport) {
+                    Timber.i("$TAG: Added WiFi Aware transport to existing peer: $foundPeerId")
+                    onPeerTransportAdded?.invoke(peer, TransportType.WIFI_AWARE)
+                }
+            }
+        } else {
+            // Create new peer
+            val peerId = publicId ?: "${TEMP_ID_PREFIX}$transportKey"
+            val peer = UnifiedPeer(
+                publicId = peerId,
+                transports = mutableMapOf(TransportType.WIFI_AWARE to transportInfo),
+                handshakeCompleted = publicId != null
+            )
+            peers[peerId] = peer
+            addressToPeerId[transportKey] = peerId
+
+            if (publicId != null) {
+                addressToPeerId["id:$publicId"] = peerId
+            }
+
+            Timber.i("$TAG: New WiFi Aware peer: session=$sessionId -> ID: ${publicId ?: "pending"}")
+            onPeerDiscovered?.invoke(peer)
+        }
+
         updatePeerList()
     }
     

@@ -90,6 +90,24 @@
                 android:textColor="@color/transport_count"
                 android:visibility="gone" />
 
+            <!-- Transport breakdown: WiFi Aware (NAN) count -->
+            <ImageView
+                android:id="@+id/icon_nan"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:src="@drawable/ic_wifi_aware"
+                android:visibility="gone"
+                app:tint="@color/transport_nan" />
+            <TextView
+                android:id="@+id/count_nan"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:layout_marginEnd="8dp"
+                android:textSize="11sp"
+                android:textColor="@color/transport_count"
+                android:visibility="gone" />
+
             <!-- Transport breakdown: LAN/WiFi count -->
             <ImageView
                 android:id="@+id/icon_lan"

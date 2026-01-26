@@ -1,0 +1,474 @@
+/*
+ * Copyright (c) 2026, De Novo Group
+ * All rights reserved.
+ *
+ * WiFi Aware (NAN) manager for peer discovery without user confirmation dialogs
+ */
+package org.denovogroup.rangzen.backend.wifiaware
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.wifi.aware.*
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import androidx.annotation.RequiresApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import org.denovogroup.rangzen.backend.FriendStore
+import org.denovogroup.rangzen.backend.discovery.DiscoveredPeerRegistry
+import org.denovogroup.rangzen.backend.discovery.TransportCapabilities
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import timber.log.Timber
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Manager for WiFi Aware (Neighbor Awareness Networking) discovery.
+ *
+ * Key advantages over WiFi Direct:
+ * - No user confirmation dialog required
+ * - Doesn't disconnect from regular WiFi
+ * - Background discovery works reliably
+ * - Similar range and throughput to WiFi Direct
+ *
+ * Limitations:
+ * - Only available on Android 8+ (API 26)
+ * - Requires hardware support (~60% of devices)
+ * - Both devices must be on same WiFi band (2.4GHz or 5GHz)
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+class WifiAwareManager(
+    private val context: Context,
+    private val peerRegistry: DiscoveredPeerRegistry
+) {
+    companion object {
+        private const val TAG = "WifiAwareManager"
+
+        // Service type for Murmur discovery
+        const val SERVICE_TYPE = "_murmur._tcp"
+        const val SERVICE_NAME = "Murmur"
+
+        // TXT record keys (compatible with WiFi Direct DNS-SD)
+        const val TXT_KEY_ID = "id"      // Public ID (first 8 chars of derived hash)
+        const val TXT_KEY_PORT = "port"  // Exchange port
+        const val TXT_KEY_VER = "ver"    // Protocol version
+
+        // Discovery settings
+        const val PUBLISH_TTL_SEC = 0  // 0 = until stopped
+        const val SUBSCRIBE_TTL_SEC = 0
+    }
+
+    private var wifiAwareManager: android.net.wifi.aware.WifiAwareManager? = null
+    private var wifiAwareSession: WifiAwareSession? = null
+    private var publishSession: PublishDiscoverySession? = null
+    private var subscribeSession: SubscribeDiscoverySession? = null
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Track discovered peers by their session+handle
+    private val discoveredPeers = ConcurrentHashMap<String, DiscoveredWifiAwarePeer>()
+
+    // Our identity for publishing
+    private var localPublicId: String? = null
+    private var localPort: Int = 8765  // Default exchange port
+
+    // State
+    private val _isAvailable = MutableStateFlow(false)
+    val isAvailable: StateFlow<Boolean> = _isAvailable.asStateFlow()
+
+    private val _isActive = MutableStateFlow(false)
+    val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
+
+    private val _peerCount = MutableStateFlow(0)
+    val peerCount: StateFlow<Int> = _peerCount.asStateFlow()
+
+    // Callbacks
+    var onPeerDiscovered: ((DiscoveredWifiAwarePeer) -> Unit)? = null
+    var onPeerLost: ((String) -> Unit)? = null
+
+    // Broadcast receiver for WiFi Aware availability changes
+    private val availabilityReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == android.net.wifi.aware.WifiAwareManager.ACTION_WIFI_AWARE_STATE_CHANGED) {
+                val isAvailable = wifiAwareManager?.isAvailable == true
+                _isAvailable.value = isAvailable
+                Timber.d("$TAG: WiFi Aware availability changed: $isAvailable")
+
+                if (!isAvailable && _isActive.value) {
+                    // WiFi Aware became unavailable while we were active
+                    Timber.w("$TAG: WiFi Aware became unavailable, stopping")
+                    stop()
+                }
+            }
+        }
+    }
+
+    init {
+        if (TransportCapabilities.isWifiAwareSupported(context)) {
+            wifiAwareManager = context.getSystemService(Context.WIFI_AWARE_SERVICE)
+                as? android.net.wifi.aware.WifiAwareManager
+            _isAvailable.value = wifiAwareManager?.isAvailable == true
+
+            // Register for availability changes
+            val filter = IntentFilter(android.net.wifi.aware.WifiAwareManager.ACTION_WIFI_AWARE_STATE_CHANGED)
+            context.registerReceiver(availabilityReceiver, filter)
+
+            Timber.i("$TAG: Initialized, available=${_isAvailable.value}")
+        } else {
+            Timber.i("$TAG: WiFi Aware not supported on this device")
+        }
+    }
+
+    /**
+     * Check if WiFi Aware is supported on this device.
+     */
+    fun isSupported(): Boolean = wifiAwareManager != null
+
+    /**
+     * Start WiFi Aware discovery.
+     *
+     * @param publicId Our public ID to advertise
+     * @param port Port for exchange connections
+     */
+    fun start(publicId: String, port: Int = 8765) {
+        if (wifiAwareManager == null) {
+            Timber.w("$TAG: Cannot start - WiFi Aware not supported")
+            return
+        }
+
+        if (!_isAvailable.value) {
+            Timber.w("$TAG: Cannot start - WiFi Aware not available")
+            return
+        }
+
+        if (_isActive.value) {
+            Timber.d("$TAG: Already active")
+            return
+        }
+
+        localPublicId = publicId
+        localPort = port
+
+        Timber.i("$TAG: Starting WiFi Aware discovery, publicId=${publicId.take(8)}...")
+
+        // Attach to WiFi Aware
+        wifiAwareManager?.attach(attachCallback, mainHandler)
+
+        trackTelemetry("start_requested")
+    }
+
+    /**
+     * Stop WiFi Aware discovery and release resources.
+     */
+    fun stop() {
+        Timber.i("$TAG: Stopping WiFi Aware discovery")
+
+        publishSession?.close()
+        publishSession = null
+
+        subscribeSession?.close()
+        subscribeSession = null
+
+        wifiAwareSession?.close()
+        wifiAwareSession = null
+
+        discoveredPeers.clear()
+        _peerCount.value = 0
+        _isActive.value = false
+
+        trackTelemetry("stopped")
+    }
+
+    /**
+     * Clean up resources when no longer needed.
+     */
+    fun destroy() {
+        stop()
+        try {
+            context.unregisterReceiver(availabilityReceiver)
+        } catch (e: Exception) {
+            // Ignore if not registered
+        }
+    }
+
+    // Attach callback
+    private val attachCallback = object : AttachCallback() {
+        override fun onAttached(session: WifiAwareSession) {
+            Timber.i("$TAG: Attached to WiFi Aware session")
+            wifiAwareSession = session
+            _isActive.value = true
+
+            // Start publishing our service
+            startPublish()
+
+            // Start subscribing to discover others
+            startSubscribe()
+
+            trackTelemetry("attached")
+        }
+
+        override fun onAttachFailed() {
+            Timber.e("$TAG: Failed to attach to WiFi Aware")
+            _isActive.value = false
+            trackTelemetry("attach_failed")
+        }
+    }
+
+    /**
+     * Start publishing our service so others can discover us.
+     */
+    private fun startPublish() {
+        val session = wifiAwareSession ?: return
+        val id = localPublicId ?: return
+
+        // Create service-specific info with our identity
+        val serviceInfo = mapOf(
+            TXT_KEY_ID to id.take(8),  // Privacy: only first 8 chars
+            TXT_KEY_PORT to localPort.toString(),
+            TXT_KEY_VER to "1"
+        )
+
+        // Convert to byte array format expected by WiFi Aware
+        val serviceInfoBytes = serviceInfo.entries
+            .joinToString(",") { "${it.key}=${it.value}" }
+            .toByteArray(Charsets.UTF_8)
+
+        val config = PublishConfig.Builder()
+            .setServiceName(SERVICE_NAME)
+            .setServiceSpecificInfo(serviceInfoBytes)
+            .setPublishType(PublishConfig.PUBLISH_TYPE_UNSOLICITED)
+            .setTtlSec(PUBLISH_TTL_SEC)
+            .build()
+
+        session.publish(config, publishCallback, mainHandler)
+        Timber.d("$TAG: Publishing service with ID ${id.take(8)}...")
+    }
+
+    private val publishCallback = object : DiscoverySessionCallback() {
+        override fun onPublishStarted(session: PublishDiscoverySession) {
+            Timber.i("$TAG: Publish started")
+            publishSession = session
+            trackTelemetry("publish_started")
+        }
+
+        override fun onSessionConfigFailed() {
+            Timber.e("$TAG: Publish config failed")
+            trackTelemetry("publish_failed")
+        }
+
+        override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
+            // Handle incoming messages from peers
+            handleIncomingMessage(peerHandle, message)
+        }
+    }
+
+    /**
+     * Start subscribing to discover other Murmur devices.
+     */
+    private fun startSubscribe() {
+        val session = wifiAwareSession ?: return
+
+        val config = SubscribeConfig.Builder()
+            .setServiceName(SERVICE_NAME)
+            .setSubscribeType(SubscribeConfig.SUBSCRIBE_TYPE_PASSIVE)
+            .setTtlSec(SUBSCRIBE_TTL_SEC)
+            .build()
+
+        session.subscribe(config, subscribeCallback, mainHandler)
+        Timber.d("$TAG: Subscribing to discover peers...")
+    }
+
+    private val subscribeCallback = object : DiscoverySessionCallback() {
+        override fun onSubscribeStarted(session: SubscribeDiscoverySession) {
+            Timber.i("$TAG: Subscribe started")
+            subscribeSession = session
+            trackTelemetry("subscribe_started")
+        }
+
+        override fun onSessionConfigFailed() {
+            Timber.e("$TAG: Subscribe config failed")
+            trackTelemetry("subscribe_failed")
+        }
+
+        override fun onServiceDiscovered(
+            peerHandle: PeerHandle,
+            serviceSpecificInfo: ByteArray?,
+            matchFilter: List<ByteArray>?
+        ) {
+            handlePeerDiscovered(peerHandle, serviceSpecificInfo)
+        }
+
+        override fun onServiceDiscoveredWithinRange(
+            peerHandle: PeerHandle,
+            serviceSpecificInfo: ByteArray?,
+            matchFilter: List<ByteArray>?,
+            distanceMm: Int
+        ) {
+            // Enhanced discovery with distance info (Android 9+)
+            handlePeerDiscovered(peerHandle, serviceSpecificInfo, distanceMm)
+        }
+
+        override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
+            handleIncomingMessage(peerHandle, message)
+        }
+
+        override fun onServiceLost(peerHandle: PeerHandle, reason: Int) {
+            handlePeerLost(peerHandle)
+        }
+    }
+
+    /**
+     * Handle discovery of a new peer.
+     */
+    private fun handlePeerDiscovered(
+        peerHandle: PeerHandle,
+        serviceSpecificInfo: ByteArray?,
+        distanceMm: Int? = null
+    ) {
+        // Parse service info to extract peer's public ID
+        val serviceInfoStr = serviceSpecificInfo?.toString(Charsets.UTF_8) ?: ""
+        val parsedInfo = parseServiceInfo(serviceInfoStr)
+
+        val peerId = parsedInfo[TXT_KEY_ID]
+        val portStr = parsedInfo[TXT_KEY_PORT]
+        val port = portStr?.toIntOrNull()
+
+        // Create a stable session ID from the peer handle
+        val sessionId = "nan_${peerHandle.hashCode()}"
+
+        // Check if this is us (comparing our ID prefix)
+        if (peerId != null && localPublicId?.startsWith(peerId) == true) {
+            Timber.d("$TAG: Ignoring self-discovery")
+            return
+        }
+
+        Timber.i("$TAG: Discovered peer: id=${peerId ?: "unknown"}, port=$port, distance=${distanceMm}mm")
+
+        // Create peer record
+        val peer = DiscoveredWifiAwarePeer(
+            peerHandle = peerHandle,
+            sessionId = sessionId,
+            publicIdPrefix = peerId,
+            port = port,
+            distanceMm = distanceMm,
+            lastSeen = System.currentTimeMillis()
+        )
+
+        discoveredPeers[sessionId] = peer
+        _peerCount.value = discoveredPeers.size
+
+        // Report to unified registry
+        peerRegistry.reportWifiAwarePeer(
+            sessionId = sessionId,
+            peerHandleHash = peerHandle.hashCode(),
+            publicId = peerId,  // May be null or partial
+            port = port,
+            rssi = null  // WiFi Aware doesn't provide RSSI directly
+        )
+
+        onPeerDiscovered?.invoke(peer)
+
+        trackTelemetry("peer_discovered", mapOf(
+            "peer_id" to (peerId ?: "unknown"),
+            "has_port" to (port != null).toString(),
+            "has_distance" to (distanceMm != null).toString()
+        ))
+    }
+
+    /**
+     * Handle peer loss.
+     */
+    private fun handlePeerLost(peerHandle: PeerHandle) {
+        val sessionId = "nan_${peerHandle.hashCode()}"
+        val peer = discoveredPeers.remove(sessionId)
+
+        if (peer != null) {
+            Timber.i("$TAG: Lost peer: ${peer.publicIdPrefix ?: sessionId}")
+            _peerCount.value = discoveredPeers.size
+            onPeerLost?.invoke(sessionId)
+            trackTelemetry("peer_lost")
+        }
+    }
+
+    /**
+     * Handle incoming message from a peer.
+     */
+    private fun handleIncomingMessage(peerHandle: PeerHandle, message: ByteArray) {
+        val sessionId = "nan_${peerHandle.hashCode()}"
+        Timber.d("$TAG: Received message from $sessionId: ${message.size} bytes")
+
+        // Update last seen time
+        discoveredPeers[sessionId]?.lastSeen = System.currentTimeMillis()
+
+        // TODO: Process protocol messages for exchange
+    }
+
+    /**
+     * Send a message to a peer.
+     */
+    fun sendMessage(sessionId: String, message: ByteArray): Boolean {
+        val peer = discoveredPeers[sessionId] ?: return false
+        val session = subscribeSession ?: publishSession ?: return false
+
+        return try {
+            session.sendMessage(peer.peerHandle, 0, message)
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "$TAG: Failed to send message to $sessionId")
+            false
+        }
+    }
+
+    /**
+     * Parse service-specific info string.
+     * Format: "key1=value1,key2=value2,..."
+     */
+    private fun parseServiceInfo(info: String): Map<String, String> {
+        return info.split(",")
+            .mapNotNull { entry ->
+                val parts = entry.split("=", limit = 2)
+                if (parts.size == 2) parts[0] to parts[1] else null
+            }
+            .toMap()
+    }
+
+    /**
+     * Get list of currently discovered peers.
+     */
+    fun getDiscoveredPeers(): List<DiscoveredWifiAwarePeer> {
+        return discoveredPeers.values.toList()
+    }
+
+    private fun trackTelemetry(event: String, extras: Map<String, String> = emptyMap()) {
+        try {
+            val payload = mutableMapOf(
+                "event" to event,
+                "peer_count" to discoveredPeers.size.toString()
+            )
+            payload.putAll(extras)
+            TelemetryClient.getInstance()?.track(
+                eventType = "wifi_aware_$event",
+                transport = "wifi_aware",
+                payload = payload
+            )
+        } catch (e: Exception) {
+            Timber.w(e, "$TAG: Failed to track telemetry")
+        }
+    }
+}
+
+/**
+ * Represents a peer discovered via WiFi Aware.
+ */
+data class DiscoveredWifiAwarePeer(
+    val peerHandle: PeerHandle,
+    val sessionId: String,
+    val publicIdPrefix: String?,  // First 8 chars of public ID
+    val port: Int?,
+    val distanceMm: Int?,  // Distance in millimeters (if ranging supported)
+    var lastSeen: Long
+)

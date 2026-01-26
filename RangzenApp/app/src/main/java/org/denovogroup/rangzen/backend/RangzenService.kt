@@ -36,6 +36,8 @@ import org.denovogroup.rangzen.backend.telemetry.LocationHelper
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.backend.wifi.WifiDirectManager
 import org.denovogroup.rangzen.backend.wifi.WifiDirectTransport
+import org.denovogroup.rangzen.backend.wifiaware.WifiAwareManager
+import org.denovogroup.rangzen.backend.discovery.TransportCapabilities
 import org.denovogroup.rangzen.ui.MainActivity
 import timber.log.Timber
 import java.util.*
@@ -69,6 +71,7 @@ class RangzenService : Service() {
     private lateinit var bleAdvertiser: BleAdvertiser
     private lateinit var wifiDirectManager: WifiDirectManager
     private val wifiDirectTransport = WifiDirectTransport()
+    private var wifiAwareManager: WifiAwareManager? = null  // Nullable - not all devices support
     private lateinit var lanDiscoveryManager: LanDiscoveryManager
     private lateinit var nsdDiscoveryManager: NsdDiscoveryManager
     private val lanTransport = LanTransport()
@@ -224,11 +227,15 @@ class RangzenService : Service() {
         // Get privacy-preserving device ID (derived from crypto keypair, not hardware)
         // This ID is safe to share over network - cannot be traced to hardware identifiers
         val deviceId = DeviceIdentity.getDeviceId(this)
-        
+
         Timber.i("Device ID (privacy-preserving): ${deviceId.take(8)}...")
-        
+
         // Wire up WiFi Direct transport for high-bandwidth exchanges
         setupWifiDirectTransport(deviceId)
+
+        // Initialize WiFi Aware (NAN) if supported - preferred over WiFi Direct (no dialogs!)
+        // WiFi Aware provides WiFi-speed connections without user confirmation popups
+        initializeWifiAware(deviceId)
         
         // Initialize LAN discovery for same-network peer finding
         // Works on shared WiFi (home, coffee shop, hotspot) even without Internet
@@ -279,9 +286,18 @@ class RangzenService : Service() {
     private fun startBleOperations() {
         bleAdvertiser.startAdvertising()
         bleScanner.startScanning()
-        
+
+        // Start WiFi Aware if supported (preferred - no user confirmation dialogs!)
+        // WiFi Aware takes priority over WiFi Direct when both are available
+        val deviceId = DeviceIdentity.getDeviceId(this)
+        if (wifiAwareManager?.isSupported() == true) {
+            wifiAwareManager?.start(deviceId)
+            Timber.i("WiFi Aware discovery enabled (preferred over WiFi Direct)")
+        }
+
         // Start WiFi Direct discovery alongside BLE
         // This extends our discovery range (WiFi Direct can see peers further away)
+        // Note: If WiFi Aware is active, WiFi Direct still runs but may share radio resources
         if (wifiDirectManager.hasPermissions()) {
             wifiDirectManager.setSeekingDesired(true)
             startWifiDirectTaskLoop()
@@ -290,7 +306,7 @@ class RangzenService : Service() {
         } else {
             Timber.w("WiFi Direct permissions not granted, skipping WiFi Direct discovery")
         }
-        
+
         // Start LAN discovery for same-network peers (coffee shop, home WiFi, hotspot)
         // Uses both UDP broadcast AND NSD/mDNS for maximum compatibility
         lanDiscoveryManager.startDiscovery()
@@ -298,7 +314,7 @@ class RangzenService : Service() {
         lanTransport.startServer(this, messageStore, friendStore)
         startParallelExchangeLoop()  // Changed from sequential to parallel
         Timber.i("LAN + NSD discovery enabled")
-        
+
         _status.value = ServiceStatus.DISCOVERING
         updateNotification(getString(R.string.status_discovering))
     }
@@ -306,14 +322,17 @@ class RangzenService : Service() {
     private fun stopBleOperations() {
         bleAdvertiser.stopAdvertising()
         bleScanner.stopScanning()
-        
+
+        // Stop WiFi Aware discovery
+        wifiAwareManager?.stop()
+
         // Stop WiFi Direct discovery
         wifiDirectManager.setSeekingDesired(false)
         wifiDirectTaskJob?.cancel()
         wifiDirectTaskJob = null
         wifiDirectAutoConnectJob?.cancel()
         wifiDirectAutoConnectJob = null
-        
+
         // Stop LAN discovery and NSD
         lanDiscoveryManager.stopDiscovery()
         nsdDiscoveryManager.stop()
@@ -757,13 +776,13 @@ class RangzenService : Service() {
                 null
             }
         }
-        
+
         // When we become group owner, start the transport server
         wifiDirectManager.onBecameGroupOwner = { groupOwnerAddress ->
             Timber.i("WiFi Direct: Became group owner at ${groupOwnerAddress.hostAddress}")
             wifiDirectTransport.startServer(serviceScope, localPublicId)
         }
-        
+
         // When we become a client, we can optionally trigger an exchange
         // This will be called from the exchange cycle when WiFi Direct is available
         wifiDirectManager.onBecameClient = { groupOwnerAddress ->
@@ -771,11 +790,47 @@ class RangzenService : Service() {
             // The exchange will be triggered by the normal exchange cycle
             // which will check for available WiFi Direct connection
         }
-        
+
         // When WiFi Direct disconnects, stop the server
         wifiDirectManager.onConnectionLost = {
             Timber.i("WiFi Direct: Connection lost, stopping transport server")
             wifiDirectTransport.stopServer()
+        }
+    }
+
+    /**
+     * Initialize WiFi Aware (NAN) if supported on this device.
+     *
+     * WiFi Aware provides WiFi-speed peer connections WITHOUT user confirmation dialogs.
+     * It's preferred over WiFi Direct when available.
+     *
+     * Downgrade logic: If WiFi Aware is not supported, we fall back to WiFi Direct.
+     */
+    @Suppress("NewApi")
+    private fun initializeWifiAware(localPublicId: String) {
+        if (!TransportCapabilities.isWifiAwareSupported(this)) {
+            Timber.i("WiFi Aware not supported on this device, using WiFi Direct only")
+            return
+        }
+
+        try {
+            wifiAwareManager = WifiAwareManager(this, peerRegistry)
+
+            // Set up callback for discovered peers
+            wifiAwareManager?.onPeerDiscovered = { peer ->
+                Timber.i("WiFi Aware: Peer discovered: ${peer.publicIdPrefix ?: peer.sessionId}")
+            }
+
+            wifiAwareManager?.onPeerLost = { sessionId ->
+                Timber.d("WiFi Aware: Peer lost: $sessionId")
+            }
+
+            // Log capability info
+            val summary = TransportCapabilities.getSupportedTransportsSummary(this)
+            Timber.i("WiFi Aware initialized. Device supports: $summary")
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to initialize WiFi Aware")
+            wifiAwareManager = null
         }
     }
     
