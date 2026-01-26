@@ -84,4 +84,57 @@
     <string name="notification_new_messages_title">New Messages</string>
     <string name="notification_new_messages_body">%1$d new messages received</string>
     <string name="notification_unknown_sender">Anonymous</string>
+
+    <!-- BLE Pairing -->
+    <string name="pairing_title">Add Friend</string>
+    <string name="pairing_nearby_title">Nearby Devices</string>
+    <string name="pairing_enter_code_title">Enter Code</string>
+    <string name="pairing_verifying_title">Verifying</string>
+    <string name="pairing_nickname_title">Add Nickname</string>
+    <string name="pairing_success_title">Success</string>
+    <string name="pairing_error_title">Error</string>
+
+    <string name="pairing_mode_active">Pairing Mode Active</string>
+    <string name="pairing_your_code">Your Code</string>
+    <string name="pairing_show_code_hint">Show this code to your friend.\nThey\'ll enter it on their phone.</string>
+    <string name="pairing_see_nearby">See Nearby Devices</string>
+
+    <string name="pairing_select_device">Select the device showing your code:</string>
+    <string name="pairing_searching">Searching for nearby devices\u2026</string>
+    <string name="pairing_device_format">Device %1$s</string>
+    <string name="pairing_code_format">Code: %1$s</string>
+
+    <string name="pairing_enter_their_code">Enter their code</string>
+    <string name="pairing_code_hint">000000</string>
+    <string name="pairing_enter_code_hint">Type the 6-digit code shown on their screen</string>
+    <string name="pairing_verify">Verify</string>
+
+    <string name="pairing_verifying">Verifying\u2026</string>
+    <string name="pairing_verifying_hint">Establishing secure connection.\nThis may take a few seconds.</string>
+
+    <string name="pairing_verified">Friend Verified</string>
+    <string name="pairing_nickname_prompt">Give your friend a nickname (optional)</string>
+    <string name="pairing_nickname_hint">Nickname</string>
+    <string name="pairing_skip">Skip</string>
+    <string name="pairing_save">Save</string>
+
+    <string name="pairing_success">Friend Added!</string>
+    <string name="pairing_friend_added_format">%1$s has been added to your friends</string>
+    <string name="pairing_done">Done</string>
+
+    <string name="pairing_error">Error</string>
+    <string name="pairing_retry">Try Again</string>
+    <string name="pairing_code_mismatch">Code doesn\'t match. Please check and try again.</string>
+
+    <string name="pairing_error_no_identity">Identity not initialized. Please restart the app.</string>
+    <string name="pairing_error_no_bluetooth">Bluetooth permission required for pairing.</string>
+    <string name="pairing_error_invalid_response">Invalid response from device.</string>
+    <string name="pairing_error_rejected">Pairing rejected. The other device declined.</string>
+    <string name="pairing_error_no_response">No response from device. Make sure they\'re nearby.</string>
+    <string name="pairing_error_connection">Connection failed. Please try again.</string>
+    <string name="pairing_error_timeout">Verification timed out. Please try again.</string>
+    <string name="pairing_error_no_public_id">Failed to get friend\'s identity.</string>
+    <string name="pairing_error_already_friends">You\'re already friends with this person.</string>
+
+    <string name="action_add_friend_ble">Add Friend Nearby</string>
 </resources>

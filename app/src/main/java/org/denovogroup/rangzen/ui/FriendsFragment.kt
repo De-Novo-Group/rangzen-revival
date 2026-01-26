@@ -77,6 +77,17 @@ class FriendsFragment : Fragment() {
         binding.btnScanQr.setOnClickListener {
             scanFriendQR()
         }
+
+        binding.btnAddNearby.setOnClickListener {
+            openBlePairing()
+        }
+    }
+
+    private fun openBlePairing() {
+        parentFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, BlePairingFragment.newInstance())
+            .addToBackStack("ble_pairing")
+            .commit()
     }
 
     private fun observeFriends() {

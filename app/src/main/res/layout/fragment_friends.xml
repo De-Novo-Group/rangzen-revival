@@ -96,6 +96,16 @@
 
             </LinearLayout>
 
+            <!-- BLE pairing button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_add_nearby"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/action_add_friend_ble"
+                app:icon="@drawable/ic_bluetooth"
+                style="@style/Widget.Material3.Button.OutlinedButton" />
+
         </LinearLayout>
 
     </com.google.android.material.card.MaterialCardView>
