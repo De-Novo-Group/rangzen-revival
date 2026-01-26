@@ -423,10 +423,11 @@ class LanDiscoveryManager(private val context: Context) {
                 "device_id_hash" to deviceId.hashCode().toString(),
                 "ip" to address.hostAddress.toString()
             )
-            onPeerDiscovered?.invoke(peer)
         } else {
             Timber.v("LAN peer refreshed: ${deviceId.take(8)}... at ${address.hostAddress}")
         }
+        // Always invoke callback to keep peerRegistry timestamps fresh
+        onPeerDiscovered?.invoke(peer)
     }
     
     /**

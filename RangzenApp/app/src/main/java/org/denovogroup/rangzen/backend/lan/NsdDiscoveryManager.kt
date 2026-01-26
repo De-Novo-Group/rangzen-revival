@@ -334,10 +334,11 @@ class NsdDiscoveryManager(private val context: Context) {
                         "device_id_hash" to deviceId.hashCode().toString(),
                         "host" to host
                     )
-                    onPeerDiscovered?.invoke(peer)
                 } else {
                     Timber.v("NSD peer refreshed: ${deviceId.take(8)}...")
                 }
+                // Always invoke callback to keep peerRegistry timestamps fresh
+                onPeerDiscovered?.invoke(peer)
             }
         }
         

@@ -515,6 +515,7 @@ class DiscoveredPeerRegistry {
             .sortedByDescending { it.getSignalStrength() ?: Int.MIN_VALUE }
         _peerList.value = list
         _peerCount.value = list.size
+        Timber.v("$TAG: updatePeerList: ${list.size} reachable peers (raw: ${peers.size})")
         onPeersUpdated?.invoke(list)
     }
 }

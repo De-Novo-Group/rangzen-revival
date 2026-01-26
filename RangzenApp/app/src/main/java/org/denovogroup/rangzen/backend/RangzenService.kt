@@ -54,6 +54,7 @@ class RangzenService : Service() {
         const val ACTION_STOP = "org.denovogroup.rangzen.action.STOP"
         const val ACTION_FORCE_EXCHANGE = "org.denovogroup.rangzen.action.FORCE_EXCHANGE"
         const val ACTION_SOFT_FORCE_EXCHANGE = "org.denovogroup.rangzen.action.SOFT_FORCE_EXCHANGE"
+        const val ACTION_RADIO_CONFIG_CHANGED = "org.denovogroup.rangzen.action.RADIO_CONFIG_CHANGED"
         private const val EXCHANGE_INTERVAL_MS = 15_000L // Exchange every 15 seconds
 
         @Volatile
@@ -170,11 +171,22 @@ class RangzenService : Service() {
             updateNotification(getString(R.string.status_peers_found, _peerCount.value))
         }
         // Keep peer count in sync when the list changes (including stale removals).
+        // Also refresh the unified peer registry with fresh timestamps.
         bleScanner.onPeersUpdated = { peers ->
             // Update the cached count to match the latest list.
             _peerCount.value = peers.size
             // Update the notification to avoid stale peer counts.
             updateNotification(getString(R.string.status_peers_found, _peerCount.value))
+            // Refresh the unified peer registry with all current BLE peers.
+            // This keeps lastSeen timestamps current so peers don't become stale.
+            peers.forEach { peer ->
+                peerRegistry.reportBlePeer(
+                    bleAddress = peer.address,
+                    device = peer.device,
+                    rssi = peer.rssi,
+                    name = peer.name
+                )
+            }
         }
         
         // Set up peer registry callbacks
@@ -260,8 +272,57 @@ class RangzenService : Service() {
             ACTION_STOP -> stopService()
             ACTION_FORCE_EXCHANGE -> triggerImmediateExchange(respectInbound = false)
             ACTION_SOFT_FORCE_EXCHANGE -> triggerImmediateExchange(respectInbound = true)
+            ACTION_RADIO_CONFIG_CHANGED -> handleRadioConfigChange()
         }
         return START_STICKY
+    }
+
+    /**
+     * Handle radio configuration changes from Settings.
+     * Restarts discovery with new radio settings.
+     */
+    private fun handleRadioConfigChange() {
+        Timber.i("Radio configuration changed, restarting discovery")
+        val prefs = getSharedPreferences("rangzen_prefs", 0)
+
+        val bleEnabled = prefs.getBoolean("radio_ble_enabled", true)
+        val wifiDirectEnabled = prefs.getBoolean("radio_wifi_direct_enabled", true)
+        val wifiAwareEnabled = prefs.getBoolean("radio_wifi_aware_enabled", true)
+        val lanEnabled = prefs.getBoolean("radio_lan_enabled", true)
+
+        Timber.i("Radio config: BLE=$bleEnabled, WiFiDirect=$wifiDirectEnabled, WiFiAware=$wifiAwareEnabled, LAN=$lanEnabled")
+
+        // Stop all discovery
+        stopBleOperations()
+
+        // Restart with new config
+        if (bleEnabled) {
+            startBleOperations()
+        }
+
+        // WiFi Direct is controlled by its own manager
+        if (wifiDirectEnabled) {
+            wifiDirectManager.startDiscovery()
+        } else {
+            wifiDirectManager.stopDiscovery()
+        }
+
+        // WiFi Aware
+        if (wifiAwareEnabled && wifiAwareManager != null) {
+            val deviceId = DeviceIdentity.getDeviceId(this)
+            wifiAwareManager?.start(deviceId)
+        } else {
+            wifiAwareManager?.stop()
+        }
+
+        // LAN discovery
+        if (lanEnabled) {
+            lanDiscoveryManager.startDiscovery()
+            nsdDiscoveryManager.start()
+        } else {
+            lanDiscoveryManager.stopDiscovery()
+            nsdDiscoveryManager.stop()
+        }
     }
 
     private fun startForegroundService() {

@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
+import org.denovogroup.rangzen.backend.discovery.TransportCapabilities
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.backend.update.UpdateClient
 import org.denovogroup.rangzen.backend.update.UpdateState
@@ -73,6 +74,7 @@ class SettingsFragment : Fragment() {
         setupSettings()
         setupQaHelpIcon()
         setupQaTools()
+        setupRadioToggles()
         loadStats()
         checkForPendingUpdate()
         setupShareApp()
@@ -215,8 +217,9 @@ class SettingsFragment : Fragment() {
         val qaEnabled = prefs.getBoolean("qa_mode", false)
         // Show help icon only when QA mode is ON
         binding.btnQaHelp.visibility = if (qaEnabled) View.VISIBLE else View.GONE
-        // Also update QA tools visibility
+        // Also update QA tools and radios visibility
         binding.cardQaTools.visibility = if (qaEnabled) View.VISIBLE else View.GONE
+        binding.cardRadios.visibility = if (qaEnabled) View.VISIBLE else View.GONE
     }
 
     /**
@@ -235,6 +238,67 @@ class SettingsFragment : Fragment() {
 
         // Update inbox count badge
         updateInboxBadge()
+    }
+
+    /**
+     * Sets up the radio toggle switches for enabling/disabling transports.
+     * These are QA/debug features for advanced testers.
+     */
+    private fun setupRadioToggles() {
+        val prefs = requireContext().getSharedPreferences("rangzen_prefs", 0)
+
+        // Load saved states (default all enabled)
+        binding.switchRadioBle.isChecked = prefs.getBoolean("radio_ble_enabled", true)
+        binding.switchRadioWifiDirect.isChecked = prefs.getBoolean("radio_wifi_direct_enabled", true)
+        binding.switchRadioWifiAware.isChecked = prefs.getBoolean("radio_wifi_aware_enabled", true)
+        binding.switchRadioLan.isChecked = prefs.getBoolean("radio_lan_enabled", true)
+
+        // Check WiFi Aware support and update UI
+        val wifiAwareSupported = TransportCapabilities.isWifiAwareSupported(requireContext())
+        if (!wifiAwareSupported) {
+            binding.textWifiAwareStatus.text = "Not supported on this device"
+            binding.switchRadioWifiAware.isEnabled = false
+            binding.switchRadioWifiAware.isChecked = false
+        }
+
+        // BLE toggle
+        binding.switchRadioBle.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("radio_ble_enabled", isChecked).apply()
+            Timber.i("Radio BLE enabled: $isChecked")
+            notifyServiceOfRadioChange()
+        }
+
+        // WiFi Direct toggle
+        binding.switchRadioWifiDirect.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("radio_wifi_direct_enabled", isChecked).apply()
+            Timber.i("Radio WiFi Direct enabled: $isChecked")
+            notifyServiceOfRadioChange()
+        }
+
+        // WiFi Aware toggle
+        binding.switchRadioWifiAware.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("radio_wifi_aware_enabled", isChecked).apply()
+            Timber.i("Radio WiFi Aware enabled: $isChecked")
+            notifyServiceOfRadioChange()
+        }
+
+        // LAN toggle
+        binding.switchRadioLan.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("radio_lan_enabled", isChecked).apply()
+            Timber.i("Radio LAN enabled: $isChecked")
+            notifyServiceOfRadioChange()
+        }
+    }
+
+    /**
+     * Notify the service that radio settings have changed.
+     * The service will restart with the new configuration.
+     */
+    private fun notifyServiceOfRadioChange() {
+        val intent = Intent(requireContext(), RangzenService::class.java).apply {
+            action = RangzenService.ACTION_RADIO_CONFIG_CHANGED
+        }
+        requireContext().startService(intent)
     }
 
     private fun showQaInbox() {

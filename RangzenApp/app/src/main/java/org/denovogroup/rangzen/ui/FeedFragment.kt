@@ -321,7 +321,9 @@ class FeedFragment : Fragment() {
 
     private fun observeServiceStatus() {
         viewLifecycleOwner.lifecycleScope.launch {
+            timber.log.Timber.d("FeedFragment: Starting to observe unifiedPeers")
             rangzenService?.unifiedPeers?.collectLatest { unifiedPeers ->
+                timber.log.Timber.d("FeedFragment: Received ${unifiedPeers.size} unified peers")
                 // Real transport counts from unified peer registry.
                 updateStatusText(unifiedPeers)
             }
