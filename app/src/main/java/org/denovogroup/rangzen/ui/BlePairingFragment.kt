@@ -464,10 +464,11 @@ class BlePairingFragment : Fragment() {
                         peersWhoVerifiedUs[address] = parsed.theirCode
                         Timber.i("$TAG: Peer $address verified us correctly, their code is ${parsed.theirCode}")
 
-                        // Check if we've verified them (either through UI or they're the selected peer)
-                        val weVerifiedThem = session.peerCode == parsed.theirCode ||
-                            (selectedPairingPeer?.code == parsed.theirCode)
-                        Timber.i("$TAG: weVerifiedThem=$weVerifiedThem, session.peerCode=${session.peerCode}, selectedPairingPeer?.code=${selectedPairingPeer?.code}")
+                        // Check if we've verified them - ONLY counts if user entered code and tapped Verify
+                        // (session.peerCode is set in verifyCode() when user submits)
+                        // Note: Just selecting a device does NOT count as verification!
+                        val weVerifiedThem = session.peerCode == parsed.theirCode
+                        Timber.i("$TAG: weVerifiedThem=$weVerifiedThem, session.peerCode=${session.peerCode}")
 
                         if (weVerifiedThem) {
                             // Both verified! Send confirmation with our public ID
