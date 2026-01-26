@@ -20,6 +20,9 @@ data class TelemetryEvent(
     @SerializedName("device_id_hash")
     val deviceIdHash: String,
 
+    @SerializedName("display_name")
+    val displayName: String? = null,
+
     @SerializedName("peer_id_hash")
     val peerIdHash: String? = null,
 

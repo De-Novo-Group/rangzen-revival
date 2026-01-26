@@ -111,6 +111,26 @@ class TelemetryClient private constructor(
     /** Public read-only access to device ID hash */
     val deviceIdHash: String get() = _deviceIdHash
 
+    /** App-level prefs for display name */
+    private val appPrefs: SharedPreferences by lazy {
+        context.getSharedPreferences("rangzen_prefs", Context.MODE_PRIVATE)
+    }
+
+    /**
+     * Get the user's display name for telemetry.
+     * Uses the pseudonym from message compose, or generates fallback "Tester-{short-hash}".
+     */
+    val displayName: String
+        get() {
+            // Use the pseudonym they enter when composing messages
+            val pseudonym = appPrefs.getString("default_pseudonym", null)
+            if (!pseudonym.isNullOrBlank()) {
+                return pseudonym
+            }
+            // Generate fallback: Tester-{first 4 chars of device hash}
+            return "Tester-${deviceIdHash.take(4)}"
+        }
+
     init {
         startFlushTimer()
     }
@@ -145,6 +165,7 @@ class TelemetryClient private constructor(
         val event = TelemetryEvent(
             eventType = eventType,
             deviceIdHash = deviceIdHash,
+            displayName = displayName,
             peerIdHash = peerIdHash,
             transport = transport,
             payload = payload
