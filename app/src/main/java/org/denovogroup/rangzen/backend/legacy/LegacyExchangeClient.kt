@@ -49,6 +49,11 @@ class LegacyExchangeClient(
                 // Decide whether to use the trust/PSI pipeline (from SecurityManager profile).
                 val useTrust = SecurityManager.useTrust(context)
                 val localFriends = friendStore.getAllFriendIds()
+                // Paper-aligned: Include our own public ID in the PSI input.
+                // This makes direct friends count as "mutual friends" in the trust computation.
+                friendStore.getMyPublicId()?.let { myId ->
+                    localFriends.add(myId)
+                }
                 val clientPSI = Crypto.PrivateSetIntersection(localFriends)
                 val serverPSI = Crypto.PrivateSetIntersection(localFriends)
 
@@ -306,29 +311,26 @@ class LegacyExchangeClient(
                 
                 val existing = messageStore.getMessage(msg.messageId)
                 if (existing != null) {
-                    // Update trust if new value is higher
-                    val newTrust = LegacyExchangeMath.newPriority(
-                        msg.trustScore,
-                        existing.trustScore,
-                        0, // No PSI context in simplified exchange
-                        myFriendsCount
-                    )
-                    if (newTrust > existing.trustScore) {
-                        messageStore.updateTrustScore(msg.messageId, newTrust)
+                    // Paper-aligned: WiFi Direct doesn't do PSI, so we can't recompute trust.
+                    // Instead, preserve the incoming message's trust score if it's higher.
+                    // The incoming score was computed when the message was first received via
+                    // a trusted channel (BLE with PSI).
+                    if (msg.trustScore > existing.trustScore) {
+                        messageStore.updateTrustScore(msg.messageId, msg.trustScore)
                     }
                 } else if (msg.text != null && msg.text.isNotEmpty()) {
                     messageStore.addMessage(msg)
                     newCount++
                 }
             }
-            
+
             if (newCount > 0) {
                 // Trigger UI refresh
                 messageStore.refreshMessagesNow()
                 // Show notification for new messages
                 NotificationHelper.showNewMessageNotification(context, newCount)
             }
-            
+
             newCount
         } catch (e: Exception) {
             Timber.e(e, "Failed to process WiFi Direct exchange response")

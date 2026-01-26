@@ -49,6 +49,9 @@ object SecurityManager {
     private const val PROFILE_RANDOM_EXCHANGE_KEY = "randomExchange"
     private const val PROFILE_MIN_CONTACTS_FOR_HOP_KEY = "minContactsForHop"
 
+    /** Key to track if initial seeding from config.json has been done */
+    private const val PROFILE_SEEDED_KEY = "profile_seeded_from_config"
+
     /** Default pseudonym if none is stored */
     const val DEFAULT_PSEUDONYM = ""
 
@@ -86,6 +89,12 @@ object SecurityManager {
      */
     fun getCurrentProfile(context: Context): SecurityProfile {
         val prefs = getPrefs(context)
+
+        // On first run, seed from config.json to apply paper-aligned defaults.
+        if (!prefs.getBoolean(PROFILE_SEEDED_KEY, false)) {
+            seedFromConfig(context)
+        }
+
         val defaults = SecurityProfile.flexible()
 
         val profileName = prefs.getString(PROFILE_NAME_KEY, defaults.name) ?: defaults.name
@@ -115,6 +124,42 @@ object SecurityManager {
             randomExchange = prefs.getBoolean(PROFILE_RANDOM_EXCHANGE_KEY, defaults.randomExchange),
             minContactsForHop = prefs.getInt(PROFILE_MIN_CONTACTS_FOR_HOP_KEY, defaults.minContactsForHop)
         )
+    }
+
+    /**
+     * Seed profile settings from config.json on first run.
+     * This ensures paper-aligned defaults (useTrust=true) are applied
+     * even though SecurityProfile.flexible() has useTrust=false.
+     */
+    private fun seedFromConfig(context: Context) {
+        val prefs = getPrefs(context)
+        val useTrustFromConfig = AppConfig.useTrust(context)
+        val minSharedContactsFromConfig = AppConfig.minSharedContactsForExchange(context)
+        val defaults = SecurityProfile.flexible()
+
+        prefs.edit().apply {
+            putString(PROFILE_NAME_KEY, SecurityProfile.PROFILE_CUSTOM)
+            putBoolean(PROFILE_TIMESTAMP_KEY, defaults.timestamp)
+            putBoolean(PROFILE_PSEUDONYM_KEY, defaults.pseudonyms)
+            putInt(PROFILE_FEED_SIZE_KEY, defaults.feedSize)
+            putBoolean(PROFILE_FRIEND_VIA_BOOK_KEY, defaults.friendsViaBook)
+            putBoolean(PROFILE_FRIEND_VIA_QR_KEY, defaults.friendsViaQR)
+            putBoolean(PROFILE_AUTO_DELETE_KEY, defaults.autodelete)
+            putFloat(PROFILE_AUTO_DELETE_TRUST_KEY, defaults.autodeleteTrust)
+            putInt(PROFILE_AUTO_DELETE_AGE_KEY, defaults.autodeleteAge)
+            putBoolean(PROFILE_SHARE_LOCATIONS_KEY, defaults.shareLocation)
+            putInt(PROFILE_MIN_SHARED_CONTACTS_KEY, minSharedContactsFromConfig)
+            putInt(PROFILE_MAX_MESSAGES_KEY, defaults.maxMessages)
+            putInt(PROFILE_COOLDOWN_KEY, defaults.cooldown)
+            putInt(PROFILE_TIMEBOUND_KEY, defaults.timeboundPeriod)
+            putBoolean(PROFILE_ENFORCE_LOCK_KEY, defaults.enforceLock)
+            putBoolean(PROFILE_USE_TRUST_KEY, useTrustFromConfig)
+            putBoolean(PROFILE_RANDOM_EXCHANGE_KEY, defaults.randomExchange)
+            putInt(PROFILE_MIN_CONTACTS_FOR_HOP_KEY, defaults.minContactsForHop)
+            putBoolean(PROFILE_SEEDED_KEY, true)
+            apply()
+        }
+        timber.log.Timber.i("SecurityManager: Seeded profile from config.json (useTrust=$useTrustFromConfig, minSharedContacts=$minSharedContactsFromConfig)")
     }
 
     /**

@@ -231,6 +231,11 @@ class LanTransport {
             
             // Step 4: Create our PSI objects and send our blinded friends
             val localFriends = friendStore.getAllFriendIds()
+            // Paper-aligned: Include our own public ID in the PSI input.
+            // This makes direct friends count as "mutual friends" in the trust computation.
+            friendStore.getMyPublicId()?.let { myId ->
+                localFriends.add(myId)
+            }
             val clientPSI = Crypto.PrivateSetIntersection(localFriends)
             val serverPSI = Crypto.PrivateSetIntersection(localFriends)
             
@@ -409,6 +414,11 @@ class LanTransport {
             // Step 3: PSI - Send our blinded friends
             val useTrust = SecurityManager.useTrust(context)
             val localFriends = friendStore.getAllFriendIds()
+            // Paper-aligned: Include our own public ID in the PSI input.
+            // This makes direct friends count as "mutual friends" in the trust computation.
+            friendStore.getMyPublicId()?.let { myId ->
+                localFriends.add(myId)
+            }
             val clientPSI = Crypto.PrivateSetIntersection(localFriends)
             val serverPSI = Crypto.PrivateSetIntersection(localFriends)
 

@@ -98,15 +98,10 @@ class LegacyExchangeServer(
                     
                     val existing = messageStore.getMessage(msg.messageId)
                     if (existing != null) {
-                        // Update trust if new value is higher
-                        val newTrust = LegacyExchangeMath.newPriority(
-                            msg.trustScore,
-                            existing.trustScore,
-                            0, // No PSI context in simplified exchange
-                            myFriendsCount
-                        )
-                        if (newTrust > existing.trustScore) {
-                            messageStore.updateTrustScore(msg.messageId, newTrust)
+                        // Paper-aligned: WiFi Direct doesn't do PSI, so we can't recompute trust.
+                        // Instead, preserve the incoming message's trust score if it's higher.
+                        if (msg.trustScore > existing.trustScore) {
+                            messageStore.updateTrustScore(msg.messageId, msg.trustScore)
                         }
                     } else if (msg.text != null && msg.text.isNotEmpty()) {
                         messageStore.addMessage(msg)
@@ -195,6 +190,11 @@ private class LegacyExchangeSession(
         remoteBlindedFriends = if (useTrust) clientMessage.blindedFriends else emptyList()
 
         val localFriends = friendStore.getAllFriendIds()
+        // Paper-aligned: Include our own public ID in the PSI input.
+        // This makes direct friends count as "mutual friends" in the trust computation.
+        friendStore.getMyPublicId()?.let { myId ->
+            localFriends.add(myId)
+        }
         clientPSI = Crypto.PrivateSetIntersection(localFriends)
         serverPSI = Crypto.PrivateSetIntersection(localFriends)
 
