@@ -338,7 +338,7 @@
                         android:layout_height="24dp"
                         android:layout_marginEnd="12dp"
                         android:src="@drawable/ic_bluetooth"
-                        app:tint="@color/primary"
+                        app:tint="@color/transport_bt"
                         android:contentDescription="Bluetooth" />
 
                     <LinearLayout
@@ -384,7 +384,7 @@
                         android:layout_height="24dp"
                         android:layout_marginEnd="12dp"
                         android:src="@drawable/ic_wifi_direct"
-                        app:tint="@color/primary"
+                        app:tint="@color/transport_wd"
                         android:contentDescription="WiFi Direct" />
 
                     <LinearLayout
@@ -431,7 +431,7 @@
                         android:layout_height="24dp"
                         android:layout_marginEnd="12dp"
                         android:src="@drawable/ic_wifi_aware"
-                        app:tint="@color/primary"
+                        app:tint="@color/transport_nan"
                         android:contentDescription="WiFi Aware" />
 
                     <LinearLayout
@@ -477,8 +477,8 @@
                         android:layout_width="24dp"
                         android:layout_height="24dp"
                         android:layout_marginEnd="12dp"
-                        android:src="@drawable/ic_lan"
-                        app:tint="@color/primary"
+                        android:src="@drawable/ic_wifi"
+                        app:tint="@color/transport_lan"
                         android:contentDescription="LAN" />
 
                     <LinearLayout
