@@ -1,8 +1,6 @@
 # OTA Release Workflow
-# Triggered on version tags (v*), builds APK, creates GitHub Release,
+# Triggered on version tags (v*), builds signed APK, creates GitHub Release,
 # and triggers the private repo to deploy to the OTA server.
-#
-# See docs/phases/PHASE_10_OTA_CICD.md for full documentation.
 
 name: Build and Release
 
@@ -39,13 +37,22 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > $GITHUB_WORKSPACE/release.keystore
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
 
       - name: Extract version FROM APK (source of truth)
         id: version
         run: |
-          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
+          APK_PATH="app/build/outputs/apk/release/app-release.apk"
 
           # Find aapt binary
           AAPT=$(find $ANDROID_HOME/build-tools -name "aapt" -type f | head -1)
@@ -83,6 +90,7 @@ jobs:
           echo "- **SHA256:** \`$SHA256\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Size:** $SIZE bytes" >> $GITHUB_STEP_SUMMARY
           echo "- **Tag:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build type:** Release (signed)" >> $GITHUB_STEP_SUMMARY
 
       - name: Validate version matches tag
         run: |
@@ -110,8 +118,12 @@ jobs:
 
       - name: Rename APK with version
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk \
+          cp app/build/outputs/apk/release/app-release.apk \
              murmur-${{ steps.version.outputs.version_name }}.apk
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f $GITHUB_WORKSPACE/release.keystore
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -124,7 +136,7 @@ jobs:
             **Size:** ${{ steps.version.outputs.size }} bytes
 
             ### Verification
-            This APK was built automatically from tag `${{ github.ref_name }}` by GitHub Actions.
+            This APK was built and signed automatically from tag `${{ github.ref_name }}` by GitHub Actions.
 
             You can verify the build by:
             1. Checking the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
