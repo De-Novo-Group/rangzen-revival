@@ -228,6 +228,8 @@ class BlePairingFragment : Fragment() {
             State.VERIFYING -> {
                 binding.layoutVerifying.visibility = View.VISIBLE
                 binding.title.text = getString(R.string.pairing_verifying_title)
+                // Show our code so the other person can still enter it
+                binding.textMyCodeVerifying.text = pairingSession?.myCode ?: ""
             }
             State.NICKNAME -> {
                 binding.layoutNickname.visibility = View.VISIBLE
@@ -574,13 +576,10 @@ class BlePairingFragment : Fragment() {
     private fun verifyCode(enteredCode: String) {
         val session = pairingSession ?: return
         val peer = selectedPeer ?: return
-        val pairingPeer = selectedPairingPeer
 
-        // Check if the entered code matches what we see for this peer
-        if (pairingPeer != null && enteredCode != pairingPeer.code) {
-            Toast.makeText(context, getString(R.string.pairing_code_mismatch), Toast.LENGTH_SHORT).show()
-            return
-        }
+        // Note: We don't check against cached pairingPeer.code here because
+        // the cache can be stale if the peer regenerated their session.
+        // The protocol will validate - if wrong, peer responds with REJECT.
 
         // Store the code we entered
         session.peerCode = enteredCode

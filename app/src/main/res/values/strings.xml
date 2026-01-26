@@ -112,6 +112,7 @@
 
     <string name="pairing_verifying">Verifying\u2026</string>
     <string name="pairing_verifying_hint">Establishing secure connection.\nThis may take a few seconds.</string>
+    <string name="pairing_show_code_while_verifying">Show this to your friend if they haven\'t entered it yet</string>
 
     <string name="pairing_verified">Friend Verified</string>
     <string name="pairing_nickname_prompt">Give your friend a nickname (optional)</string>
