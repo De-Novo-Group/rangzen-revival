@@ -35,7 +35,7 @@ object SecurityManager {
     private const val PROFILE_PSEUDONYM_KEY = "usePseudonym"
     private const val PROFILE_FEED_SIZE_KEY = "maxFeedSize"
     private const val PROFILE_FRIEND_VIA_BOOK_KEY = "addFromBook"
-    private const val PROFILE_FRIEND_VIA_QR_KEY = "addFromQR"
+    private const val PROFILE_FRIEND_VIA_PAIRING_KEY = "addFromPairing"
     private const val PROFILE_AUTO_DELETE_KEY = "useAutoDecay"
     private const val PROFILE_AUTO_DELETE_TRUST_KEY = "AutoDecayTrust"
     private const val PROFILE_AUTO_DELETE_AGE_KEY = "AutoDecayAge"
@@ -110,7 +110,7 @@ object SecurityManager {
             pseudonyms = prefs.getBoolean(PROFILE_PSEUDONYM_KEY, defaults.pseudonyms),
             feedSize = prefs.getInt(PROFILE_FEED_SIZE_KEY, defaults.feedSize),
             friendsViaBook = prefs.getBoolean(PROFILE_FRIEND_VIA_BOOK_KEY, defaults.friendsViaBook),
-            friendsViaQR = prefs.getBoolean(PROFILE_FRIEND_VIA_QR_KEY, defaults.friendsViaQR),
+            friendsViaPairing = prefs.getBoolean(PROFILE_FRIEND_VIA_PAIRING_KEY, defaults.friendsViaPairing),
             autodelete = prefs.getBoolean(PROFILE_AUTO_DELETE_KEY, defaults.autodelete),
             autodeleteTrust = prefs.getFloat(PROFILE_AUTO_DELETE_TRUST_KEY, defaults.autodeleteTrust),
             autodeleteAge = prefs.getInt(PROFILE_AUTO_DELETE_AGE_KEY, defaults.autodeleteAge),
@@ -143,7 +143,7 @@ object SecurityManager {
             putBoolean(PROFILE_PSEUDONYM_KEY, defaults.pseudonyms)
             putInt(PROFILE_FEED_SIZE_KEY, defaults.feedSize)
             putBoolean(PROFILE_FRIEND_VIA_BOOK_KEY, defaults.friendsViaBook)
-            putBoolean(PROFILE_FRIEND_VIA_QR_KEY, defaults.friendsViaQR)
+            putBoolean(PROFILE_FRIEND_VIA_PAIRING_KEY, defaults.friendsViaPairing)
             putBoolean(PROFILE_AUTO_DELETE_KEY, defaults.autodelete)
             putFloat(PROFILE_AUTO_DELETE_TRUST_KEY, defaults.autodeleteTrust)
             putInt(PROFILE_AUTO_DELETE_AGE_KEY, defaults.autodeleteAge)
@@ -188,7 +188,7 @@ object SecurityManager {
             putBoolean(PROFILE_PSEUDONYM_KEY, profile.pseudonyms)
             putInt(PROFILE_FEED_SIZE_KEY, profile.feedSize)
             putBoolean(PROFILE_FRIEND_VIA_BOOK_KEY, profile.friendsViaBook)
-            putBoolean(PROFILE_FRIEND_VIA_QR_KEY, profile.friendsViaQR)
+            putBoolean(PROFILE_FRIEND_VIA_PAIRING_KEY, profile.friendsViaPairing)
             putBoolean(PROFILE_AUTO_DELETE_KEY, profile.autodelete)
             putFloat(PROFILE_AUTO_DELETE_TRUST_KEY, profile.autodeleteTrust)
             putInt(PROFILE_AUTO_DELETE_AGE_KEY, profile.autodeleteAge)

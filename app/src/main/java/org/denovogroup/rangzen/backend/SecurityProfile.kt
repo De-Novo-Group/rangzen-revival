@@ -37,8 +37,8 @@ data class SecurityProfile(
     /** Can add friends from device phonebook */
     var friendsViaBook: Boolean = true,
 
-    /** Can add friends via QR code scanning */
-    var friendsViaQR: Boolean = true,
+    /** Can add friends via BLE pairing */
+    var friendsViaPairing: Boolean = true,
 
     /** Enable auto-delete of low-trust/old messages */
     var autodelete: Boolean = false,
@@ -93,7 +93,7 @@ data class SecurityProfile(
             pseudonyms = true,
             feedSize = 0,
             friendsViaBook = true,
-            friendsViaQR = true,
+            friendsViaPairing = true,
             autodelete = false,
             autodeleteTrust = 0.05f,
             autodeleteAge = 14,
@@ -119,7 +119,7 @@ data class SecurityProfile(
             pseudonyms = false,
             feedSize = 0,
             friendsViaBook = false,
-            friendsViaQR = true,
+            friendsViaPairing = true,
             autodelete = false,
             autodeleteTrust = 0.05f,
             autodeleteAge = 14,

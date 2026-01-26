@@ -96,7 +96,7 @@
             android:layout_height="wrap_content"
             android:text="@string/pairing_your_code"
             android:textColor="@color/text_secondary"
-            android:textSize="16sp" />
+            android:textSize="18sp" />
 
         <!-- Large code display -->
         <TextView
@@ -106,10 +106,10 @@
             android:layout_marginTop="16dp"
             android:text="123456"
             android:textColor="@color/text_primary"
-            android:textSize="56sp"
+            android:textSize="72sp"
             android:textStyle="bold"
             android:fontFamily="monospace"
-            android:letterSpacing="0.2" />
+            android:letterSpacing="0.15" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -117,7 +117,7 @@
             android:layout_marginTop="24dp"
             android:text="@string/pairing_show_code_hint"
             android:textColor="@color/text_secondary"
-            android:textSize="14sp"
+            android:textSize="16sp"
             android:textAlignment="center"
             android:lineSpacingExtra="4dp" />
 
@@ -144,32 +144,33 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- My code banner (smaller) -->
+        <!-- My code banner - LARGER -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
+            android:orientation="vertical"
             android:padding="16dp"
             android:background="@color/surface"
-            android:gravity="center_vertical">
+            android:gravity="center">
 
             <TextView
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:text="@string/pairing_your_code"
                 android:textColor="@color/text_secondary"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
 
             <TextView
                 android:id="@+id/text_my_code_small"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:text="123456"
                 android:textColor="@color/primary"
-                android:textSize="20sp"
+                android:textSize="40sp"
                 android:textStyle="bold"
-                android:fontFamily="monospace" />
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15" />
 
         </LinearLayout>
 
@@ -184,7 +185,7 @@
             android:padding="16dp"
             android:text="@string/pairing_select_device"
             android:textColor="@color/text_primary"
-            android:textSize="16sp" />
+            android:textSize="18sp" />
 
         <!-- Device list -->
         <androidx.recyclerview.widget.RecyclerView
@@ -215,7 +216,7 @@
                 android:layout_marginTop="16dp"
                 android:text="@string/pairing_searching"
                 android:textColor="@color/text_secondary"
-                android:textSize="14sp" />
+                android:textSize="16sp" />
 
         </LinearLayout>
 
@@ -229,7 +230,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:orientation="vertical"
-        android:gravity="center"
+        android:gravity="center_horizontal"
         android:padding="24dp"
         android:visibility="gone"
         app:layout_constraintTop_toBottomOf="@id/header"
@@ -237,12 +238,51 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- Show our code at the top so both people can exchange -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/pairing_your_code"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/text_my_code_enter_screen"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="123456"
+                    android:textColor="@color/primary"
+                    android:textSize="36sp"
+                    android:textStyle="bold"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.15" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/pairing_enter_their_code"
             android:textColor="@color/text_primary"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:textStyle="bold" />
 
         <TextView
@@ -252,14 +292,14 @@
             android:layout_marginTop="8dp"
             android:text="Device AB12"
             android:textColor="@color/text_secondary"
-            android:textSize="14sp" />
+            android:textSize="16sp" />
 
-        <!-- Code input -->
+        <!-- Code input - LARGER -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/input_layout_code"
-            android:layout_width="200dp"
+            android:layout_width="280dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
+            android:layout_marginTop="24dp"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -270,9 +310,9 @@
                 android:inputType="number"
                 android:maxLength="6"
                 android:textAlignment="center"
-                android:textSize="24sp"
+                android:textSize="36sp"
                 android:fontFamily="monospace"
-                android:letterSpacing="0.2" />
+                android:letterSpacing="0.15" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -289,7 +329,7 @@
             android:id="@+id/btn_verify"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
+            android:layout_marginTop="24dp"
             android:text="@string/pairing_verify"
             android:enabled="false" />
 

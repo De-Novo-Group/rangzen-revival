@@ -73,6 +73,10 @@ class BlePairingFragment : Fragment() {
     private var selectedPeer: DiscoveredPeer? = null
     private var selectedPairingPeer: BlePairingProtocol.PairingPeer? = null
 
+    // Track peers who have verified us (they entered our code correctly)
+    // Maps address -> their code
+    private var peersWhoVerifiedUs = mutableMapOf<String, String>()
+
     // Friend store
     private lateinit var friendStore: FriendStore
 
@@ -255,6 +259,7 @@ class BlePairingFragment : Fragment() {
         // Update UI with our code
         binding.textMyCode.text = pairingSession!!.myCode
         binding.textMyCodeSmall.text = pairingSession!!.myCode
+        binding.textMyCodeEnterScreen.text = pairingSession!!.myCode
 
         // Start BLE advertising and scanning
         startBle()
@@ -289,7 +294,7 @@ class BlePairingFragment : Fragment() {
         scope.launch {
             while (isActive) {
                 sendPairingAnnouncement()
-                delay(3000) // Every 3 seconds
+                delay(1000) // Every 1 second for faster discovery
             }
         }
 
@@ -389,18 +394,29 @@ class BlePairingFragment : Fragment() {
 
                     // Check if they entered our code correctly
                     if (enteredCode == session.myCode) {
-                        // They verified us, now check if we've verified them
-                        if (session.peerCode == theirCode) {
+                        // They verified us correctly! Remember this
+                        peersWhoVerifiedUs[address] = theirCode
+                        Timber.d("$TAG: Peer $address verified us, their code is $theirCode")
+
+                        // Check if we've verified them (either through UI or they're the selected peer)
+                        val weVerifiedThem = session.peerCode == theirCode ||
+                            (selectedPairingPeer?.code == theirCode && selectedPeer?.address == address)
+
+                        if (weVerifiedThem) {
                             // Both verified! Send confirmation with our public ID
                             session.verified = true
                             session.peerShortId = theirShortId
+                            session.peerCode = theirCode
+                            Timber.i("$TAG: Mutual verification complete, sending CONFIRM")
                             BlePairingProtocol.createConfirmMessage(session)
                         } else {
-                            // We haven't verified them yet, just acknowledge
+                            // We haven't verified them yet, send announce so they know we're active
+                            Timber.d("$TAG: They verified us but we haven't verified them yet")
                             BlePairingProtocol.createAnnounceMessage(session)
                         }
                     } else {
                         // Wrong code
+                        Timber.w("$TAG: Peer entered wrong code: $enteredCode vs ${session.myCode}")
                         BlePairingProtocol.createRejectMessage("invalid_code")
                     }
                 } else null
@@ -476,8 +492,12 @@ class BlePairingFragment : Fragment() {
             return
         }
 
-        // Store the code they entered
+        // Store the code we entered
         session.peerCode = enteredCode
+
+        // Check if this peer has already verified us (entered our code)
+        val theyVerifiedUs = peersWhoVerifiedUs[peer.address] == enteredCode
+        Timber.d("$TAG: We entered $enteredCode for ${peer.address}, they verified us: $theyVerifiedUs")
 
         showState(State.VERIFYING)
 
@@ -485,12 +505,14 @@ class BlePairingFragment : Fragment() {
         scope.launch {
             try {
                 val verifyMessage = BlePairingProtocol.createVerifyMessage(session, enteredCode)
+                Timber.d("$TAG: Sending VERIFY to ${peer.address}")
                 val response = withContext(Dispatchers.IO) {
                     bleScanner?.exchange(peer, verifyMessage)
                 }
 
                 if (response != null) {
                     val messageType = BlePairingProtocol.getMessageType(response)
+                    Timber.d("$TAG: Got response type: $messageType")
 
                     when (messageType) {
                         BlePairingProtocol.MSG_PAIRING_CONFIRM -> {
@@ -512,9 +534,10 @@ class BlePairingFragment : Fragment() {
 
                         else -> {
                             // Not confirmed yet, they may still be entering our code
-                            // Wait a bit and retry
+                            // Wait a bit and retry (up to 10 times = 20 seconds)
+                            Timber.d("$TAG: Not confirmed yet, retrying...")
                             delay(2000)
-                            retryVerification(enteredCode, 3)
+                            retryVerification(enteredCode, 10)
                         }
                     }
                 } else {
@@ -614,6 +637,7 @@ class BlePairingFragment : Fragment() {
         stopBle()
         pairingSession = null
         discoveredPairingPeers.clear()
+        peersWhoVerifiedUs.clear()
         selectedPeer = null
         selectedPairingPeer = null
     }
@@ -661,7 +685,7 @@ class NearbyDeviceAdapter(
 
         fun bind(peer: DisplayPeer) {
             textDeviceId.text = itemView.context.getString(R.string.pairing_device_format, peer.shortId)
-            textDeviceCode.text = itemView.context.getString(R.string.pairing_code_format, peer.code)
+            textDeviceCode.text = peer.code  // Show code directly, large font
             textRssi.text = "${peer.blePeer.rssi}"
 
             itemView.setOnClickListener {

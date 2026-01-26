@@ -151,14 +151,14 @@ class FriendStore private constructor(context: Context) :
     }
 
     /**
-     * Get the user's public ID as bytes (for sharing via QR code).
+     * Get the user's public ID as bytes (for BLE pairing).
      */
     fun getMyPublicId(): ByteArray? {
         return getStoredKey(KEY_PUBLIC)
     }
 
     /**
-     * Get the user's public ID as a Base64 string (for QR codes).
+     * Get the user's public ID as a Base64 string (for BLE pairing).
      */
     fun getMyPublicIdString(): String? {
         return getStoredKey(KEY_PUBLIC)?.let {
