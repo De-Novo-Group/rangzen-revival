@@ -335,12 +335,14 @@ class SettingsFragment : Fragment() {
         binding.textMessageCount.text = "Messages: ${messageStore.getMessageCount()}"
         binding.textFriendCount.text = "Friends: ${friendStore.getFriendCount()}"
         
-        // App version
+        // App version and device ID (for debugging sync issues)
         try {
             val packageInfo = requireContext().packageManager.getPackageInfo(
                 requireContext().packageName, 0
             )
-            binding.textVersion.text = "Version: ${packageInfo.versionName}"
+            val deviceHash = TelemetryClient.getInstance()?.deviceIdHash
+            val shortHash = deviceHash?.take(8) ?: "N/A"
+            binding.textVersion.text = "Version: ${packageInfo.versionName} • Device: $shortHash"
         } catch (e: Exception) {
             binding.textVersion.text = "Version: Unknown"
         }

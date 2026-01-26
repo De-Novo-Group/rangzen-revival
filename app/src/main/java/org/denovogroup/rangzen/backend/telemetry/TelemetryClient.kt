@@ -563,7 +563,7 @@ class TelemetryClient private constructor(
      */
     suspend fun markMessageRead(messageId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val url = URL("$serverUrl/v1/messages/$messageId")
+            val url = URL("$serverUrl/v1/messages/$messageId/read")
             val connection = url.openConnection() as HttpURLConnection
 
             try {
