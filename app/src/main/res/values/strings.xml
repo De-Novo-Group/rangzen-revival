@@ -140,4 +140,12 @@
     <string name="pairing_error_already_friends">You\'re already friends with this person.</string>
 
     <string name="action_add_friend_ble">Add Friend Nearby</string>
+
+    <!-- Friends list -->
+    <string name="friends_count_format">Friends: %1$d</string>
+    <string name="friend_delete_title">Remove Friend?</string>
+    <string name="friend_delete_message">Are you sure you want to remove %1$s from your friends? Their messages will no longer be prioritized in your feed.</string>
+    <string name="friend_delete_confirm">Remove</string>
+    <string name="friend_delete_cancel">Cancel</string>
+    <string name="friend_deleted">%1$s removed from friends</string>
 </resources>

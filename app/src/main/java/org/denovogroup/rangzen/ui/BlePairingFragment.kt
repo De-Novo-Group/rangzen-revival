@@ -814,8 +814,8 @@ class NearbyDeviceAdapter(
         private val textRssi: TextView = itemView.findViewById(R.id.text_rssi)
 
         fun bind(peer: DisplayPeer) {
-            textDeviceId.text = itemView.context.getString(R.string.pairing_device_format, peer.shortId)
-            textDeviceCode.text = peer.code  // Show code directly, large font
+            textDeviceId.text = peer.shortId  // Just the hex ID, small and subtle
+            textDeviceCode.text = peer.code   // The 6-digit code is the main identifier
             textRssi.text = "${peer.blePeer.rssi}"
 
             itemView.setOnClickListener {

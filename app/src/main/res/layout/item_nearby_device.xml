@@ -44,7 +44,7 @@
 
         </LinearLayout>
 
-        <!-- Device info -->
+        <!-- Device info - code is prominent, shortId is subtle -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -52,29 +52,28 @@
             android:layout_marginStart="16dp"
             android:orientation="vertical">
 
-            <!-- Short ID / Device identifier -->
-            <TextView
-                android:id="@+id/text_device_id"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Device AB12"
-                android:textSize="18sp"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold" />
-
-            <!-- Pairing code display - LARGE, forced Western numerals -->
+            <!-- Pairing code display - LARGE, the main identifier -->
             <TextView
                 android:id="@+id/text_device_code"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
                 android:text="123456"
-                android:textSize="28sp"
+                android:textSize="32sp"
                 android:textColor="@color/primary"
                 android:textStyle="bold"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.1"
                 android:textLocale="en-US" />
+
+            <!-- Short ID - small and subtle, for debugging only -->
+            <TextView
+                android:id="@+id/text_device_id"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="AB12"
+                android:textSize="11sp"
+                android:textColor="@color/text_hint" />
 
         </LinearLayout>
 

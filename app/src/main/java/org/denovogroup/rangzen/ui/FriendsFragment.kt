@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -54,15 +55,27 @@ class FriendsFragment : Fragment() {
 
     private fun setupRecyclerView() {
         friendAdapter = FriendAdapter { friend ->
-            // Long press to remove friend
-            friendStore.removeFriend(friend.publicId)
-            Toast.makeText(context, "Friend removed", Toast.LENGTH_SHORT).show()
+            // Long press to remove friend - show confirmation first
+            showDeleteConfirmation(friend)
         }
 
         binding.recyclerFriends.apply {
             layoutManager = LinearLayoutManager(context)
             adapter = friendAdapter
         }
+    }
+
+    private fun showDeleteConfirmation(friend: Friend) {
+        val displayName = friend.getDisplayName()
+        AlertDialog.Builder(requireContext())
+            .setTitle(getString(R.string.friend_delete_title))
+            .setMessage(getString(R.string.friend_delete_message, displayName))
+            .setPositiveButton(getString(R.string.friend_delete_confirm)) { _, _ ->
+                friendStore.removeFriend(friend.publicId)
+                Toast.makeText(context, getString(R.string.friend_deleted, displayName), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(getString(R.string.friend_delete_cancel), null)
+            .show()
     }
 
     private fun setupButtons() {
@@ -87,7 +100,7 @@ class FriendsFragment : Fragment() {
     }
 
     private fun updateUI(friends: List<Friend>) {
-        binding.friendCount.text = "Friends: ${friends.size}"
+        binding.friendCount.text = getString(R.string.friends_count_format, friends.size)
 
         if (friends.isEmpty()) {
             binding.emptyState.visibility = View.VISIBLE

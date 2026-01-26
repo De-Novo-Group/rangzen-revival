@@ -140,4 +140,12 @@
 
     <string name="action_add_friend_ble">افزودن دوست نزدیک</string>
     <string name="empty_friends_ble">هنوز دوستی ندارید.\nدکمه بالا را بزنید تا دوستی نزدیک اضافه کنید.</string>
+
+    <!-- Friends list -->
+    <string name="friends_count_format">دوستان: %1$d</string>
+    <string name="friend_delete_title">حذف دوست؟</string>
+    <string name="friend_delete_message">آیا مطمئن هستید که می‌خواهید %1$s را از دوستان خود حذف کنید؟ پیام‌های او دیگر در فید شما اولویت نخواهند داشت.</string>
+    <string name="friend_delete_confirm">حذف</string>
+    <string name="friend_delete_cancel">لغو</string>
+    <string name="friend_deleted">%1$s از دوستان حذف شد</string>
 </resources>
