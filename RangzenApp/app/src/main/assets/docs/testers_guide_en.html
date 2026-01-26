@@ -356,23 +356,55 @@
                 <span>📻</span> Radio Settings (Advanced)
             </div>
             <div class="card-content">
-                <p>Murmur uses multiple wireless radios simultaneously. You can see their status in the feed header and toggle them in Settings → Radios:</p>
+                <p>Murmur uses <strong>four wireless transports</strong> simultaneously. Each has different range, speed, and behavior. You can toggle them in <strong>Settings → Radios</strong> and see their status in the feed header.</p>
+
+                <div class="scenario" style="margin-top: 16px;">
+                    <h4><strong style="color: #3B82F6;">Bluetooth (BLE)</strong></h4>
+                    <p><strong>Range:</strong> ~10 meters | <strong>Speed:</strong> Slow (messages trickle)</p>
+                    <p><strong>How it works:</strong> Always scanning in background. When two Murmur users come near each other, their phones discover each other via BLE advertising. This is the primary discovery mechanism.</p>
+                    <p><strong>Status icon:</strong> Shows number of BLE peers currently visible (e.g., "2" means 2 nearby devices detected).</p>
+                    <p><strong>If disabled:</strong> You will NOT discover nearby peers at all unless another transport finds them first. <span style="color: #d32f2f;">Critical for mesh operation.</span></p>
+                </div>
+
+                <div class="scenario" style="margin-top: 12px;">
+                    <h4><strong style="color: #F97316;">WiFi Direct</strong></h4>
+                    <p><strong>Range:</strong> ~100 meters | <strong>Speed:</strong> Fast (bulk sync)</p>
+                    <p><strong>How it works:</strong> After BLE discovers a peer, WiFi Direct creates a direct phone-to-phone WiFi connection for high-speed message exchange. Does NOT require a WiFi network.</p>
+                    <p><strong>Popup issue:</strong> Some devices (especially Samsung) show an "Invitation to connect" popup. Users must tap Accept for the exchange to complete.</p>
+                    <p><strong>Status icon:</strong> Shows active WiFi Direct connections.</p>
+                    <p><strong>If disabled:</strong> Exchanges will be BLE-only (very slow, limited messages per encounter).</p>
+                </div>
+
+                <div class="scenario" style="margin-top: 12px;">
+                    <h4><strong style="color: #8B5CF6;">WiFi Aware (NAN)</strong></h4>
+                    <p><strong>Range:</strong> ~100 meters | <strong>Speed:</strong> Fast (bulk sync)</p>
+                    <p><strong>How it works:</strong> Modern replacement for WiFi Direct. Creates direct connections WITHOUT the popup problem. Uses Neighborhood Awareness Networking (NAN).</p>
+                    <p><strong>Availability:</strong> Requires Android 8+ AND hardware support. Not all devices have it. Check Settings → Radios — if the toggle is grayed out, your device doesn't support it.</p>
+                    <p><strong>Status icon:</strong> Shows active WiFi Aware sessions.</p>
+                    <p><strong>If disabled:</strong> Falls back to WiFi Direct (may show popups).</p>
+                </div>
+
+                <div class="scenario" style="margin-top: 12px;">
+                    <h4><strong style="color: #22C55E;">LAN (Local Network)</strong></h4>
+                    <p><strong>Range:</strong> Same WiFi network | <strong>Speed:</strong> Fastest</p>
+                    <p><strong>How it works:</strong> When both devices are on the same WiFi network (home, office, cafe hotspot), they can exchange directly over the local network. Uses mDNS/NSD for discovery.</p>
+                    <p><strong>Limitation:</strong> Only works if BOTH devices are connected to the SAME WiFi. Does not work across different networks.</p>
+                    <p><strong>Status icon:</strong> Shows peers found on local network.</p>
+                    <p><strong>If disabled:</strong> No LAN sync — only BLE/WiFi Direct/Aware will be used.</p>
+                </div>
+
+                <p style="margin-top: 16px;"><strong>Troubleshooting by radio:</strong></p>
                 <ul>
-                    <li><strong style="color: #3B82F6;">Bluetooth (BLE)</strong> — Always-on background discovery. Range ~10m, low power. Most reliable for finding peers.</li>
-                    <li><strong style="color: #F97316;">WiFi Direct</strong> — Longer range (~100m), faster transfers. May show a "connection invitation" popup on some devices.</li>
-                    <li><strong style="color: #8B5CF6;">WiFi Aware (NAN)</strong> — Modern alternative to WiFi Direct. Same range/speed, no popups. Requires Android 8+ and supported hardware (not all devices have it).</li>
-                    <li><strong style="color: #22C55E;">LAN</strong> — Works when devices share the same WiFi network. Fastest transfer speed but limited to local network.</li>
+                    <li><strong>BLE not finding peers?</strong> — Check Bluetooth is ON in system settings. Check Location permission granted.</li>
+                    <li><strong>WiFi Direct popups annoying?</strong> — If your device has WiFi Aware, the app prefers it automatically. Otherwise, accept the popup to sync.</li>
+                    <li><strong>WiFi Aware grayed out?</strong> — Your device doesn't support NAN. This is hardware-dependent, nothing you can do.</li>
+                    <li><strong>LAN not working?</strong> — Both devices must be on the exact same WiFi network. Some corporate/hotel networks block device-to-device traffic.</li>
                 </ul>
-                <p style="margin-top: 12px;"><strong>Known limitations:</strong></p>
-                <ul>
-                    <li>WiFi Direct popups can be intrusive on some Samsung devices</li>
-                    <li>WiFi Aware is not available on older or budget phones</li>
-                    <li>LAN only works if both devices are on the same WiFi</li>
-                    <li>Some devices have aggressive battery optimization that kills background radios</li>
-                </ul>
+
                 <div class="bug-report" style="margin-top: 16px;">
                     <h4>⚠️ Important for Testers</h4>
-                    <p style="margin: 0;"><strong>Do NOT disable any radios</strong> unless specifically asked by the De Novo Group testing team. We need all radios active to test the full mesh behavior.</p>
+                    <p><strong>Do NOT disable any radios</strong> unless specifically asked by the De Novo Group team. We need all radios active to test the full mesh behavior.</p>
+                    <p style="margin-top: 8px;">If asked to test with specific radios disabled, note which ones in your bug reports.</p>
                 </div>
             </div>
         </div>
