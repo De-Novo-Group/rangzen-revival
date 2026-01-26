@@ -498,7 +498,7 @@ class TelemetryClient private constructor(
         if (!isEnabled()) return@withContext null
 
         try {
-            val url = URL("$serverUrl/v1/sync?device_id_hash=$deviceIdHash")
+            val url = URL("$serverUrl/v1/sync?device_id_hash=$deviceIdHash&version_code=${org.denovogroup.rangzen.BuildConfig.VERSION_CODE}")
             val connection = url.openConnection() as HttpURLConnection
 
             try {
