@@ -1,10 +1,17 @@
 package org.denovogroup.rangzen.backend.telemetry
 
 import android.app.ActivityManager
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
+import android.net.wifi.p2p.WifiP2pManager
 import android.os.BatteryManager
+import android.os.Build
 import android.os.PowerManager
 import timber.log.Timber
 
@@ -64,6 +71,57 @@ object DeviceStateHelper {
             Timber.w(e, "Failed to get app process state")
         }
 
+        // Radio state
+        result["radio_state"] = captureRadioState(context)
+
         return result
+    }
+
+    /**
+     * Capture radio (WiFi/Bluetooth) state for telemetry.
+     */
+    private fun captureRadioState(context: Context): Map<String, Any> {
+        val radioState = mutableMapOf<String, Any>()
+
+        try {
+            // WiFi state
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            wifiManager?.let {
+                radioState["wifi_enabled"] = it.isWifiEnabled
+            }
+
+            // WiFi connected
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            connectivityManager?.let { cm ->
+                val network = cm.activeNetwork
+                val capabilities = network?.let { cm.getNetworkCapabilities(it) }
+                radioState["wifi_connected"] = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+            }
+
+            // WiFi Direct supported
+            val p2pManager = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
+            radioState["wifi_direct_supported"] = p2pManager != null
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to get WiFi state")
+        }
+
+        try {
+            // Bluetooth state
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            val bluetoothAdapter = bluetoothManager?.adapter
+            bluetoothAdapter?.let {
+                radioState["bluetooth_enabled"] = it.isEnabled
+                try {
+                    radioState["bluetooth_paired_count"] = it.bondedDevices?.size ?: 0
+                } catch (e: SecurityException) {
+                    // No BLUETOOTH_CONNECT permission
+                    Timber.v("No permission for bonded devices count")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to get Bluetooth state")
+        }
+
+        return radioState
     }
 }
