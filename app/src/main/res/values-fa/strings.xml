@@ -84,4 +84,60 @@
     <string name="notification_new_messages_title">پیام‌های جدید</string>
     <string name="notification_new_messages_body">%1$d پیام جدید دریافت شد</string>
     <string name="notification_unknown_sender">ناشناس</string>
+
+    <!-- BLE Pairing -->
+    <string name="pairing_title">افزودن دوست</string>
+    <string name="pairing_nearby_title">دستگاه‌های نزدیک</string>
+    <string name="pairing_enter_code_title">وارد کردن کد</string>
+    <string name="pairing_verifying_title">در حال تأیید</string>
+    <string name="pairing_nickname_title">انتخاب نام</string>
+    <string name="pairing_success_title">موفقیت</string>
+    <string name="pairing_error_title">خطا</string>
+
+    <string name="pairing_mode_active">حالت جفت‌سازی فعال</string>
+    <string name="pairing_your_code">کد شما</string>
+    <string name="pairing_show_code_hint">این کد را به دوستتان نشان دهید.\nآن‌ها آن را در گوشی خود وارد می‌کنند.</string>
+    <string name="pairing_see_nearby">مشاهده دستگاه‌های نزدیک</string>
+
+    <string name="pairing_select_device">دستگاه دوستتان را انتخاب کنید:</string>
+    <string name="pairing_searching">در حال جستجوی دستگاه‌های نزدیک…</string>
+    <string name="pairing_device_format">دستگاه %1$s</string>
+    <string name="pairing_code_format">کد: %1$s</string>
+
+    <string name="pairing_enter_their_code">کد آن‌ها را وارد کنید</string>
+    <string name="pairing_code_hint">000000</string>
+    <string name="pairing_enter_code_hint">کد ۶ رقمی نمایش داده شده روی صفحه آن‌ها را تایپ کنید</string>
+    <string name="pairing_verify">تأیید</string>
+
+    <string name="pairing_verifying">در حال تأیید…</string>
+    <string name="pairing_verifying_hint">در حال برقراری اتصال امن.\nممکن است چند ثانیه طول بکشد.</string>
+    <string name="pairing_show_code_while_verifying">این را به دوستتان نشان دهید اگر هنوز وارد نکرده‌اند</string>
+
+    <string name="pairing_verified">دوست تأیید شد</string>
+    <string name="pairing_nickname_prompt">یک نام مستعار برای دوستتان انتخاب کنید (اختیاری)</string>
+    <string name="pairing_nickname_hint">نام مستعار</string>
+    <string name="pairing_skip">رد کردن</string>
+    <string name="pairing_save">ذخیره</string>
+
+    <string name="pairing_success">دوست اضافه شد!</string>
+    <string name="pairing_friend_added_format">%1$s به دوستان شما اضافه شد</string>
+    <string name="pairing_already_friends_format">قبلاً با %1$s دوست هستید</string>
+    <string name="pairing_done">تمام</string>
+
+    <string name="pairing_error">خطا</string>
+    <string name="pairing_retry">تلاش مجدد</string>
+    <string name="pairing_code_mismatch">کد مطابقت ندارد. لطفاً بررسی کنید و دوباره تلاش کنید.</string>
+
+    <string name="pairing_error_no_identity">هویت مقداردهی نشده. لطفاً برنامه را مجدداً راه‌اندازی کنید.</string>
+    <string name="pairing_error_no_bluetooth">مجوز بلوتوث برای جفت‌سازی مورد نیاز است.</string>
+    <string name="pairing_error_invalid_response">پاسخ نامعتبر از دستگاه.</string>
+    <string name="pairing_error_rejected">جفت‌سازی رد شد. دستگاه دیگر امتناع کرد.</string>
+    <string name="pairing_error_no_response">پاسخی از دستگاه نیامد. مطمئن شوید نزدیک هستند.</string>
+    <string name="pairing_error_connection">اتصال ناموفق بود. لطفاً دوباره تلاش کنید.</string>
+    <string name="pairing_error_timeout">زمان تأیید تمام شد. لطفاً دوباره تلاش کنید.</string>
+    <string name="pairing_error_no_public_id">دریافت هویت دوست ناموفق بود.</string>
+    <string name="pairing_error_already_friends">شما قبلاً با این شخص دوست هستید.</string>
+
+    <string name="action_add_friend_ble">افزودن دوست نزدیک</string>
+    <string name="empty_friends_ble">هنوز دوستی ندارید.\nدکمه بالا را بزنید تا دوستی نزدیک اضافه کنید.</string>
 </resources>

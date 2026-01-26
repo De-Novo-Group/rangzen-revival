@@ -98,7 +98,7 @@
             android:textColor="@color/text_secondary"
             android:textSize="18sp" />
 
-        <!-- Large code display -->
+        <!-- Large code display - textLocale forces Western numerals -->
         <TextView
             android:id="@+id/text_my_code"
             android:layout_width="wrap_content"
@@ -109,7 +109,8 @@
             android:textSize="72sp"
             android:textStyle="bold"
             android:fontFamily="monospace"
-            android:letterSpacing="0.15" />
+            android:letterSpacing="0.15"
+            android:textLocale="en-US" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -170,7 +171,8 @@
                 android:textSize="40sp"
                 android:textStyle="bold"
                 android:fontFamily="monospace"
-                android:letterSpacing="0.15" />
+                android:letterSpacing="0.15"
+                android:textLocale="en-US" />
 
         </LinearLayout>
 
@@ -271,7 +273,8 @@
                     android:textSize="36sp"
                     android:textStyle="bold"
                     android:fontFamily="monospace"
-                    android:letterSpacing="0.15" />
+                    android:letterSpacing="0.15"
+                    android:textLocale="en-US" />
 
             </LinearLayout>
 
@@ -384,7 +387,8 @@
                     android:textSize="36sp"
                     android:textStyle="bold"
                     android:fontFamily="monospace"
-                    android:letterSpacing="0.15" />
+                    android:letterSpacing="0.15"
+                    android:textLocale="en-US" />
 
                 <TextView
                     android:layout_width="wrap_content"

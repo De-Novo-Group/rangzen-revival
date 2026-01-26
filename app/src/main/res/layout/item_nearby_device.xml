@@ -62,7 +62,7 @@
                 android:textColor="@color/text_primary"
                 android:textStyle="bold" />
 
-            <!-- Pairing code display - LARGE -->
+            <!-- Pairing code display - LARGE, forced Western numerals -->
             <TextView
                 android:id="@+id/text_device_code"
                 android:layout_width="match_parent"
@@ -73,7 +73,8 @@
                 android:textColor="@color/primary"
                 android:textStyle="bold"
                 android:fontFamily="monospace"
-                android:letterSpacing="0.1" />
+                android:letterSpacing="0.1"
+                android:textLocale="en-US" />
 
         </LinearLayout>
 
