@@ -279,6 +279,9 @@ class BlePairingFragment : Fragment() {
             return
         }
 
+        // Set pairing mode active - this signals the service to pause BLE exchanges
+        BleAdvertiser.pairingModeActive = true
+
         // Set global pairing callback - this takes priority over the service's callback
         BleAdvertiser.pairingModeCallback = { device, data ->
             handleIncomingPairingMessage(device.address, data)
@@ -307,6 +310,8 @@ class BlePairingFragment : Fragment() {
 
     private fun stopBle() {
         bleScanner?.stopScanning()
+        // Clear pairing mode - service can resume BLE exchanges
+        BleAdvertiser.pairingModeActive = false
         // Clear global pairing callback so service handles messages again
         BleAdvertiser.pairingModeCallback = null
         Timber.i("$TAG: BLE pairing mode stopped")

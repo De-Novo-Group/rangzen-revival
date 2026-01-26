@@ -46,6 +46,10 @@ class BleAdvertiser(private val context: Context) {
         // Global pairing callback - takes priority over instance callbacks when set
         @Volatile
         var pairingModeCallback: ((BluetoothDevice, ByteArray) -> ByteArray?)? = null
+
+        // Flag to indicate pairing mode is active - service should pause BLE exchanges
+        @Volatile
+        var pairingModeActive: Boolean = false
     }
 
     private val bluetoothManager: BluetoothManager? =

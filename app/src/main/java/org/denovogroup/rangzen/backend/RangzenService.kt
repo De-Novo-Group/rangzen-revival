@@ -939,6 +939,12 @@ class RangzenService : Service() {
     }
 
     private suspend fun performExchangeCycle(forceOutbound: Boolean, respectInbound: Boolean = true) {
+        // Skip BLE exchanges when pairing mode is active to avoid resource contention.
+        // The pairing UI needs exclusive access to BLE for verification.
+        if (BleAdvertiser.pairingModeActive) {
+            Timber.d("Skipping BLE exchange - pairing mode active")
+            return
+        }
         // Respect cooldown timing unless we are forcing an outbound attempt.
         if (!forceOutbound && !readyToConnect()) {
             return
