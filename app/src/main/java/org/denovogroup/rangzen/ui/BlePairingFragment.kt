@@ -298,10 +298,11 @@ class BlePairingFragment : Fragment() {
         }
 
         // Periodically send pairing announcements
+        // Use a longer interval to avoid BLE resource contention
         scope.launch {
             while (isActive) {
                 sendPairingAnnouncement()
-                delay(1000) // Every 1 second for faster discovery
+                delay(3000) // Every 3 seconds to avoid BLE contention
             }
         }
 
@@ -331,13 +332,17 @@ class BlePairingFragment : Fragment() {
             return
         }
 
-        // Send announcement to all discovered peers and parse responses
+        // Send announcement to discovered peers ONE AT A TIME with delays
+        // This avoids overwhelming the BLE stack with concurrent GATT connections
         val announcement = BlePairingProtocol.createAnnounceMessage(session)
         val peersList = bleScanner?.peers?.value ?: emptyList()
-        Timber.d("$TAG: Sending announcement to ${peersList.size} scanner peers")
+        Timber.d("$TAG: Sending announcement to ${peersList.size} scanner peers (serialized)")
 
         scope.launch(Dispatchers.IO) {
-            peersList.forEach { peer ->
+            for (peer in peersList) {
+                // Check if we should stop (verification started or fragment destroyed)
+                if (verificationInProgress || !isActive) break
+
                 try {
                     Timber.d("$TAG: Sending announcement to scanner peer ${peer.address}")
                     val response = bleScanner?.exchange(peer, announcement)
@@ -371,6 +376,9 @@ class BlePairingFragment : Fragment() {
                 } catch (e: Exception) {
                     Timber.e(e, "$TAG: Failed to send announcement to ${peer.address}")
                 }
+
+                // Add delay between peers to let BLE stack settle
+                delay(1500)
             }
         }
     }
