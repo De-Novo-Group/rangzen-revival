@@ -11,8 +11,8 @@ android {
         applicationId "org.denovogroup.rangzen"
         minSdk 26
         targetSdk 35
-        versionCode 47
-        versionName "0.2.42"
+        versionCode 50
+        versionName "0.2.50"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -60,7 +60,10 @@ dependencies {
     // Lifecycle components
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
     implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
-    
+
+    // WorkManager for background tasks
+    implementation 'androidx.work:work-runtime-ktx:2.9.0'
+
     // Coroutines for async operations
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     

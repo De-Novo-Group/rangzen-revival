@@ -10,6 +10,7 @@ import org.denovogroup.rangzen.BuildConfig;
 import org.denovogroup.rangzen.backend.AppConfig;
 import org.denovogroup.rangzen.backend.distribution.ShareModeManager;
 import org.denovogroup.rangzen.backend.distribution.WifiDirectGroupCleanup;
+import org.denovogroup.rangzen.backend.telemetry.SupportSyncWorker;
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient;
 import org.denovogroup.rangzen.backend.update.UpdateClient;
 import timber.log.Timber;
@@ -90,6 +91,12 @@ public class RangzenApplication extends Application {
         SharedPreferences prefs = getSharedPreferences("rangzen_prefs", MODE_PRIVATE);
         boolean qaMode = prefs.getBoolean("qa_mode", false);
         client.setEnabled(qaMode);
+
+        // Schedule support message sync if QA mode is enabled
+        if (qaMode) {
+            SupportSyncWorker.Companion.schedule(this);
+            Timber.d("Support sync worker scheduled");
+        }
 
         Timber.d("Telemetry initialized, QA mode: %s", qaMode);
     }

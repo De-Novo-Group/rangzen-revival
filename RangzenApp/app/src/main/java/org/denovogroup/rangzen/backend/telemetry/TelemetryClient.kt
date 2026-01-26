@@ -561,26 +561,123 @@ class TelemetryClient private constructor(
     /**
      * Mark a device message as read on the server.
      */
-    suspend fun markMessageRead(messageId: String) = withContext(Dispatchers.IO) {
+    suspend fun markMessageRead(messageId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            val url = URL("$serverUrl/v1/messages/$messageId/read?device_id_hash=$deviceIdHash")
+            val url = URL("$serverUrl/v1/messages/$messageId")
             val connection = url.openConnection() as HttpURLConnection
 
             try {
                 connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
                 connection.setRequestProperty("Authorization", "Bearer $apiToken")
                 connection.connectTimeout = CONNECTION_TIMEOUT_MS
                 connection.readTimeout = READ_TIMEOUT_MS
+                connection.doOutput = true
+
+                val body = gson.toJson(mapOf("device_id_hash" to deviceIdHash))
+                OutputStreamWriter(connection.outputStream).use { writer ->
+                    writer.write(body)
+                    writer.flush()
+                }
 
                 val responseCode = connection.responseCode
                 if (responseCode !in 200..299) {
                     Timber.w("Failed to mark message read: $responseCode")
+                    return@withContext false
                 }
+                true
             } finally {
                 connection.disconnect()
             }
         } catch (e: Exception) {
             Timber.w("Failed to mark message read: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Fetch a bug report with its full conversation history.
+     *
+     * @param reportId The bug report ID
+     * @return The report detail with replies, or null on error
+     */
+    suspend fun fetchBugReport(reportId: String): BugReportDetailResponse? = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$serverUrl/v1/bug-reports/$reportId?device_id_hash=$deviceIdHash")
+            val connection = url.openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("Authorization", "Bearer $apiToken")
+                connection.connectTimeout = CONNECTION_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
+
+                val responseCode = connection.responseCode
+                if (responseCode in 200..299) {
+                    val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                    val response = gson.fromJson(reader.readText(), BugReportDetailResponse::class.java)
+                    Timber.d("Fetched bug report $reportId: ${response.replies.size} replies")
+                    response
+                } else {
+                    Timber.w("Failed to fetch bug report: $responseCode")
+                    null
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to fetch bug report")
+            null
+        }
+    }
+
+    /**
+     * Send a follow-up reply to a bug report.
+     *
+     * @param reportId The bug report ID
+     * @param message The reply message
+     * @return The reply ID if successful, null otherwise
+     */
+    suspend fun sendReply(reportId: String, message: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$serverUrl/v1/bug-reports/$reportId/reply")
+            val connection = url.openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "POST"
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Authorization", "Bearer $apiToken")
+                connection.connectTimeout = CONNECTION_TIMEOUT_MS
+                connection.readTimeout = READ_TIMEOUT_MS
+                connection.doOutput = true
+                connection.doInput = true
+
+                val body = gson.toJson(mapOf(
+                    "device_id_hash" to deviceIdHash,
+                    "message" to message
+                ))
+
+                OutputStreamWriter(connection.outputStream).use { writer ->
+                    writer.write(body)
+                    writer.flush()
+                }
+
+                val responseCode = connection.responseCode
+                if (responseCode in 200..299) {
+                    val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                    val response = gson.fromJson(reader.readText(), ReplyResponse::class.java)
+                    Timber.i("Reply sent to bug report $reportId: ${response.id}")
+                    response.id
+                } else {
+                    Timber.w("Failed to send reply: $responseCode")
+                    null
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to send reply")
+            null
         }
     }
 

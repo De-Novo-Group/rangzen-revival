@@ -8,6 +8,7 @@
     <color name="primary">#3B82F6</color>
     <color name="primary_dark">#2563EB</color>
     <color name="primary_light">#60A5FA</color>
+    <color name="on_primary">#FFFFFF</color>
     
     <!-- Secondary colors - kept for compatibility -->
     <color name="secondary">#8B5CF6</color>

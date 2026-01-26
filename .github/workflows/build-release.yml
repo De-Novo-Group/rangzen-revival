@@ -1,0 +1,155 @@
+# OTA Release Workflow
+# Triggered on version tags (v*), builds APK, creates GitHub Release,
+# and triggers the private repo to deploy to the OTA server.
+#
+# See docs/phases/PHASE_10_OTA_CICD.md for full documentation.
+
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # For creating releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version_code: ${{ steps.version.outputs.version_code }}
+      version_name: ${{ steps.version.outputs.version_name }}
+      sha256: ${{ steps.version.outputs.sha256 }}
+      size: ${{ steps.version.outputs.size }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make gradlew executable
+        run: chmod +x ./RangzenApp/gradlew
+
+      - name: Build Debug APK
+        working-directory: ./RangzenApp
+        run: ./gradlew assembleDebug
+
+      - name: Extract version FROM APK (source of truth)
+        id: version
+        run: |
+          APK_PATH="RangzenApp/app/build/outputs/apk/debug/app-debug.apk"
+
+          # Extract version using aapt (installed with Android SDK)
+          VERSION_INFO=$($ANDROID_HOME/build-tools/*/aapt dump badging "$APK_PATH" | head -1)
+          VERSION_CODE=$(echo "$VERSION_INFO" | grep -oP "versionCode='\K[^']+")
+          VERSION_NAME=$(echo "$VERSION_INFO" | grep -oP "versionName='\K[^']+")
+
+          # Calculate SHA256
+          SHA256=$(sha256sum "$APK_PATH" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$APK_PATH")
+
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
+
+          echo "### Build Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** $VERSION_NAME (code $VERSION_CODE)" >> $GITHUB_STEP_SUMMARY
+          echo "- **SHA256:** \`$SHA256\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size:** $SIZE bytes" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Validate version matches tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="v${{ steps.version.outputs.version_name }}"
+
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::warning::Tag ($TAG) doesn't match APK version ($VERSION)"
+            echo "This is OK for test releases, but production releases should match."
+          fi
+
+      - name: Create docs.zip
+        run: |
+          DOCS_DIR="RangzenApp/app/src/main/assets/docs"
+          if [ -d "$DOCS_DIR" ] && [ "$(ls -A $DOCS_DIR/*.html 2>/dev/null)" ]; then
+            cd "$DOCS_DIR"
+            zip -r $GITHUB_WORKSPACE/docs.zip *.html
+            echo "Docs zip created with $(unzip -l $GITHUB_WORKSPACE/docs.zip | tail -1)"
+          else
+            echo "::warning::No docs found in $DOCS_DIR"
+            # Create empty zip to avoid workflow failure
+            echo "placeholder" > /tmp/placeholder.txt
+            zip $GITHUB_WORKSPACE/docs.zip /tmp/placeholder.txt
+          fi
+
+      - name: Rename APK with version
+        run: |
+          cp RangzenApp/app/build/outputs/apk/debug/app-debug.apk \
+             murmur-${{ steps.version.outputs.version_name }}.apk
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Murmur ${{ steps.version.outputs.version_name }}
+          body: |
+            ## Murmur ${{ steps.version.outputs.version_name }}
+
+            **SHA256:** `${{ steps.version.outputs.sha256 }}`
+            **Size:** ${{ steps.version.outputs.size }} bytes
+
+            ### Verification
+            This APK was built automatically from tag `${{ github.ref_name }}` by GitHub Actions.
+
+            You can verify the build by:
+            1. Checking the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            2. Comparing the SHA256 hash above with `sha256sum murmur-${{ steps.version.outputs.version_name }}.apk`
+
+            ### Install
+            - Download `murmur-${{ steps.version.outputs.version_name }}.apk` below
+            - Or get it from our [download page](https://murmur-telemetry.denovogroup.org/download)
+          files: |
+            murmur-${{ steps.version.outputs.version_name }}.apk
+            docs.zip
+          generate_release_notes: true
+
+      - name: Trigger OTA deployment in private repo
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          repository: De-Novo-Group/murmur-telemetry-server
+          event-type: deploy-ota
+          client-payload: >-
+            {
+              "version_code": "${{ steps.version.outputs.version_code }}",
+              "version_name": "${{ steps.version.outputs.version_name }}",
+              "sha256": "${{ steps.version.outputs.sha256 }}",
+              "size": "${{ steps.version.outputs.size }}",
+              "release_url": "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}",
+              "apk_url": "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/murmur-${{ steps.version.outputs.version_name }}.apk",
+              "docs_url": "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/docs.zip",
+              "tag": "${{ github.ref_name }}",
+              "run_id": "${{ github.run_id }}"
+            }
+
+      - name: Summary
+        run: |
+          echo "### Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Release:** ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **OTA Deployment:** Triggered in private repo" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The private repo workflow will now:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the APK from this release" >> $GITHUB_STEP_SUMMARY
+          echo "2. Verify SHA256 hash" >> $GITHUB_STEP_SUMMARY
+          echo "3. Deploy to OTA server" >> $GITHUB_STEP_SUMMARY
+          echo "4. Update the database" >> $GITHUB_STEP_SUMMARY

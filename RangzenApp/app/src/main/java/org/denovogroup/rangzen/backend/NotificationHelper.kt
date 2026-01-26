@@ -150,11 +150,92 @@ object NotificationHelper {
      * Call this when user opens the feed to clear pending notifications.
      */
     fun clearMessageNotifications(context: Context) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) 
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE)
             as NotificationManager
         notificationManager.cancel(NOTIFICATION_ID_MESSAGES)
         pendingMessageCount = 0
         Timber.d("Cleared message notifications")
+    }
+
+    // Notification ID for support messages (different from mesh messages)
+    private const val NOTIFICATION_ID_SUPPORT = 2002
+
+    /**
+     * Show notification for new support message (reply from admin).
+     *
+     * @param context Application context
+     * @param messageCount Number of new support messages
+     * @param messagePreview Preview of the message content
+     */
+    fun showSupportMessageNotification(
+        context: Context,
+        messageCount: Int = 1,
+        messagePreview: String? = null
+    ) {
+        // Check notification permission (required on Android 13+)
+        if (!hasNotificationPermission(context)) {
+            Timber.d("Notification permission not granted, skipping support notification")
+            return
+        }
+
+        Timber.i("NotificationHelper: Showing support notification for $messageCount message(s)")
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE)
+            as NotificationManager
+
+        // Create intent to open support inbox when notification is tapped
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("navigate_to", "support_inbox")
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            1, // Different request code from mesh messages
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Build notification content
+        val (title, content) = if (messageCount == 1 && messagePreview != null) {
+            Pair(
+                "New Message from Support",
+                messagePreview.take(100)
+            )
+        } else {
+            Pair(
+                "New Support Messages",
+                "You have $messageCount new messages from support"
+            )
+        }
+
+        // Build the notification
+        val notification = NotificationCompat.Builder(context, RangzenApplication.CHANNEL_ID_MESSAGES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setOngoing(false)
+            .setWhen(System.currentTimeMillis())
+            .setShowWhen(true)
+            .build()
+
+        notificationManager.notify(NOTIFICATION_ID_SUPPORT, notification)
+        Timber.i("Showed support notification for $messageCount message(s)")
+    }
+
+    /**
+     * Clear support message notifications.
+     */
+    fun clearSupportNotifications(context: Context) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE)
+            as NotificationManager
+        notificationManager.cancel(NOTIFICATION_ID_SUPPORT)
+        Timber.d("Cleared support notifications")
     }
     
     /**

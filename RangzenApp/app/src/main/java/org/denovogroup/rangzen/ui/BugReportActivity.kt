@@ -22,6 +22,8 @@ import org.denovogroup.rangzen.BuildConfig
 import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.RangzenService
 import org.denovogroup.rangzen.backend.telemetry.LocationHelper
+import org.denovogroup.rangzen.backend.telemetry.SubmittedBugReport
+import org.denovogroup.rangzen.backend.telemetry.SupportStore
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.databinding.ActivityBugReportBinding
 import timber.log.Timber
@@ -142,6 +144,19 @@ class BugReportActivity : AppCompatActivity() {
                     lastExchangeId = RangzenService.getServiceInstance()?.getLastExchangeId(),
                     location = location
                 )
+
+                // Store locally if successful
+                if (reportId != null) {
+                    val supportStore = SupportStore.getInstance(this@BugReportActivity)
+                    supportStore.addReport(SubmittedBugReport(
+                        id = reportId,
+                        category = selectedCategory,
+                        description = description,
+                        status = "open",
+                        createdAt = System.currentTimeMillis(),
+                        updatedAt = null
+                    ))
+                }
 
                 withContext(Dispatchers.Main) {
                     binding.btnSubmit.isEnabled = true

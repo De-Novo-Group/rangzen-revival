@@ -87,6 +87,18 @@
             android:exported="false"
             android:theme="@style/Theme.Rangzen" />
 
+        <!-- Support Inbox Activity for viewing messages and reports -->
+        <activity
+            android:name=".ui.SupportInboxActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Rangzen" />
+
+        <!-- Bug Report Conversation Activity -->
+        <activity
+            android:name=".ui.BugReportConversationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Rangzen" />
+
         <!-- QR Scanner Activity locked to portrait mode -->
         <activity
             android:name=".ui.PortraitCaptureActivity"

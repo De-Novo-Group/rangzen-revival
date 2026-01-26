@@ -192,3 +192,65 @@ data class SyncResponse(
     @SerializedName("messages")
     val messages: List<DeviceMessage>? = null
 )
+
+/**
+ * Response from GET /v1/bug-reports/{id} - full report with conversation.
+ */
+data class BugReportDetailResponse(
+    @SerializedName("report")
+    val report: BugReportDetail,
+
+    @SerializedName("replies")
+    val replies: List<BugReportReply>
+)
+
+/**
+ * Bug report detail returned from server.
+ */
+data class BugReportDetail(
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("category")
+    val category: String,
+
+    @SerializedName("description")
+    val description: String,
+
+    @SerializedName("status")
+    val status: String,
+
+    @SerializedName("created_at")
+    val createdAt: String,
+
+    @SerializedName("updated_at")
+    val updatedAt: String? = null
+)
+
+/**
+ * A reply in a bug report conversation.
+ */
+data class BugReportReply(
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("message")
+    val message: String,
+
+    @SerializedName("from_dashboard")
+    val fromDashboard: Boolean,
+
+    @SerializedName("created_at")
+    val createdAt: String
+)
+
+/**
+ * Response from POST /v1/bug-reports/{id}/reply.
+ */
+data class ReplyResponse(
+    @SerializedName("id")
+    val id: String,
+
+    @SerializedName("status")
+    val status: String
+)

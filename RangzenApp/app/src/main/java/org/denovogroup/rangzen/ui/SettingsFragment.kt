@@ -20,6 +20,8 @@ import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
 import org.denovogroup.rangzen.backend.discovery.TransportCapabilities
+import org.denovogroup.rangzen.backend.telemetry.SupportStore
+import org.denovogroup.rangzen.backend.telemetry.SupportSyncWorker
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.backend.update.UpdateClient
 import org.denovogroup.rangzen.backend.update.UpdateState
@@ -43,7 +45,7 @@ class SettingsFragment : Fragment() {
         val prefs = requireContext().getSharedPreferences("rangzen_prefs", 0)
         prefs.edit().putBoolean("qa_mode", true).apply()
         TelemetryClient.getInstance()?.setEnabled(true)
-        
+
         // Start OTA update checks and check immediately
         UpdateClient.getInstance()?.let { client ->
             client.startPeriodicChecks()
@@ -54,7 +56,10 @@ class SettingsFragment : Fragment() {
                 }
             }
         }
-        
+
+        // Start support message sync worker
+        SupportSyncWorker.schedule(requireContext())
+
         // Update UI to show the help icon now that QA mode is on
         updateQaHelpIconVisibility()
     }
@@ -180,6 +185,7 @@ class SettingsFragment : Fragment() {
                 prefs.edit().putBoolean("qa_mode", false).apply()
                 TelemetryClient.getInstance()?.setEnabled(false)
                 UpdateClient.getInstance()?.stopPeriodicChecks()
+                SupportSyncWorker.cancel(requireContext())
                 // Hide the help icon since QA mode is now off
                 updateQaHelpIconVisibility()
             }
@@ -302,47 +308,20 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showQaInbox() {
-        val telemetry = TelemetryClient.getInstance() ?: return
-
-        // Trigger a sync to get latest messages
-        CoroutineScope(Dispatchers.IO).launch {
-            telemetry.sync()
-
-            activity?.runOnUiThread {
-                // Only show device messages (replies to bug reports) here.
-                // Broadcasts now appear in the main feed.
-                val messages = telemetry.messages.value
-
-                if (messages.isEmpty()) {
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Bug Report Replies")
-                        .setMessage("No replies to your bug reports yet.\n\nBroadcasts now appear in the main feed.")
-                        .setPositiveButton("OK", null)
-                        .show()
-                } else {
-                    val items = messages.map { "[Reply] ${it.message}" }.toTypedArray()
-
-                    AlertDialog.Builder(requireContext())
-                        .setTitle("Bug Report Replies (${messages.size})")
-                        .setItems(items) { _, index ->
-                            // Mark as read when tapped
-                            CoroutineScope(Dispatchers.IO).launch {
-                                telemetry.markMessageRead(messages[index].id)
-                            }
-                        }
-                        .setPositiveButton("Close", null)
-                        .show()
-                }
-            }
-        }
+        // Open the full support inbox activity
+        startActivity(Intent(requireContext(), SupportInboxActivity::class.java))
     }
 
     private fun updateInboxBadge() {
-        val telemetry = TelemetryClient.getInstance() ?: return
-        // Only count device messages (replies), not broadcasts
-        val count = telemetry.messages.value.size
-        if (count > 0) {
-            binding.textInboxCount.text = "$count replies"
+        val supportStore = SupportStore.getInstance(requireContext())
+        val unreadCount = supportStore.getUnreadCount()
+        val reportCount = supportStore.getAllReports().size
+
+        if (unreadCount > 0) {
+            binding.textInboxCount.text = "$unreadCount new"
+            binding.textInboxCount.visibility = View.VISIBLE
+        } else if (reportCount > 0) {
+            binding.textInboxCount.text = "$reportCount reports"
             binding.textInboxCount.visibility = View.VISIBLE
         } else {
             binding.textInboxCount.visibility = View.GONE
