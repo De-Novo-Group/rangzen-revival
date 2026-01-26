@@ -28,7 +28,7 @@
   "telemetryFlushIntervalMs": 60000,
   "otaEnabled": true,
   "otaCheckIntervalMs": 14400000,
-  "otaWifiOnly": true,
+  "otaWifiOnly": false,
   "otaAutoDownload": true,
   "wifiDirectServiceType": "_murmur._tcp",
   "wifiDirectServicePort": 41235
