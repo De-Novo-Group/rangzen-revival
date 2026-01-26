@@ -48,10 +48,27 @@ jobs:
         run: |
           APK_PATH="RangzenApp/app/build/outputs/apk/debug/app-debug.apk"
 
-          # Extract version using aapt (installed with Android SDK)
-          VERSION_INFO=$($ANDROID_HOME/build-tools/*/aapt dump badging "$APK_PATH" | head -1)
-          VERSION_CODE=$(echo "$VERSION_INFO" | grep -oP "versionCode='\K[^']+")
-          VERSION_NAME=$(echo "$VERSION_INFO" | grep -oP "versionName='\K[^']+")
+          # Find aapt binary
+          AAPT=$(find $ANDROID_HOME/build-tools -name "aapt" -type f | head -1)
+          if [ -z "$AAPT" ]; then
+            echo "aapt not found, falling back to build.gradle"
+            VERSION_CODE=$(grep "versionCode" RangzenApp/app/build.gradle | grep -oE '[0-9]+')
+            VERSION_NAME=$(grep "versionName" RangzenApp/app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
+          else
+            echo "Using aapt at: $AAPT"
+            VERSION_INFO=$("$AAPT" dump badging "$APK_PATH" | head -1)
+            VERSION_CODE=$(echo "$VERSION_INFO" | grep -oP "versionCode='\K[^']+" || echo "")
+            VERSION_NAME=$(echo "$VERSION_INFO" | grep -oP "versionName='\K[^']+" || echo "")
+
+            # Fallback to build.gradle if aapt extraction failed
+            if [ -z "$VERSION_CODE" ]; then
+              echo "aapt extraction failed, falling back to build.gradle"
+              VERSION_CODE=$(grep "versionCode" RangzenApp/app/build.gradle | grep -oE '[0-9]+')
+              VERSION_NAME=$(grep "versionName" RangzenApp/app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
+            fi
+          fi
+
+          echo "Extracted: versionCode=$VERSION_CODE, versionName=$VERSION_NAME"
 
           # Calculate SHA256
           SHA256=$(sha256sum "$APK_PATH" | cut -d' ' -f1)
