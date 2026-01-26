@@ -45,14 +45,27 @@ jobs:
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           echo "Keystore file size: $(stat -c%s $GITHUB_WORKSPACE/release.keystore) bytes"
-          echo "Verifying keystore with keytool..."
-          keytool -list -keystore $GITHUB_WORKSPACE/release.keystore -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" || {
-            echo "::error::Keystore verification failed! Check KEYSTORE_BASE64, KEYSTORE_PASSWORD, and KEY_ALIAS secrets."
+          echo "Verifying keystore password..."
+          keytool -list -keystore $GITHUB_WORKSPACE/release.keystore -storepass "$KEYSTORE_PASSWORD" || {
+            echo "::error::KEYSTORE_PASSWORD is wrong!"
             exit 1
           }
-          echo "Keystore verified successfully!"
+          echo "Keystore password OK"
+          echo "Verifying key alias exists..."
+          keytool -list -keystore $GITHUB_WORKSPACE/release.keystore -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" || {
+            echo "::error::KEY_ALIAS '$KEY_ALIAS' not found in keystore!"
+            exit 1
+          }
+          echo "Key alias OK"
+          echo "Verifying key password (extracting key)..."
+          keytool -exportcert -keystore $GITHUB_WORKSPACE/release.keystore -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" -keypass "$KEY_PASSWORD" > /dev/null || {
+            echo "::error::KEY_PASSWORD is wrong!"
+            exit 1
+          }
+          echo "All keystore secrets verified!"
 
       - name: Build Release APK
         env:
