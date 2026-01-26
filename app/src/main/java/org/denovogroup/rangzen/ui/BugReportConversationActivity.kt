@@ -60,7 +60,7 @@ class BugReportConversationActivity : AppCompatActivity() {
         description = intent.getStringExtra(EXTRA_DESCRIPTION) ?: ""
 
         if (reportId.isEmpty()) {
-            Toast.makeText(this, "Invalid report", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.conversation_invalid_report), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -82,8 +82,8 @@ class BugReportConversationActivity : AppCompatActivity() {
     private fun setupUI() {
         binding.btnBack.setOnClickListener { finish() }
 
-        binding.textTitle.text = "Bug Report: ${category.replaceFirstChar { it.uppercase() }}"
-        binding.textStatus.text = "Loading..."
+        binding.textTitle.text = getString(R.string.conversation_title, category.replaceFirstChar { it.uppercase() })
+        binding.textStatus.text = getString(R.string.conversation_loading)
 
         adapter = ConversationAdapter()
         binding.recyclerConversation.layoutManager = LinearLayoutManager(this).apply {
@@ -105,7 +105,7 @@ class BugReportConversationActivity : AppCompatActivity() {
                 if (telemetry == null) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@BugReportConversationActivity,
-                            "Telemetry not initialized", Toast.LENGTH_SHORT).show()
+                            getString(R.string.bug_report_telemetry_error), Toast.LENGTH_SHORT).show()
                         showLoading(false)
                     }
                     return@launch
@@ -118,7 +118,7 @@ class BugReportConversationActivity : AppCompatActivity() {
 
                     if (response != null) {
                         // Update status
-                        binding.textStatus.text = "Status: ${response.report.status}"
+                        binding.textStatus.text = getString(R.string.conversation_status, response.report.status)
 
                         // Update local status
                         val supportStore = SupportStore.getInstance(this@BugReportConversationActivity)
@@ -182,7 +182,7 @@ class BugReportConversationActivity : AppCompatActivity() {
                         }
 
                         adapter.submitList(items)
-                        binding.textStatus.text = "Status: Unknown (offline)"
+                        binding.textStatus.text = getString(R.string.conversation_status_offline)
                     }
                 }
             } catch (e: Exception) {
@@ -190,7 +190,7 @@ class BugReportConversationActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     showLoading(false)
                     Toast.makeText(this@BugReportConversationActivity,
-                        "Failed to load: ${e.message}", Toast.LENGTH_SHORT).show()
+                        getString(R.string.conversation_load_failed, e.message ?: "Unknown error"), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -211,7 +211,7 @@ class BugReportConversationActivity : AppCompatActivity() {
                 if (telemetry == null) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@BugReportConversationActivity,
-                            "Telemetry not initialized", Toast.LENGTH_SHORT).show()
+                            getString(R.string.bug_report_telemetry_error), Toast.LENGTH_SHORT).show()
                         binding.editReply.isEnabled = true
                         binding.btnSend.isEnabled = true
                     }
@@ -227,12 +227,12 @@ class BugReportConversationActivity : AppCompatActivity() {
                     if (replyId != null) {
                         binding.editReply.text?.clear()
                         Toast.makeText(this@BugReportConversationActivity,
-                            "Reply sent!", Toast.LENGTH_SHORT).show()
+                            getString(R.string.conversation_reply_sent), Toast.LENGTH_SHORT).show()
                         // Reload conversation to show the new reply
                         loadConversation()
                     } else {
                         Toast.makeText(this@BugReportConversationActivity,
-                            "Failed to send reply", Toast.LENGTH_SHORT).show()
+                            getString(R.string.conversation_reply_failed), Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
@@ -241,7 +241,7 @@ class BugReportConversationActivity : AppCompatActivity() {
                     binding.editReply.isEnabled = true
                     binding.btnSend.isEnabled = true
                     Toast.makeText(this@BugReportConversationActivity,
-                        "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        getString(R.string.bug_report_error, e.message ?: "Unknown error"), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -285,7 +285,10 @@ class ConversationAdapter : RecyclerView.Adapter<ConversationAdapter.ViewHolder>
         RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: ConversationItem) {
-            binding.textSender.text = if (item.isFromUser) "You" else "Support"
+            binding.textSender.text = if (item.isFromUser)
+                binding.root.context.getString(R.string.conversation_sender_you)
+            else
+                binding.root.context.getString(R.string.conversation_sender_support)
             binding.textMessage.text = item.message
             binding.textTimestamp.text = if (item.timestamp.isNotEmpty()) {
                 parseAndFormatTimestamp(item.timestamp)

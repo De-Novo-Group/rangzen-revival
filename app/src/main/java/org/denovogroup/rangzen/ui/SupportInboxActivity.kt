@@ -76,8 +76,8 @@ class SupportInboxActivity : AppCompatActivity() {
 
         TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
             tab.text = when (position) {
-                0 -> "Messages"
-                1 -> "My Reports"
+                0 -> getString(R.string.support_tab_messages)
+                1 -> getString(R.string.support_tab_reports)
                 else -> ""
             }
         }.attach()
@@ -174,7 +174,7 @@ class MessagesListFragment : Fragment() {
             binding.recyclerView.visibility = View.GONE
             binding.emptyState.root.visibility = View.VISIBLE
             binding.emptyState.root.findViewById<TextView>(R.id.text_empty).text =
-                "No messages yet.\n\nReplies to your bug reports will appear here."
+                getString(R.string.support_empty_messages)
         } else {
             binding.recyclerView.visibility = View.VISIBLE
             binding.emptyState.root.visibility = View.GONE
@@ -235,7 +235,7 @@ class ReportsListFragment : Fragment() {
             binding.recyclerView.visibility = View.GONE
             binding.emptyState.root.visibility = View.VISIBLE
             binding.emptyState.root.findViewById<TextView>(R.id.text_empty).text =
-                "No bug reports submitted yet.\n\nReports you submit will appear here."
+                getString(R.string.support_empty_reports)
         } else {
             binding.recyclerView.visibility = View.VISIBLE
             binding.emptyState.root.visibility = View.GONE
@@ -286,7 +286,7 @@ class MessagesAdapter(
 
         fun bind(message: SupportMessage) {
             binding.textMessage.text = message.message
-            binding.textTimestamp.text = formatTimestamp(message.createdAt)
+            binding.textTimestamp.text = formatTimestamp(message.createdAt, binding.root.context)
             binding.unreadIndicator.visibility = if (message.isRead) View.GONE else View.VISIBLE
 
             binding.root.setOnClickListener {
@@ -332,7 +332,7 @@ class ReportsAdapter(
             binding.textCategory.text = report.category.uppercase()
             binding.textStatus.text = report.status
             binding.textDescription.text = report.description
-            binding.textTimestamp.text = formatTimestamp(report.createdAt)
+            binding.textTimestamp.text = formatTimestamp(report.createdAt, binding.root.context)
             binding.unreadIndicator.visibility = if (item.hasUnread) View.VISIBLE else View.GONE
 
             binding.root.setOnClickListener {
@@ -342,15 +342,15 @@ class ReportsAdapter(
     }
 }
 
-private fun formatTimestamp(timestamp: Long): String {
+private fun formatTimestamp(timestamp: Long, context: android.content.Context): String {
     val date = Date(timestamp)
     val now = System.currentTimeMillis()
     val diff = now - timestamp
 
     return when {
-        diff < 60_000 -> "Just now"
-        diff < 3600_000 -> "${diff / 60_000}m ago"
-        diff < 86400_000 -> "${diff / 3600_000}h ago"
+        diff < 60_000 -> context.getString(R.string.support_time_just_now)
+        diff < 3600_000 -> context.getString(R.string.support_time_minutes_ago, diff / 60_000)
+        diff < 86400_000 -> context.getString(R.string.support_time_hours_ago, diff / 3600_000)
         else -> SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(date)
     }
 }

@@ -148,4 +148,104 @@
     <string name="friend_delete_confirm">Remove</string>
     <string name="friend_delete_cancel">Cancel</string>
     <string name="friend_deleted">%1$s removed from friends</string>
+
+    <!-- Statistics section -->
+    <string name="settings_statistics">Statistics</string>
+    <string name="settings_messages_count">Messages: %1$d</string>
+    <string name="settings_friends_count">Friends: %1$d</string>
+    <string name="settings_version">Version: %1$s</string>
+    <string name="settings_version_device">Version: %1$s • Device: %2$s</string>
+    <string name="settings_version_unknown">Version: Unknown</string>
+
+    <!-- QA Tools section -->
+    <string name="qa_tools_title">QA Tools</string>
+    <string name="qa_tools_subtitle">For testers and developers</string>
+    <string name="qa_report_bug">Report Bug</string>
+    <string name="qa_replies">Replies</string>
+    <string name="qa_inbox_new_count">%1$d new</string>
+    <string name="qa_inbox_reports_count">%1$d reports</string>
+    <string name="qa_testers_guide">Tester\'s Guide</string>
+
+    <!-- Radios section -->
+    <string name="radios_title">Radios</string>
+    <string name="radios_warning">Advanced testers only. Do not modify unless instructed.</string>
+    <string name="radio_bluetooth_title">Bluetooth (BLE)</string>
+    <string name="radio_bluetooth_desc">Short range, low power</string>
+    <string name="radio_wifi_direct_title">WiFi Direct</string>
+    <string name="radio_wifi_direct_desc">Long range, requires confirmation</string>
+    <string name="radio_wifi_aware_title">WiFi Aware (NAN)</string>
+    <string name="radio_wifi_aware_desc">WiFi speed, no dialogs (API 26+)</string>
+    <string name="radio_wifi_aware_not_supported">Not supported on this device</string>
+    <string name="radio_lan_title">LAN (WiFi Network)</string>
+    <string name="radio_lan_desc">Same network, fastest</string>
+
+    <!-- Help & About section -->
+    <string name="help_how_to_use">How to Use</string>
+    <string name="help_how_to_use_desc">Quick start guide and tips</string>
+    <string name="help_faq">FAQ</string>
+    <string name="help_faq_desc">Frequently asked questions</string>
+    <string name="about_murmur">About Murmur</string>
+    <string name="about_description">Anonymous, censorship-resistant messaging via Bluetooth and WiFi Direct. No internet required.</string>
+    <string name="about_copyright">© 2026 De Novo Group</string>
+
+    <!-- Update dialog -->
+    <string name="update_available">Update Available</string>
+    <string name="update_message">Version %1$s is ready to install.\n\nWould you like to install it now?</string>
+    <string name="update_install">Install</string>
+    <string name="update_later">Later</string>
+
+    <!-- Compose errors -->
+    <string name="compose_error_empty">Message cannot be empty</string>
+    <string name="compose_error_too_long">Message too long</string>
+    <string name="compose_success">Message sent to the mesh network</string>
+    <string name="compose_error_failed">Failed to send message</string>
+    <string name="compose_default_pseudonym">Anonymous</string>
+
+    <!-- Permission errors -->
+    <string name="permission_required">Murmur needs permissions to work</string>
+
+    <!-- Support Inbox -->
+    <string name="support_tab_messages">Messages</string>
+    <string name="support_tab_reports">My Reports</string>
+    <string name="support_empty_messages">No messages yet.\n\nReplies to your bug reports will appear here.</string>
+    <string name="support_empty_reports">No bug reports submitted yet.\n\nReports you submit will appear here.</string>
+    <string name="support_time_just_now">Just now</string>
+    <string name="support_time_minutes_ago">%1$dm ago</string>
+    <string name="support_time_hours_ago">%1$dh ago</string>
+
+    <!-- Bug Report Activity -->
+    <string name="bug_report_describe_issue">Please describe the issue</string>
+    <string name="bug_report_more_details">Please provide more details</string>
+    <string name="bug_report_telemetry_error">Telemetry not initialized</string>
+    <string name="bug_report_success">Report submitted! We may reply in-app.</string>
+    <string name="bug_report_failed">Failed to submit report. Please try again.</string>
+    <string name="bug_report_error">Error: %1$s</string>
+
+    <!-- Bug Report Conversation -->
+    <string name="conversation_invalid_report">Invalid report</string>
+    <string name="conversation_title">Bug Report: %1$s</string>
+    <string name="conversation_loading">Loading…</string>
+    <string name="conversation_status">Status: %1$s</string>
+    <string name="conversation_status_offline">Status: Unknown (offline)</string>
+    <string name="conversation_load_failed">Failed to load: %1$s</string>
+    <string name="conversation_reply_sent">Reply sent!</string>
+    <string name="conversation_reply_failed">Failed to send reply</string>
+    <string name="conversation_sender_you">You</string>
+    <string name="conversation_sender_support">Support</string>
+
+    <!-- Feed filters -->
+    <string name="feed_filter_liked">Liked</string>
+    <string name="feed_filter_hide_mine">Hide mine</string>
+    <string name="feed_sort_recent">Recent ▼</string>
+    <string name="feed_sort_hearts">♥ Hearts ▼</string>
+    <string name="feed_restore_swiped">Restore swiped</string>
+    <string name="feed_peers_nearby">%1$d peers nearby</string>
+    <string name="feed_anonymous">Anonymous</string>
+    <string name="feed_time_just_now">Just now</string>
+    <string name="feed_time_hours_ago">%1$dh ago</string>
+    <string name="feed_time_days_ago">%1$dd ago</string>
+
+    <!-- Compose hints -->
+    <string name="compose_pseudonym_hint">Pseudonym (optional)</string>
+    <string name="compose_mesh_info">Messages will propagate through the mesh network to nearby Murmur users. The more mutual friends you have with someone, the higher priority your messages receive.</string>
 </resources>

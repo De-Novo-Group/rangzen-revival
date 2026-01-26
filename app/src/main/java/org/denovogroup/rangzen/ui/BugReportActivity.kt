@@ -99,18 +99,18 @@ class BugReportActivity : AppCompatActivity() {
         val description = binding.editDescription.text?.toString()?.trim()
 
         if (description.isNullOrEmpty()) {
-            Toast.makeText(this, "Please describe the issue", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.bug_report_describe_issue), Toast.LENGTH_SHORT).show()
             return
         }
 
         if (description.length < 10) {
-            Toast.makeText(this, "Please provide more details", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.bug_report_more_details), Toast.LENGTH_SHORT).show()
             return
         }
 
         val telemetryClient = TelemetryClient.getInstance()
         if (telemetryClient == null) {
-            Toast.makeText(this, "Telemetry not initialized", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.bug_report_telemetry_error), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -165,14 +165,14 @@ class BugReportActivity : AppCompatActivity() {
                     if (reportId != null) {
                         Toast.makeText(
                             this@BugReportActivity,
-                            "Report submitted! We may reply in-app.",
+                            getString(R.string.bug_report_success),
                             Toast.LENGTH_LONG
                         ).show()
                         finish()
                     } else {
                         Toast.makeText(
                             this@BugReportActivity,
-                            "Failed to submit report. Please try again.",
+                            getString(R.string.bug_report_failed),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -184,7 +184,7 @@ class BugReportActivity : AppCompatActivity() {
                     binding.progressBar.visibility = View.GONE
                     Toast.makeText(
                         this@BugReportActivity,
-                        "Error: ${e.message}",
+                        getString(R.string.bug_report_error, e.message ?: "Unknown error"),
                         Toast.LENGTH_SHORT
                     ).show()
                 }

@@ -2,6 +2,7 @@
 <ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background">
@@ -114,7 +115,7 @@
                         android:layout_marginEnd="8dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:src="@android:drawable/ic_menu_help"
-                        android:contentDescription="Tester's Guide"
+                        android:contentDescription="@string/qa_testers_guide"
                         android:visibility="gone"
                         app:tint="@color/primary" />
 
@@ -185,7 +186,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Statistics"
+                    android:text="@string/settings_statistics"
                     android:textSize="16sp"
                     android:textColor="@color/text_primary"
                     android:textStyle="bold" />
@@ -232,7 +233,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="QA Tools"
+                    android:text="@string/qa_tools_title"
                     android:textSize="16sp"
                     android:textColor="@color/text_primary"
                     android:textStyle="bold" />
@@ -241,7 +242,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="For testers and developers"
+                    android:text="@string/qa_tools_subtitle"
                     android:textSize="12sp"
                     android:textColor="@color/text_secondary" />
 
@@ -257,7 +258,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:layout_marginEnd="8dp"
-                        android:text="Report Bug"
+                        android:text="@string/qa_report_bug"
                         android:textAllCaps="false"
                         app:icon="@android:drawable/ic_menu_report_image"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
@@ -268,7 +269,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:layout_marginStart="8dp"
-                        android:text="Replies"
+                        android:text="@string/qa_replies"
                         android:textAllCaps="false"
                         app:icon="@android:drawable/ic_dialog_email"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
@@ -312,7 +313,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Radios"
+                    android:text="@string/radios_title"
                     android:textSize="16sp"
                     android:textColor="@color/text_primary"
                     android:textStyle="bold" />
@@ -321,7 +322,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="⚠️ Advanced testers only. Do not modify unless instructed."
+                    android:text="@string/radios_warning"
                     android:textSize="12sp"
                     android:textColor="@color/warning" />
 
@@ -350,14 +351,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Bluetooth (BLE)"
+                            android:text="@string/radio_bluetooth_title"
                             android:textSize="14sp"
                             android:textColor="@color/text_primary" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Short range, low power"
+                            android:text="@string/radio_bluetooth_desc"
                             android:textSize="12sp"
                             android:textColor="@color/text_secondary" />
 
@@ -396,14 +397,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="WiFi Direct"
+                            android:text="@string/radio_wifi_direct_title"
                             android:textSize="14sp"
                             android:textColor="@color/text_primary" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Long range, requires confirmation"
+                            android:text="@string/radio_wifi_direct_desc"
                             android:textSize="12sp"
                             android:textColor="@color/text_secondary" />
 
@@ -443,7 +444,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="WiFi Aware (NAN)"
+                            android:text="@string/radio_wifi_aware_title"
                             android:textSize="14sp"
                             android:textColor="@color/text_primary" />
 
@@ -451,7 +452,7 @@
                             android:id="@+id/text_wifi_aware_status"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="WiFi speed, no dialogs (API 26+)"
+                            android:text="@string/radio_wifi_aware_desc"
                             android:textSize="12sp"
                             android:textColor="@color/text_secondary" />
 
@@ -490,14 +491,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="LAN (WiFi Network)"
+                            android:text="@string/radio_lan_title"
                             android:textSize="14sp"
                             android:textColor="@color/text_primary" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Same network, fastest"
+                            android:text="@string/radio_lan_desc"
                             android:textSize="12sp"
                             android:textColor="@color/text_secondary" />
 
@@ -549,14 +550,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="How to Use"
+                            android:text="@string/help_how_to_use"
                             android:textSize="16sp"
                             android:textColor="@color/text_primary" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Quick start guide and tips"
+                            android:text="@string/help_how_to_use_desc"
                             android:textSize="14sp"
                             android:textColor="@color/text_secondary" />
 
@@ -598,14 +599,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="FAQ"
+                            android:text="@string/help_faq"
                             android:textSize="16sp"
                             android:textColor="@color/text_primary" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Frequently asked questions"
+                            android:text="@string/help_faq_desc"
                             android:textSize="14sp"
                             android:textColor="@color/text_secondary" />
 
@@ -636,7 +637,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="About Murmur"
+                        android:text="@string/about_murmur"
                         android:textSize="16sp"
                         android:textColor="@color/text_primary"
                         android:textStyle="bold" />
@@ -645,7 +646,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Anonymous, censorship-resistant messaging via Bluetooth and WiFi Direct. No internet required."
+                        android:text="@string/about_description"
                         android:textSize="14sp"
                         android:textColor="@color/text_secondary" />
 
@@ -654,14 +655,14 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Version: 2.0.0"
                         android:textSize="14sp"
-                        android:textColor="@color/text_hint" />
+                        android:textColor="@color/text_hint"
+                        tools:text="Version: 2.0.0" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="© 2026 De Novo Group"
+                        android:text="@string/about_copyright"
                         android:textSize="12sp"
                         android:textColor="@color/text_hint" />
 

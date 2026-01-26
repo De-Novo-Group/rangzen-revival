@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
             startRangzenService()
         } else {
             Timber.w("Some permissions denied")
-            Toast.makeText(this, "Rangzen needs permissions to work", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.permission_required), Toast.LENGTH_LONG).show()
         }
     }
 

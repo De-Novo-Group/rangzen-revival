@@ -16,6 +16,7 @@ import androidx.fragment.app.Fragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
@@ -150,12 +151,12 @@ class SettingsFragment : Fragment() {
 
     private fun showUpdateDialog(versionName: String, apkFile: java.io.File, release: org.denovogroup.rangzen.backend.update.ReleaseInfo) {
         AlertDialog.Builder(requireContext())
-            .setTitle("Update Available")
-            .setMessage("Version $versionName is ready to install.\n\nWould you like to install it now?")
-            .setPositiveButton("Install") { _, _ ->
+            .setTitle(R.string.update_available)
+            .setMessage(getString(R.string.update_message, versionName))
+            .setPositiveButton(R.string.update_install) { _, _ ->
                 UpdateClient.getInstance()?.promptInstall(apkFile, release)
             }
-            .setNegativeButton("Later", null)
+            .setNegativeButton(R.string.update_later, null)
             .show()
     }
 
@@ -262,7 +263,7 @@ class SettingsFragment : Fragment() {
         // Check WiFi Aware support and update UI
         val wifiAwareSupported = TransportCapabilities.isWifiAwareSupported(requireContext())
         if (!wifiAwareSupported) {
-            binding.textWifiAwareStatus.text = "Not supported on this device"
+            binding.textWifiAwareStatus.text = getString(R.string.radio_wifi_aware_not_supported)
             binding.switchRadioWifiAware.isEnabled = false
             binding.switchRadioWifiAware.isChecked = false
         }
@@ -318,10 +319,10 @@ class SettingsFragment : Fragment() {
         val reportCount = supportStore.getAllReports().size
 
         if (unreadCount > 0) {
-            binding.textInboxCount.text = "$unreadCount new"
+            binding.textInboxCount.text = getString(R.string.qa_inbox_new_count, unreadCount)
             binding.textInboxCount.visibility = View.VISIBLE
         } else if (reportCount > 0) {
-            binding.textInboxCount.text = "$reportCount reports"
+            binding.textInboxCount.text = getString(R.string.qa_inbox_reports_count, reportCount)
             binding.textInboxCount.visibility = View.VISIBLE
         } else {
             binding.textInboxCount.visibility = View.GONE
@@ -332,9 +333,9 @@ class SettingsFragment : Fragment() {
         val messageStore = MessageStore.getInstance(requireContext())
         val friendStore = FriendStore.getInstance(requireContext())
 
-        binding.textMessageCount.text = "Messages: ${messageStore.getMessageCount()}"
-        binding.textFriendCount.text = "Friends: ${friendStore.getFriendCount()}"
-        
+        binding.textMessageCount.text = getString(R.string.settings_messages_count, messageStore.getMessageCount())
+        binding.textFriendCount.text = getString(R.string.settings_friends_count, friendStore.getFriendCount())
+
         // App version and device ID (for debugging sync issues)
         try {
             val packageInfo = requireContext().packageManager.getPackageInfo(
@@ -342,9 +343,9 @@ class SettingsFragment : Fragment() {
             )
             val deviceHash = TelemetryClient.getInstance()?.deviceIdHash
             val shortHash = deviceHash?.take(8) ?: "N/A"
-            binding.textVersion.text = "Version: ${packageInfo.versionName} • Device: $shortHash"
+            binding.textVersion.text = getString(R.string.settings_version_device, packageInfo.versionName, shortHash)
         } catch (e: Exception) {
-            binding.textVersion.text = "Version: Unknown"
+            binding.textVersion.text = getString(R.string.settings_version_unknown)
         }
     }
 

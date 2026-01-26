@@ -249,7 +249,7 @@ class FeedFragment : Fragment() {
         binding.btnSort.setOnClickListener {
             sortByHearts = !sortByHearts
             // Update button text to reflect current sort mode
-            binding.btnSort.text = if (sortByHearts) "♥ Hearts ▼" else "Recent ▼"
+            binding.btnSort.text = if (sortByHearts) getString(R.string.feed_sort_hearts) else getString(R.string.feed_sort_recent)
             // Re-apply filters with new sort order
             updateUI(buildFeedItems())
         }
@@ -384,7 +384,7 @@ class FeedFragment : Fragment() {
         )
 
         binding.statusText.text = if (peerCount > 0) {
-            "$peerCount peers nearby"
+            getString(R.string.feed_peers_nearby, peerCount)
         } else {
             getString(R.string.status_discovering)
         }
@@ -552,7 +552,7 @@ class FeedAdapter(
 
         fun bind(message: RangzenMessage) {
             textMessage.text = message.text
-            textPseudonym.text = message.pseudonym ?: "Anonymous"
+            textPseudonym.text = message.pseudonym ?: itemView.context.getString(R.string.feed_anonymous)
             textTimestamp.text = formatHeaderTimes(
                 composedAt = message.timestamp,
                 receivedAt = message.receivedTimestamp
@@ -603,11 +603,12 @@ class FeedAdapter(
             val diff = now - timestamp
             val hours = diff / (1000 * 60 * 60)
             val days = hours / 24
+            val ctx = itemView.context
 
             return when {
-                hours < 1 -> "Just now"
-                hours < 24 -> "${hours}h ago"
-                days < 7 -> "${days}d ago"
+                hours < 1 -> ctx.getString(R.string.feed_time_just_now)
+                hours < 24 -> ctx.getString(R.string.feed_time_hours_ago, hours.toInt())
+                days < 7 -> ctx.getString(R.string.feed_time_days_ago, days.toInt())
                 else -> {
                     val formatter = SimpleDateFormat("MMM d", Locale.getDefault())
                     formatter.format(Date(timestamp))

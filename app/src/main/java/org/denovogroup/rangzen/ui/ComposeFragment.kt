@@ -87,17 +87,17 @@ class ComposeFragment : Fragment() {
         val text = binding.editMessage.text.toString().trim()
         
         if (text.isEmpty()) {
-            Toast.makeText(context, "Message cannot be empty", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, getString(R.string.compose_error_empty), Toast.LENGTH_SHORT).show()
             return
         }
 
         if (text.length > RangzenMessage.MAX_MESSAGE_LENGTH) {
-            Toast.makeText(context, "Message too long", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, getString(R.string.compose_error_too_long), Toast.LENGTH_SHORT).show()
             return
         }
 
         // Get pseudonym
-        val pseudonym = binding.editPseudonym.text.toString().trim().ifEmpty { "Anonymous" }
+        val pseudonym = binding.editPseudonym.text.toString().trim().ifEmpty { getString(R.string.compose_default_pseudonym) }
         
         // Save pseudonym for next time
         requireContext().getSharedPreferences("rangzen_prefs", 0)
@@ -119,7 +119,7 @@ class ComposeFragment : Fragment() {
                 messageIdHash = sha256(message.messageId),
                 textLength = message.text?.length ?: 0
             )
-            Toast.makeText(context, "Message sent to the mesh network", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, getString(R.string.compose_success), Toast.LENGTH_SHORT).show()
             // Trigger an immediate outbound exchange attempt after local send.
             forceOutboundExchange()
             // Clear the input
@@ -132,7 +132,7 @@ class ComposeFragment : Fragment() {
                 )?.selectedItemId = R.id.nav_feed
             }
         } else {
-            Toast.makeText(context, "Failed to send message", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, getString(R.string.compose_error_failed), Toast.LENGTH_SHORT).show()
         }
     }
 

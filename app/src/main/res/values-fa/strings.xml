@@ -148,4 +148,104 @@
     <string name="friend_delete_confirm">حذف</string>
     <string name="friend_delete_cancel">لغو</string>
     <string name="friend_deleted">%1$s از دوستان حذف شد</string>
+
+    <!-- Statistics section -->
+    <string name="settings_statistics">آمار</string>
+    <string name="settings_messages_count">پیام‌ها: %1$d</string>
+    <string name="settings_friends_count">دوستان: %1$d</string>
+    <string name="settings_version">نسخه: %1$s</string>
+    <string name="settings_version_device">نسخه: %1$s • دستگاه: %2$s</string>
+    <string name="settings_version_unknown">نسخه: نامشخص</string>
+
+    <!-- QA Tools section -->
+    <string name="qa_tools_title">ابزارهای آزمایش</string>
+    <string name="qa_tools_subtitle">برای آزمایش‌کنندگان و توسعه‌دهندگان</string>
+    <string name="qa_report_bug">گزارش مشکل</string>
+    <string name="qa_replies">پاسخ‌ها</string>
+    <string name="qa_inbox_new_count">%1$d جدید</string>
+    <string name="qa_inbox_reports_count">%1$d گزارش</string>
+    <string name="qa_testers_guide">راهنمای آزمایش‌کنندگان</string>
+
+    <!-- Radios section -->
+    <string name="radios_title">رادیوها</string>
+    <string name="radios_warning">فقط برای آزمایش‌کنندگان پیشرفته. بدون دستورالعمل تغییر ندهید.</string>
+    <string name="radio_bluetooth_title">بلوتوث (BLE)</string>
+    <string name="radio_bluetooth_desc">برد کوتاه، مصرف کم</string>
+    <string name="radio_wifi_direct_title">WiFi Direct</string>
+    <string name="radio_wifi_direct_desc">برد بلند، نیاز به تأیید</string>
+    <string name="radio_wifi_aware_title">WiFi Aware (NAN)</string>
+    <string name="radio_wifi_aware_desc">سرعت WiFi، بدون دیالوگ (API 26+)</string>
+    <string name="radio_wifi_aware_not_supported">در این دستگاه پشتیبانی نمی‌شود</string>
+    <string name="radio_lan_title">LAN (شبکه WiFi)</string>
+    <string name="radio_lan_desc">یک شبکه، سریع‌ترین</string>
+
+    <!-- Help & About section -->
+    <string name="help_how_to_use">نحوه استفاده</string>
+    <string name="help_how_to_use_desc">راهنمای شروع سریع و نکات</string>
+    <string name="help_faq">سوالات متداول</string>
+    <string name="help_faq_desc">پرسش‌های متداول</string>
+    <string name="about_murmur">درباره مورمور</string>
+    <string name="about_description">پیام‌رسانی ناشناس و مقاوم در برابر سانسور از طریق بلوتوث و WiFi Direct. بدون نیاز به اینترنت.</string>
+    <string name="about_copyright">© ۲۰۲۶ گروه دنوو</string>
+
+    <!-- Update dialog -->
+    <string name="update_available">به‌روزرسانی موجود است</string>
+    <string name="update_message">نسخه %1$s آماده نصب است.\n\nآیا می‌خواهید الان نصب کنید؟</string>
+    <string name="update_install">نصب</string>
+    <string name="update_later">بعداً</string>
+
+    <!-- Compose errors -->
+    <string name="compose_error_empty">پیام نمی‌تواند خالی باشد</string>
+    <string name="compose_error_too_long">پیام خیلی طولانی است</string>
+    <string name="compose_success">پیام به شبکه مش ارسال شد</string>
+    <string name="compose_error_failed">ارسال پیام ناموفق بود</string>
+    <string name="compose_default_pseudonym">ناشناس</string>
+
+    <!-- Permission errors -->
+    <string name="permission_required">مورمور برای کار کردن به مجوزها نیاز دارد</string>
+
+    <!-- Support Inbox -->
+    <string name="support_tab_messages">پیام‌ها</string>
+    <string name="support_tab_reports">گزارش‌های من</string>
+    <string name="support_empty_messages">هنوز پیامی نیست.\n\nپاسخ‌های گزارش‌های مشکل شما اینجا نمایش داده می‌شوند.</string>
+    <string name="support_empty_reports">هنوز گزارش مشکلی ارسال نشده.\n\nگزارش‌هایی که ارسال می‌کنید اینجا نمایش داده می‌شوند.</string>
+    <string name="support_time_just_now">همین الان</string>
+    <string name="support_time_minutes_ago">%1$d دقیقه پیش</string>
+    <string name="support_time_hours_ago">%1$d ساعت پیش</string>
+
+    <!-- Bug Report Activity -->
+    <string name="bug_report_describe_issue">لطفاً مشکل را توضیح دهید</string>
+    <string name="bug_report_more_details">لطفاً جزئیات بیشتری ارائه دهید</string>
+    <string name="bug_report_telemetry_error">تله‌متری مقداردهی نشده</string>
+    <string name="bug_report_success">گزارش ارسال شد! ممکن است در برنامه پاسخ دهیم.</string>
+    <string name="bug_report_failed">ارسال گزارش ناموفق بود. لطفاً دوباره تلاش کنید.</string>
+    <string name="bug_report_error">خطا: %1$s</string>
+
+    <!-- Bug Report Conversation -->
+    <string name="conversation_invalid_report">گزارش نامعتبر</string>
+    <string name="conversation_title">گزارش مشکل: %1$s</string>
+    <string name="conversation_loading">در حال بارگذاری…</string>
+    <string name="conversation_status">وضعیت: %1$s</string>
+    <string name="conversation_status_offline">وضعیت: نامشخص (آفلاین)</string>
+    <string name="conversation_load_failed">بارگذاری ناموفق: %1$s</string>
+    <string name="conversation_reply_sent">پاسخ ارسال شد!</string>
+    <string name="conversation_reply_failed">ارسال پاسخ ناموفق بود</string>
+    <string name="conversation_sender_you">شما</string>
+    <string name="conversation_sender_support">پشتیبانی</string>
+
+    <!-- Feed filters -->
+    <string name="feed_filter_liked">پسندیده</string>
+    <string name="feed_filter_hide_mine">پنهان کردن پیام‌های من</string>
+    <string name="feed_sort_recent">اخیر ▼</string>
+    <string name="feed_sort_hearts">♥ قلب‌ها ▼</string>
+    <string name="feed_restore_swiped">بازگردانی حذف شده‌ها</string>
+    <string name="feed_peers_nearby">%1$d دستگاه در نزدیکی</string>
+    <string name="feed_anonymous">ناشناس</string>
+    <string name="feed_time_just_now">همین الان</string>
+    <string name="feed_time_hours_ago">%1$d ساعت پیش</string>
+    <string name="feed_time_days_ago">%1$d روز پیش</string>
+
+    <!-- Compose hints -->
+    <string name="compose_pseudonym_hint">نام مستعار (اختیاری)</string>
+    <string name="compose_mesh_info">پیام‌ها از طریق شبکه مش به کاربران نزدیک مورمور منتشر می‌شوند. هرچه دوستان مشترک بیشتری با کسی داشته باشید، پیام‌های شما اولویت بالاتری دریافت می‌کنند.</string>
 </resources>
