@@ -298,9 +298,19 @@ class BleAdvertiser(private val context: Context) {
                         }
                         // Build the full request payload.
                         val requestPayload = session.requestBuffer.toByteArray()
-                        // Process the request - pairing mode callback takes priority
-                        val responsePayload = pairingModeCallback?.invoke(device, requestPayload)
-                            ?: onDataReceived?.invoke(device, requestPayload)
+                        // Process the request - pairing mode callback takes priority, but falls back to regular handler
+                        Timber.i("Processing request from ${device.address}, size=${requestPayload.size}, pairingModeCallback=${pairingModeCallback != null}")
+                        var responsePayload: ByteArray? = null
+                        if (pairingModeCallback != null) {
+                            Timber.i("Trying pairingModeCallback for ${device.address}")
+                            responsePayload = pairingModeCallback?.invoke(device, requestPayload)
+                            Timber.i("pairingModeCallback returned ${responsePayload?.size ?: "null"} bytes")
+                        }
+                        // Fall back to regular handler if pairing callback returns null or isn't set
+                        if (responsePayload == null) {
+                            Timber.i("Falling back to onDataReceived for ${device.address}")
+                            responsePayload = onDataReceived?.invoke(device, requestPayload)
+                        }
                         if (responsePayload == null) {
                             Timber.e("No response generated for ${device.address}; rejecting request")
                             clearSession(device)

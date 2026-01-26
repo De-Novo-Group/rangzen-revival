@@ -318,15 +318,21 @@ class BlePairingFragment : Fragment() {
 
         // Send announcement to all discovered peers and parse responses
         val announcement = BlePairingProtocol.createAnnounceMessage(session)
+        val peersList = bleScanner?.peers?.value ?: emptyList()
+        Timber.d("$TAG: Sending announcement to ${peersList.size} scanner peers")
+
         scope.launch(Dispatchers.IO) {
-            bleScanner?.peers?.value?.forEach { peer ->
+            peersList.forEach { peer ->
                 try {
+                    Timber.d("$TAG: Sending announcement to scanner peer ${peer.address}")
                     val response = bleScanner?.exchange(peer, announcement)
                     // Parse the response - if they're in pairing mode, they'll respond with their announcement
                     if (response != null) {
+                        Timber.i("$TAG: Got response from ${peer.address}, size=${response.size}")
                         val parsed = BlePairingProtocol.parseAnnounceMessage(response)
                         if (parsed != null) {
                             val (code, shortId, _) = parsed
+                            Timber.i("$TAG: Peer ${peer.address} is in pairing mode - code=$code, shortId=$shortId")
                             val pairingPeer = BlePairingProtocol.PairingPeer(
                                 address = peer.address,
                                 shortId = shortId,
@@ -341,7 +347,11 @@ class BlePairingFragment : Fragment() {
                                     updateDeviceList()
                                 }
                             }
+                        } else {
+                            Timber.d("$TAG: Response from ${peer.address} is not a pairing announcement")
                         }
+                    } else {
+                        Timber.d("$TAG: No response from ${peer.address}")
                     }
                 } catch (e: Exception) {
                     Timber.e(e, "$TAG: Failed to send announcement to ${peer.address}")
@@ -358,8 +368,14 @@ class BlePairingFragment : Fragment() {
     }
 
     private fun handleIncomingPairingMessage(address: String, data: ByteArray): ByteArray? {
-        val session = pairingSession ?: return null
+        Timber.i("$TAG: handleIncomingPairingMessage from $address, data size=${data.size}")
+        val session = pairingSession
+        if (session == null) {
+            Timber.w("$TAG: No pairing session, returning null")
+            return null
+        }
         val messageType = BlePairingProtocol.getMessageType(data)
+        Timber.i("$TAG: Message type: $messageType")
 
         return when (messageType) {
             BlePairingProtocol.MSG_PAIRING_ANNOUNCE -> {
@@ -367,14 +383,38 @@ class BlePairingFragment : Fragment() {
                 val parsed = BlePairingProtocol.parseAnnounceMessage(data)
                 if (parsed != null) {
                     val (code, shortId, timestamp) = parsed
-                    val peer = BlePairingProtocol.PairingPeer(
-                        address = address,
-                        shortId = shortId,
-                        code = code,
-                        rssi = bleScanner?.peers?.value?.find { it.address == address }?.rssi ?: -100,
-                        lastSeen = System.currentTimeMillis()
-                    )
-                    discoveredPairingPeers[address] = peer
+                    Timber.i("$TAG: Received announcement from $address - code=$code, shortId=$shortId")
+
+                    // IMPORTANT: The server-side address may differ from scanner address due to BLE
+                    // address randomization. Try to find existing entry by shortId to avoid duplicates.
+                    val existingEntry = discoveredPairingPeers.values.find { it.shortId == shortId }
+
+                    if (existingEntry != null) {
+                        // Update lastSeen for existing entry, but keep the scanner's address
+                        Timber.i("$TAG: Updating existing entry for $shortId (scanner addr: ${existingEntry.address}, server addr: $address)")
+                        discoveredPairingPeers[existingEntry.address] = existingEntry.copy(
+                            lastSeen = System.currentTimeMillis()
+                        )
+                    } else {
+                        // Check if scanner knows about this device with matching address
+                        val scannerPeer = bleScanner?.peers?.value?.find { it.address == address }
+                        if (scannerPeer != null) {
+                            // Scanner knows this address, safe to add
+                            Timber.i("$TAG: Adding new pairing peer from server (scanner knows this addr)")
+                            val peer = BlePairingProtocol.PairingPeer(
+                                address = address,
+                                shortId = shortId,
+                                code = code,
+                                rssi = scannerPeer.rssi,
+                                lastSeen = System.currentTimeMillis()
+                            )
+                            discoveredPairingPeers[address] = peer
+                        } else {
+                            // Server-side address doesn't match scanner - log but don't add
+                            // Let the client-side flow in sendPairingAnnouncement() handle discovery
+                            Timber.i("$TAG: Received announcement from unknown address $address (shortId=$shortId), waiting for scanner match")
+                        }
+                    }
 
                     activity?.runOnUiThread {
                         if (currentState == State.NEARBY_DEVICES) {
@@ -388,26 +428,29 @@ class BlePairingFragment : Fragment() {
 
             BlePairingProtocol.MSG_PAIRING_VERIFY -> {
                 // Peer is trying to verify our code
+                Timber.i("$TAG: Received VERIFY from $address")
                 val parsed = BlePairingProtocol.parseVerifyMessage(data)
                 if (parsed != null) {
                     val (theirCode, theirShortId, enteredCode) = parsed
+                    Timber.i("$TAG: VERIFY parsed - theirCode=$theirCode, theirShortId=$theirShortId, enteredCode=$enteredCode, myCode=${session.myCode}")
 
                     // Check if they entered our code correctly
                     if (enteredCode == session.myCode) {
                         // They verified us correctly! Remember this
                         peersWhoVerifiedUs[address] = theirCode
-                        Timber.d("$TAG: Peer $address verified us, their code is $theirCode")
+                        Timber.i("$TAG: Peer $address verified us correctly, their code is $theirCode")
 
                         // Check if we've verified them (either through UI or they're the selected peer)
                         val weVerifiedThem = session.peerCode == theirCode ||
                             (selectedPairingPeer?.code == theirCode && selectedPeer?.address == address)
+                        Timber.i("$TAG: weVerifiedThem=$weVerifiedThem, session.peerCode=${session.peerCode}, selectedPairingPeer?.code=${selectedPairingPeer?.code}")
 
                         if (weVerifiedThem) {
                             // Both verified! Send confirmation with our public ID
                             session.verified = true
                             session.peerShortId = theirShortId
                             session.peerCode = theirCode
-                            Timber.i("$TAG: Mutual verification complete, sending CONFIRM")
+                            Timber.i("$TAG: Mutual verification complete! Sending CONFIRM")
                             BlePairingProtocol.createConfirmMessage(session)
                         } else {
                             // We haven't verified them yet, send announce so they know we're active
@@ -419,7 +462,10 @@ class BlePairingFragment : Fragment() {
                         Timber.w("$TAG: Peer entered wrong code: $enteredCode vs ${session.myCode}")
                         BlePairingProtocol.createRejectMessage("invalid_code")
                     }
-                } else null
+                } else {
+                    Timber.w("$TAG: Failed to parse VERIFY message")
+                    null
+                }
             }
 
             BlePairingProtocol.MSG_PAIRING_CONFIRM -> {
@@ -440,12 +486,19 @@ class BlePairingFragment : Fragment() {
                 } else null
             }
 
-            else -> null
+            else -> {
+                Timber.w("$TAG: Unknown message type: $messageType")
+                null
+            }
         }
     }
 
     private fun updateDeviceList() {
         val blePeers = bleScanner?.peers?.value ?: emptyList()
+
+        Timber.d("$TAG: updateDeviceList - ${blePeers.size} scanner peers, ${discoveredPairingPeers.size} pairing peers")
+        blePeers.forEach { p -> Timber.d("$TAG:   scanner peer: ${p.address}") }
+        discoveredPairingPeers.forEach { (addr, p) -> Timber.d("$TAG:   pairing peer: $addr -> ${p.shortId}/${p.code}") }
 
         // Only show devices that are in pairing mode (sent a pairing announcement)
         val displayPeers = blePeers.mapNotNull { blePeer ->
@@ -461,6 +514,8 @@ class BlePairingFragment : Fragment() {
             }
         }
 
+        Timber.i("$TAG: updateDeviceList - showing ${displayPeers.size} devices in pairing mode")
+
         if (displayPeers.isEmpty()) {
             binding.recyclerDevices.visibility = View.GONE
             binding.emptyDevices.visibility = View.VISIBLE
@@ -474,6 +529,9 @@ class BlePairingFragment : Fragment() {
     private fun selectDevice(peer: DisplayPeer) {
         selectedPeer = peer.blePeer
         selectedPairingPeer = discoveredPairingPeers[peer.blePeer.address]
+
+        Timber.i("$TAG: Selected device - blePeer.address=${peer.blePeer.address}, shortId=${peer.shortId}, code=${peer.code}")
+        Timber.i("$TAG: selectedPairingPeer=${selectedPairingPeer?.address}, code=${selectedPairingPeer?.code}")
 
         // Update the enter code screen with peer info
         binding.textPeerInfo.text = getString(R.string.pairing_device_format, peer.shortId)
@@ -505,14 +563,17 @@ class BlePairingFragment : Fragment() {
         scope.launch {
             try {
                 val verifyMessage = BlePairingProtocol.createVerifyMessage(session, enteredCode)
-                Timber.d("$TAG: Sending VERIFY to ${peer.address}")
+                Timber.i("$TAG: Sending VERIFY to ${peer.address}, message size=${verifyMessage.size}")
+                Timber.i("$TAG: bleScanner is ${if (bleScanner != null) "available" else "NULL"}")
                 val response = withContext(Dispatchers.IO) {
-                    bleScanner?.exchange(peer, verifyMessage)
+                    val result = bleScanner?.exchange(peer, verifyMessage)
+                    Timber.i("$TAG: exchange() returned ${result?.size ?: "null"} bytes")
+                    result
                 }
 
                 if (response != null) {
                     val messageType = BlePairingProtocol.getMessageType(response)
-                    Timber.d("$TAG: Got response type: $messageType")
+                    Timber.i("$TAG: Got response type: $messageType, size=${response.size}")
 
                     when (messageType) {
                         BlePairingProtocol.MSG_PAIRING_CONFIRM -> {
