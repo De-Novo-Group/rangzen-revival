@@ -37,23 +37,22 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Make gradlew executable
-        run: chmod +x ./RangzenApp/gradlew
+        run: chmod +x ./gradlew
 
       - name: Build Debug APK
-        working-directory: ./RangzenApp
         run: ./gradlew assembleDebug
 
       - name: Extract version FROM APK (source of truth)
         id: version
         run: |
-          APK_PATH="RangzenApp/app/build/outputs/apk/debug/app-debug.apk"
+          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 
           # Find aapt binary
           AAPT=$(find $ANDROID_HOME/build-tools -name "aapt" -type f | head -1)
           if [ -z "$AAPT" ]; then
             echo "aapt not found, falling back to build.gradle"
-            VERSION_CODE=$(grep "versionCode" RangzenApp/app/build.gradle | grep -oE '[0-9]+')
-            VERSION_NAME=$(grep "versionName" RangzenApp/app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
+            VERSION_CODE=$(grep "versionCode" app/build.gradle | grep -oE '[0-9]+')
+            VERSION_NAME=$(grep "versionName" app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
           else
             echo "Using aapt at: $AAPT"
             VERSION_INFO=$("$AAPT" dump badging "$APK_PATH" | head -1)
@@ -63,8 +62,8 @@ jobs:
             # Fallback to build.gradle if aapt extraction failed
             if [ -z "$VERSION_CODE" ]; then
               echo "aapt extraction failed, falling back to build.gradle"
-              VERSION_CODE=$(grep "versionCode" RangzenApp/app/build.gradle | grep -oE '[0-9]+')
-              VERSION_NAME=$(grep "versionName" RangzenApp/app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
+              VERSION_CODE=$(grep "versionCode" app/build.gradle | grep -oE '[0-9]+')
+              VERSION_NAME=$(grep "versionName" app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
             fi
           fi
 
@@ -97,7 +96,7 @@ jobs:
 
       - name: Create docs.zip
         run: |
-          DOCS_DIR="RangzenApp/app/src/main/assets/docs"
+          DOCS_DIR="app/src/main/assets/docs"
           if [ -d "$DOCS_DIR" ] && [ "$(ls -A $DOCS_DIR/*.html 2>/dev/null)" ]; then
             cd "$DOCS_DIR"
             zip -r $GITHUB_WORKSPACE/docs.zip *.html
@@ -111,7 +110,7 @@ jobs:
 
       - name: Rename APK with version
         run: |
-          cp RangzenApp/app/build/outputs/apk/debug/app-debug.apk \
+          cp app/build/outputs/apk/debug/app-debug.apk \
              murmur-${{ steps.version.outputs.version_name }}.apk
 
       - name: Create GitHub Release

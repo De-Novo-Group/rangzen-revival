@@ -20,70 +20,9 @@
 *.apk
 *.db
 *.db-journal
-tmp_*_messages.db
-
-# ===========================================
-# LOCAL-ONLY: Never track or push these
-# ===========================================
-
-# Telemetry server (private, not for public repo)
-telemetry-server/
-
-# Deployment scripts and state (live in telemetry-server repo)
-scripts/
-.last-deployed-*
-
-# Local working files
-local-only/
-
-# AutoClaude VS Code extension
-.autoclaude/
 
 # Debug logs (may contain device info)
-ble-logs/
 *.log
 
 # Node tooling (for local docx generation)
 node_modules/
-package.json
-package-lock.json
-
-# ===========================================
-# LOCAL PLANNING & DOCS (not for GitHub)
-# ===========================================
-
-# Planning documents
-plans/
-
-# Proposal artifacts
-proposal/
-docs/
-rangzen_revival_proposal*.docx
-rangzen_revival_proposal*.html
-create_docx*.js
-
-# Legacy repo copies (reference only, not for public repo)
-rangzen-production/
-rangzen-murmur
-rangzen-murmur/
-Casifiic-rangzen-murmur/
-OLD-rangzen-production-old/
-
-# Archive folder (internal docs, proposals, etc.)
-archive/
-
-# Agent instructions (internal)
-AGENTS.md
-*.md
-!RangzenApp/**/*.md
-
-# OTA APK storage (local builds)
-ota-apks/
-
-# Office temp files
-.~lock*
-~$*
-
-# Claude plans and backups
-.claude/
-.claude_agent_farm_backups/
