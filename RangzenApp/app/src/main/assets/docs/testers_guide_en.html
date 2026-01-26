@@ -350,7 +350,33 @@
                 </div>
             </div>
         </div>
-        
+
+        <div class="card">
+            <div class="card-header">
+                <span>📻</span> Radio Settings (Advanced)
+            </div>
+            <div class="card-content">
+                <p>Murmur uses multiple wireless radios simultaneously. You can see their status in the feed header and toggle them in Settings → Radios:</p>
+                <ul>
+                    <li><strong style="color: #3B82F6;">Bluetooth (BLE)</strong> — Always-on background discovery. Range ~10m, low power. Most reliable for finding peers.</li>
+                    <li><strong style="color: #F97316;">WiFi Direct</strong> — Longer range (~100m), faster transfers. May show a "connection invitation" popup on some devices.</li>
+                    <li><strong style="color: #8B5CF6;">WiFi Aware (NAN)</strong> — Modern alternative to WiFi Direct. Same range/speed, no popups. Requires Android 8+ and supported hardware (not all devices have it).</li>
+                    <li><strong style="color: #22C55E;">LAN</strong> — Works when devices share the same WiFi network. Fastest transfer speed but limited to local network.</li>
+                </ul>
+                <p style="margin-top: 12px;"><strong>Known limitations:</strong></p>
+                <ul>
+                    <li>WiFi Direct popups can be intrusive on some Samsung devices</li>
+                    <li>WiFi Aware is not available on older or budget phones</li>
+                    <li>LAN only works if both devices are on the same WiFi</li>
+                    <li>Some devices have aggressive battery optimization that kills background radios</li>
+                </ul>
+                <div class="bug-report" style="margin-top: 16px;">
+                    <h4>⚠️ Important for Testers</h4>
+                    <p style="margin: 0;"><strong>Do NOT disable any radios</strong> unless specifically asked by the De Novo Group testing team. We need all radios active to test the full mesh behavior.</p>
+                </div>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <span>🐛</span> Reporting Bugs
