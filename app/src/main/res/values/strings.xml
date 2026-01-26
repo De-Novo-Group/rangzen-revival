@@ -121,6 +121,7 @@
 
     <string name="pairing_success">Friend Added!</string>
     <string name="pairing_friend_added_format">%1$s has been added to your friends</string>
+    <string name="pairing_already_friends_format">Already friends with %1$s</string>
     <string name="pairing_done">Done</string>
 
     <string name="pairing_error">Error</string>

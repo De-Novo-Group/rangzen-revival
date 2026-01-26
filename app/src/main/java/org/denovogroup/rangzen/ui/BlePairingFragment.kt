@@ -727,6 +727,14 @@ class BlePairingFragment : Fragment() {
         // Stop BLE since pairing is complete
         stopBle()
 
+        // Check if already friends - skip nickname prompt if so
+        if (friendStore.hasFriend(session.peerPublicId!!)) {
+            Timber.i("$TAG: Already friends with ${session.peerShortId}")
+            binding.textFriendName.text = getString(R.string.pairing_already_friends_format, session.peerShortId)
+            showState(State.SUCCESS)
+            return
+        }
+
         // Show nickname prompt
         showState(State.NICKNAME)
     }
