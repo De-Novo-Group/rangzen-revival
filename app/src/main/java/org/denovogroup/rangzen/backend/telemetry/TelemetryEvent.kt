@@ -80,9 +80,12 @@ data class TelemetryEvent(
         // Priority distribution (hearts integration)
         const val TYPE_PRIORITY_DISTRIBUTION = "priority_distribution"
 
-        // Transport identifiers
-        const val TRANSPORT_BLE = "ble"
-        const val TRANSPORT_WIFI = "wifi"
+        // Transport identifiers (match dashboard expectations)
+        const val TRANSPORT_BLE = "bt-le"
+        const val TRANSPORT_WIFI_DIRECT = "wifi-direct"
+        const val TRANSPORT_WIFI_AWARE = "wifi-aware"
+        const val TRANSPORT_WLAN = "wlan"
+        const val TRANSPORT_INTERNET = "internet"
     }
 }
 

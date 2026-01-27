@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 
@@ -429,7 +430,7 @@ class NsdDiscoveryManager(private val context: Context) {
             }
             TelemetryClient.getInstance()?.track(
                 eventType = "nsd_discovery_$eventType",
-                transport = "nsd",
+                transport = TelemetryEvent.TRANSPORT_WLAN,
                 payload = payload
             )
         } catch (e: Exception) {

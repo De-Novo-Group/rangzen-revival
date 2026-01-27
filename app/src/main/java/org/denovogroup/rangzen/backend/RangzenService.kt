@@ -34,6 +34,7 @@ import org.denovogroup.rangzen.backend.lan.LanTransport
 import org.denovogroup.rangzen.backend.lan.NsdDiscoveryManager
 import org.denovogroup.rangzen.backend.telemetry.LocationHelper
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.denovogroup.rangzen.backend.wifi.WifiDirectManager
 import org.denovogroup.rangzen.backend.wifi.WifiDirectTransport
 import org.denovogroup.rangzen.backend.wifiaware.WifiAwareManager
@@ -594,7 +595,7 @@ class RangzenService : Service() {
                             TelemetryClient.getInstance()?.trackExchangeWithLocation(
                                 success = true,
                                 peerIdHash = result.peerPublicId.hashCode().toString(),
-                                transport = "wifi_direct",
+                                transport = TelemetryEvent.TRANSPORT_WIFI_DIRECT,
                                 location = location,
                                 durationMs = durationMs,
                                 messagesSent = 0,  // Count not easily available
@@ -612,7 +613,7 @@ class RangzenService : Service() {
                         TelemetryClient.getInstance()?.trackExchangeWithLocation(
                             success = false,
                             peerIdHash = "wifi_direct",
-                            transport = "wifi_direct",
+                            transport = TelemetryEvent.TRANSPORT_WIFI_DIRECT,
                             location = location,
                             durationMs = durationMs,
                             messagesSent = 0,
@@ -647,7 +648,7 @@ class RangzenService : Service() {
                         TelemetryClient.getInstance()?.trackExchangeWithLocation(
                             success = result.success,
                             peerIdHash = deviceId.hashCode().toString(),
-                            transport = "lan",
+                            transport = TelemetryEvent.TRANSPORT_WLAN,
                             location = location,
                             durationMs = durationMs,
                             messagesSent = result.messagesSent,
@@ -668,7 +669,7 @@ class RangzenService : Service() {
                         TelemetryClient.getInstance()?.trackExchangeWithLocation(
                             success = false,
                             peerIdHash = deviceId.hashCode().toString(),
-                            transport = "lan",
+                            transport = TelemetryEvent.TRANSPORT_WLAN,
                             location = location,
                             durationMs = durationMs,
                             messagesSent = 0,

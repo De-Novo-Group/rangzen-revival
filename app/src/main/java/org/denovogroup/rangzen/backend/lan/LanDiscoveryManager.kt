@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.json.JSONObject
 import timber.log.Timber
 import java.net.*
@@ -516,7 +517,7 @@ class LanDiscoveryManager(private val context: Context) {
             }
             TelemetryClient.getInstance()?.track(
                 eventType = "lan_discovery_$eventType",
-                transport = "lan",
+                transport = TelemetryEvent.TRANSPORT_WLAN,
                 payload = payload
             )
         } catch (e: Exception) {

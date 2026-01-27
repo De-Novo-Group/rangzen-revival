@@ -22,6 +22,7 @@ import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.discovery.DiscoveredPeerRegistry
 import org.denovogroup.rangzen.backend.discovery.TransportCapabilities
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import timber.log.Timber
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -452,7 +453,7 @@ class WifiAwareManager(
             payload.putAll(extras)
             TelemetryClient.getInstance()?.track(
                 eventType = "wifi_aware_$event",
-                transport = "wifi_aware",
+                transport = TelemetryEvent.TRANSPORT_WIFI_AWARE,
                 payload = payload
             )
         } catch (e: Exception) {
