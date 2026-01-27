@@ -576,11 +576,11 @@ class FeedAdapter(
             val safeReceived = if (receivedAt > 0) receivedAt else composedAt
             val composedText = formatClockTime(composedAt)
             val receivedText = formatClockTime(safeReceived)
-            return "C $composedText · R $receivedText"
+            return "C:$composedText R:$receivedText"
         }
 
         private fun formatClockTime(timestamp: Long): String {
-            val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+            val formatter = SimpleDateFormat("MM-dd_HH:mm", Locale.getDefault())
             return formatter.format(Date(timestamp))
         }
     }
