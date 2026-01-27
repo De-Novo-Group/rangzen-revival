@@ -70,7 +70,7 @@
                     android:layout_marginStart="2dp"
                     android:layout_marginEnd="8dp"
                     android:textSize="12sp"
-                    android:textColor="@color/text_hint"
+                    android:textColor="@color/text_secondary"
                     android:minWidth="16dp" />
 
                 <!-- Timestamps (C/R) -->
@@ -79,7 +79,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="11sp"
-                    android:textColor="@color/text_hint" />
+                    android:textColor="@color/text_secondary" />
 
             </LinearLayout>
 
