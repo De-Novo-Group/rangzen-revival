@@ -230,9 +230,13 @@ class LegacyExchangeClient(
         var newCount = 0
         
         for (message in messages) {
+            if (message.text.isNullOrEmpty()) continue
+
             val existing = messageStore.getMessage(message.messageId)
             if (existing != null) {
-                // Message exists - update trust if new value is higher
+                // Message exists - merge hearts (takes max) and update trust if higher
+                messageStore.addMessage(message)  // Handles heart merge via max()
+
                 val newTrust = LegacyExchangeMath.newPriority(
                     message.trustScore,
                     existing.trustScore,
@@ -242,7 +246,7 @@ class LegacyExchangeClient(
                 if (newTrust > existing.trustScore) {
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
-            } else if (message.text != null && message.text.isNotEmpty()) {
+            } else {
                 // New message - add to store
                 messageStore.addMessage(message)
                 newCount++
@@ -308,17 +312,20 @@ class LegacyExchangeClient(
             for (i in 0 until msgArray.length()) {
                 val msgJson = msgArray.getJSONObject(i)
                 val msg = LegacyExchangeCodec.decodeMessage(msgJson)
-                
+                if (msg.text.isNullOrEmpty()) continue
+
                 val existing = messageStore.getMessage(msg.messageId)
                 if (existing != null) {
+                    // Message exists - merge hearts (takes max)
+                    messageStore.addMessage(msg)
+
                     // Paper-aligned: WiFi Direct doesn't do PSI, so we can't recompute trust.
                     // Instead, preserve the incoming message's trust score if it's higher.
-                    // The incoming score was computed when the message was first received via
-                    // a trusted channel (BLE with PSI).
                     if (msg.trustScore > existing.trustScore) {
                         messageStore.updateTrustScore(msg.messageId, msg.trustScore)
                     }
-                } else if (msg.text != null && msg.text.isNotEmpty()) {
+                } else {
+                    // New message - add to store
                     messageStore.addMessage(msg)
                     newCount++
                 }

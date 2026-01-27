@@ -77,6 +77,9 @@ data class TelemetryEvent(
         const val TYPE_PEER_SNAPSHOT = "peer_snapshot"
         const val TYPE_ERROR_BATCH = "error_batch"
 
+        // Priority distribution (hearts integration)
+        const val TYPE_PRIORITY_DISTRIBUTION = "priority_distribution"
+
         // Transport identifiers
         const val TRANSPORT_BLE = "ble"
         const val TRANSPORT_WIFI = "wifi"

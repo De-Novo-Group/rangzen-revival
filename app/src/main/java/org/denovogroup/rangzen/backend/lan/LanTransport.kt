@@ -671,9 +671,13 @@ class LanTransport {
             for (i in 0 until msgArray.length()) {
                 val msgJson = msgArray.getJSONObject(i)
                 val msg = LegacyExchangeCodec.decodeMessage(msgJson)
-                
+                if (msg.text.isNullOrEmpty()) continue
+
                 val existing = messageStore.getMessage(msg.messageId)
                 if (existing != null) {
+                    // Message exists - merge hearts (takes max)
+                    messageStore.addMessage(msg)
+
                     // Update trust using proper commonFriends value
                     val newTrust = LegacyExchangeMath.newPriority(
                         msg.trustScore,
@@ -684,7 +688,8 @@ class LanTransport {
                     if (newTrust > existing.trustScore) {
                         messageStore.updateTrustScore(msg.messageId, newTrust)
                     }
-                } else if (msg.text != null && msg.text.isNotEmpty()) {
+                } else {
+                    // New message - add to store
                     messageStore.addMessage(msg)
                     received.add(msg)
                 }

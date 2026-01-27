@@ -537,6 +537,39 @@ class TelemetryClient private constructor(
     }
 
     /**
+     * Track priority distribution for exchange messages.
+     *
+     * This helps monitor how the combinedPriority() formula behaves in the field:
+     * - Are priorities well-distributed or clustered?
+     * - How many messages have hearts?
+     * - How many low-trust messages exist?
+     *
+     * @param priorities List of (combinedPriority, hearts, trustScore) tuples
+     */
+    fun trackPriorityDistribution(
+        priorities: List<Double>,
+        heartsCount: Int,
+        lowTrustCount: Int,
+        messageCount: Int
+    ) {
+        if (priorities.isEmpty()) return
+
+        track(
+            TelemetryEvent.TYPE_PRIORITY_DISTRIBUTION,
+            null,
+            null,
+            mapOf(
+                "count" to messageCount,
+                "min" to (priorities.minOrNull() ?: 0.0),
+                "max" to (priorities.maxOrNull() ?: 0.0),
+                "mean" to priorities.average(),
+                "hearts_gt_0" to heartsCount,
+                "trust_lt_03" to lowTrustCount
+            )
+        )
+    }
+
+    /**
      * Submit a bug report to the server.
      *
      * @param category Bug category (connectivity, exchange, discovery, qr, performance, other)
