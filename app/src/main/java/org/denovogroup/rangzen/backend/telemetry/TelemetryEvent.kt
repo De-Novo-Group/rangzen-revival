@@ -64,6 +64,16 @@ data class TelemetryEvent(
         const val TYPE_OTA_INSTALL_SUCCESS = "ota_install_success"
         const val TYPE_OTA_INSTALL_FAILED = "ota_install_failed"
 
+        // App lifecycle event types
+        const val TYPE_APP_START = "app_start"
+        const val TYPE_APP_STOP = "app_stop"
+        const val TYPE_APP_FOREGROUND = "app_foreground"
+        const val TYPE_APP_BACKGROUND = "app_background"
+
+        // Network state event types
+        const val TYPE_PEER_SNAPSHOT = "peer_snapshot"
+        const val TYPE_ERROR_BATCH = "error_batch"
+
         // Transport identifiers
         const val TRANSPORT_BLE = "ble"
         const val TRANSPORT_WIFI = "wifi"

@@ -10,8 +10,10 @@ import org.denovogroup.rangzen.BuildConfig;
 import org.denovogroup.rangzen.backend.AppConfig;
 import org.denovogroup.rangzen.backend.distribution.ShareModeManager;
 import org.denovogroup.rangzen.backend.distribution.WifiDirectGroupCleanup;
+import org.denovogroup.rangzen.backend.telemetry.AppLifecycleObserver;
 import org.denovogroup.rangzen.backend.telemetry.SupportSyncWorker;
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient;
+import org.denovogroup.rangzen.backend.telemetry.TelemetryTimberTree;
 import org.denovogroup.rangzen.backend.update.UpdateClient;
 import timber.log.Timber;
 
@@ -91,6 +93,12 @@ public class RangzenApplication extends Application {
         SharedPreferences prefs = getSharedPreferences("rangzen_prefs", MODE_PRIVATE);
         boolean qaMode = prefs.getBoolean("qa_mode", false);
         client.setEnabled(qaMode);
+
+        // Plant the telemetry Timber tree for error batching
+        Timber.plant(new TelemetryTimberTree());
+
+        // Initialize app lifecycle observer for lifecycle events
+        AppLifecycleObserver.INSTANCE.initialize(this);
 
         // Schedule support message sync if QA mode is enabled
         if (qaMode) {

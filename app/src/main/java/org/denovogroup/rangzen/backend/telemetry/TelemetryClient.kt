@@ -438,6 +438,73 @@ class TelemetryClient private constructor(
     }
 
     /**
+     * Track a periodic peer snapshot for network health monitoring.
+     *
+     * @param knownPeers List of peer info (peer_id_hash, transport, last_seen_ms)
+     * @param bleCount Number of BLE peers
+     * @param wifiDirectCount Number of WiFi Direct peers
+     * @param wifiAwareCount Number of WiFi Aware peers
+     * @param lanCount Number of LAN peers
+     */
+    fun trackPeerSnapshot(
+        knownPeers: List<Map<String, Any>>,
+        bleCount: Int,
+        wifiDirectCount: Int,
+        wifiAwareCount: Int,
+        lanCount: Int
+    ) {
+        track(
+            TelemetryEvent.TYPE_PEER_SNAPSHOT,
+            null,
+            null,
+            mapOf(
+                "known_peers" to knownPeers,
+                "ble_count" to bleCount,
+                "wifi_direct_count" to wifiDirectCount,
+                "wifi_aware_count" to wifiAwareCount,
+                "lan_count" to lanCount,
+                "total_count" to knownPeers.size,
+                "device_state" to DeviceStateHelper.capture(context)
+            )
+        )
+    }
+
+    /**
+     * Track app lifecycle events (start, stop, foreground, background).
+     *
+     * @param eventType One of app_start, app_stop, app_foreground, app_background
+     * @param sessionDurationMs For background/stop events, how long the session lasted
+     */
+    fun trackAppLifecycle(eventType: String, sessionDurationMs: Long? = null) {
+        val payload = mutableMapOf<String, Any>(
+            "device_state" to DeviceStateHelper.capture(context)
+        )
+        sessionDurationMs?.let { payload["session_duration_ms"] = it }
+
+        track(eventType, null, null, payload)
+    }
+
+    /**
+     * Track a batch of errors for debugging.
+     *
+     * @param errors List of error info (message, tag, timestamp, level)
+     */
+    fun trackErrorBatch(errors: List<Map<String, Any>>) {
+        if (errors.isEmpty()) return
+
+        track(
+            TelemetryEvent.TYPE_ERROR_BATCH,
+            null,
+            null,
+            mapOf(
+                "errors" to errors,
+                "error_count" to errors.size,
+                "device_state" to DeviceStateHelper.capture(context)
+            )
+        )
+    }
+
+    /**
      * Submit a bug report to the server.
      *
      * @param category Bug category (connectivity, exchange, discovery, qr, performance, other)

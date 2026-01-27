@@ -88,6 +88,7 @@ class RangzenService : Service() {
     private var lanDiscoveryJob: Job? = null
     private var parallelExchangeJob: Job? = null
     private var registryCleanupJob: Job? = null
+    private var peerSnapshotJob: Job? = null
 
     // SharedPreferences key for last exchange time.
     private val lastExchangePrefKey = "last_exchange_time"
@@ -329,12 +330,13 @@ class RangzenService : Service() {
         _status.value = ServiceStatus.STARTING
         val notification = createNotification("Starting...")
         startForeground(NOTIFICATION_ID, notification)
-        
+
         startBleOperations()
         startExchangeLoop()
         startCleanupLoop()
         startRegistryCleanupLoop()
-        
+        startPeerSnapshotLoop()
+
         Timber.i("RangzenService started")
     }
 
@@ -816,6 +818,69 @@ class RangzenService : Service() {
             }
         }
     }
+
+    /**
+     * Start periodic peer snapshot reporting for network health monitoring.
+     * Reports known peers every 5 minutes when telemetry is enabled.
+     */
+    private fun startPeerSnapshotLoop() {
+        peerSnapshotJob?.cancel()
+        peerSnapshotJob = serviceScope.launch {
+            while (isActive) {
+                delay(5 * 60 * 1000L) // Every 5 minutes
+                sendPeerSnapshot()
+            }
+        }
+    }
+
+    /**
+     * Send a peer_snapshot telemetry event with current peer information.
+     */
+    private fun sendPeerSnapshot() {
+        val telemetry = TelemetryClient.getInstance() ?: return
+        if (!telemetry.isEnabled()) return
+
+        val peers = peerRegistry.peerList.value
+        if (peers.isEmpty()) return
+
+        // Build peer info list
+        val knownPeers = peers.map { peer ->
+            val bestTransportType = peer.bestTransport()
+            val transportInfo = bestTransportType?.let { peer.transports[it] }
+            mutableMapOf<String, Any>(
+                "peer_id_hash" to peer.publicId.hashCode().toString(),
+                "transport" to (bestTransportType?.identifier() ?: "unknown"),
+                "last_seen_ms" to (System.currentTimeMillis() - (transportInfo?.lastSeen ?: System.currentTimeMillis())),
+                "handshake_completed" to peer.handshakeCompleted,
+                "transport_count" to peer.transports.size
+            ).apply {
+                transportInfo?.signalStrength?.let { put("rssi", it) }
+            }
+        }
+
+        // Count by transport type
+        var bleCount = 0
+        var wifiDirectCount = 0
+        var wifiAwareCount = 0
+        var lanCount = 0
+
+        peers.forEach { peer ->
+            if (peer.hasTransport(TransportType.BLE)) bleCount++
+            if (peer.hasTransport(TransportType.WIFI_DIRECT)) wifiDirectCount++
+            if (peer.hasTransport(TransportType.WIFI_AWARE)) wifiAwareCount++
+            if (peer.hasTransport(TransportType.LAN)) lanCount++
+        }
+
+        telemetry.trackPeerSnapshot(
+            knownPeers = knownPeers,
+            bleCount = bleCount,
+            wifiDirectCount = wifiDirectCount,
+            wifiAwareCount = wifiAwareCount,
+            lanCount = lanCount
+        )
+
+        Timber.d("Peer snapshot sent: ${peers.size} peers (BLE=$bleCount, WiFiD=$wifiDirectCount, WiFiA=$wifiAwareCount, LAN=$lanCount)")
+    }
     
     /**
      * Set up WiFi Direct transport for high-bandwidth message exchange.
@@ -1284,6 +1349,7 @@ class RangzenService : Service() {
         lanDiscoveryJob?.cancel()
         parallelExchangeJob?.cancel()
         registryCleanupJob?.cancel()
+        peerSnapshotJob?.cancel()
         stopBleOperations()
         wifiDirectManager.cleanup()
         lanDiscoveryManager.cleanup()
