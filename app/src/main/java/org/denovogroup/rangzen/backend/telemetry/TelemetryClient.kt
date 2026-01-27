@@ -116,6 +116,11 @@ class TelemetryClient private constructor(
         context.getSharedPreferences("rangzen_prefs", Context.MODE_PRIVATE)
     }
 
+    /** Location helper for adding location to all events */
+    private val locationHelper: LocationHelper by lazy {
+        LocationHelper(context)
+    }
+
     /**
      * Get the user's display name for telemetry.
      * Uses the pseudonym from message compose, or generates fallback "Tester-{short-hash}".
@@ -158,9 +163,13 @@ class TelemetryClient private constructor(
     /**
      * Enqueue a telemetry event.
      * This is fire-and-forget - never blocks.
+     * Location is automatically included in every event when available.
      */
     fun track(eventType: String, peerIdHash: String? = null, transport: String? = null, payload: Map<String, Any>? = null) {
         if (!isEnabled()) return
+
+        // Add location to every event
+        val enrichedPayload = enrichPayloadWithLocation(payload)
 
         val event = TelemetryEvent(
             eventType = eventType,
@@ -168,7 +177,7 @@ class TelemetryClient private constructor(
             displayName = displayName,
             peerIdHash = peerIdHash,
             transport = transport,
-            payload = payload
+            payload = enrichedPayload
         )
 
         // Drop oldest events if queue is full
@@ -190,6 +199,28 @@ class TelemetryClient private constructor(
         if (eventQueue.size >= BATCH_SIZE) {
             flush()
         }
+    }
+
+    /**
+     * Enrich a payload with location data.
+     * If location is available, adds it under the "location" key.
+     */
+    private fun enrichPayloadWithLocation(payload: Map<String, Any>?): Map<String, Any>? {
+        val location = locationHelper.getLastKnownLocation()
+
+        // If no location, return original payload
+        if (location == null) return payload
+
+        // If no payload, create one with just location
+        if (payload == null) {
+            return mapOf("location" to location.toTelemetryMap())
+        }
+
+        // If payload already has location, don't override
+        if (payload.containsKey("location")) return payload
+
+        // Merge location into payload
+        return payload + ("location" to location.toTelemetryMap())
     }
 
     /**

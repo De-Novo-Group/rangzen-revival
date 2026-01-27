@@ -134,13 +134,13 @@ class LocationHelper(private val context: Context) {
         
         try {
             // Try to get last known location from any provider
-            val lastLocation = getBestLastKnownLocation()
-            
+            val lastLocation = getBestLastKnownLocationInternal()
+
             // If last location is recent enough (< 5 minutes), use it
             if (lastLocation != null && isLocationRecent(lastLocation)) {
                 return@withContext lastLocation
             }
-            
+
             // If no recent location, return whatever we have (or null)
             lastLocation
         } catch (e: Exception) {
@@ -151,9 +151,21 @@ class LocationHelper(private val context: Context) {
     
     /**
      * Get the best last known location from all available providers.
+     * This is a synchronous call that returns cached location data.
+     * Safe to call from any thread.
      */
     @SuppressLint("MissingPermission")
-    private fun getBestLastKnownLocation(): LocationData? {
+    fun getLastKnownLocation(): LocationData? {
+        if (!hasLocationPermission()) return null
+        if (!isLocationServicesEnabled()) return null
+        return getBestLastKnownLocationInternal()
+    }
+
+    /**
+     * Internal: Get the best last known location from all available providers.
+     */
+    @SuppressLint("MissingPermission")
+    private fun getBestLastKnownLocationInternal(): LocationData? {
         val lm = locationManager ?: return null
         
         var bestLocation: Location? = null
