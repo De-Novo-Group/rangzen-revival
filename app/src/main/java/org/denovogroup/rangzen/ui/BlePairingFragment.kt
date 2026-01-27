@@ -396,6 +396,8 @@ class BlePairingFragment : Fragment() {
                     } else {
                         Timber.d("$TAG: No response from ${peer.address}")
                     }
+                } catch (e: CancellationException) {
+                    throw e  // Don't swallow cancellation
                 } catch (e: Exception) {
                     Timber.e(e, "$TAG: Failed to send announcement to ${peer.address}")
                 }
@@ -657,13 +659,17 @@ class BlePairingFragment : Fragment() {
                                 onPairingComplete()
                             } else {
                                 verificationInProgress = false
-                                showError(getString(R.string.pairing_error_invalid_response))
+                                if (isAdded) {
+                                    showError(getString(R.string.pairing_error_invalid_response))
+                                }
                             }
                         }
 
                         BlePairingProtocol.MSG_PAIRING_REJECT -> {
                             verificationInProgress = false
-                            showError(getString(R.string.pairing_error_rejected))
+                            if (isAdded) {
+                                showError(getString(R.string.pairing_error_rejected))
+                            }
                         }
 
                         else -> {
@@ -676,12 +682,21 @@ class BlePairingFragment : Fragment() {
                     }
                 } else {
                     verificationInProgress = false
-                    showError(getString(R.string.pairing_error_no_response))
+                    if (isAdded) {
+                        showError(getString(R.string.pairing_error_no_response))
+                    }
                 }
+            } catch (e: CancellationException) {
+                // Fragment is being destroyed, don't show error
+                Timber.d(e, "$TAG: Verification cancelled")
+                verificationInProgress = false
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "$TAG: Verification failed")
                 verificationInProgress = false
-                showError(getString(R.string.pairing_error_connection))
+                if (isAdded) {
+                    showError(getString(R.string.pairing_error_connection))
+                }
             }
         }
     }
@@ -689,7 +704,9 @@ class BlePairingFragment : Fragment() {
     private suspend fun retryVerification(enteredCode: String, attemptsLeft: Int) {
         if (attemptsLeft <= 0) {
             verificationInProgress = false
-            showError(getString(R.string.pairing_error_timeout))
+            if (isAdded) {
+                showError(getString(R.string.pairing_error_timeout))
+            }
             return
         }
 
@@ -718,8 +735,10 @@ class BlePairingFragment : Fragment() {
                     }
                 } else if (messageType == BlePairingProtocol.MSG_PAIRING_REJECT) {
                     verificationInProgress = false
-                    withContext(Dispatchers.Main) {
-                        showError(getString(R.string.pairing_error_rejected))
+                    if (isAdded) {
+                        withContext(Dispatchers.Main) {
+                            showError(getString(R.string.pairing_error_rejected))
+                        }
                     }
                     return
                 }
@@ -728,11 +747,18 @@ class BlePairingFragment : Fragment() {
             // Wait and retry
             delay(2000)
             retryVerification(enteredCode, attemptsLeft - 1)
+        } catch (e: CancellationException) {
+            // Fragment is being destroyed, don't show error
+            Timber.d(e, "$TAG: Retry verification cancelled")
+            verificationInProgress = false
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "$TAG: Retry verification failed")
             verificationInProgress = false
-            withContext(Dispatchers.Main) {
-                showError(getString(R.string.pairing_error_connection))
+            if (isAdded) {
+                withContext(Dispatchers.Main) {
+                    showError(getString(R.string.pairing_error_connection))
+                }
             }
         }
     }
@@ -780,6 +806,8 @@ class BlePairingFragment : Fragment() {
     }
 
     private fun showError(message: String) {
+        // Guard against calling after fragment is detached (e.g., during coroutine cancellation)
+        if (!isAdded) return
         binding.textErrorMessage.text = message
         showState(State.ERROR)
     }
