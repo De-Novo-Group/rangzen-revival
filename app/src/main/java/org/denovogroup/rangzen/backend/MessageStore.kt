@@ -13,6 +13,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
 import org.denovogroup.rangzen.objects.RangzenMessage
 import timber.log.Timber
 
@@ -53,12 +54,49 @@ class MessageStore private constructor(context: Context) :
         // Store version for exchange backoff logic.
         private var storeVersion: String? = null
 
+        /**
+         * Enable priority-based exchange ordering (hearts integration).
+         * When true (default), messages are sorted by combinedPriority() before sending.
+         * When false, messages are sent in insertion order (legacy behavior).
+         */
+        @Volatile
+        var usePriorityOrdering = true
+
+        // Rate limit: max hearts per hour per device (prevents gaming)
+        private const val HEARTS_RATE_LIMIT = 5
+        private const val HEARTS_RATE_WINDOW_MS = 60 * 60 * 1000L // 1 hour
+        private val recentHeartTimestamps = mutableListOf<Long>()
+
         @Volatile
         private var instance: MessageStore? = null
 
         fun getInstance(context: Context): MessageStore {
             return instance ?: synchronized(this) {
                 instance ?: MessageStore(context.applicationContext).also { instance = it }
+            }
+        }
+
+        /**
+         * Check if heart rate limit has been reached.
+         * Returns true if user has hearted too many messages in the last hour.
+         */
+        private fun isHeartRateLimited(): Boolean {
+            val now = System.currentTimeMillis()
+            val cutoff = now - HEARTS_RATE_WINDOW_MS
+
+            synchronized(recentHeartTimestamps) {
+                // Clean old timestamps
+                recentHeartTimestamps.removeAll { it < cutoff }
+                return recentHeartTimestamps.size >= HEARTS_RATE_LIMIT
+            }
+        }
+
+        /**
+         * Record a heart action for rate limiting.
+         */
+        private fun recordHeartAction() {
+            synchronized(recentHeartTimestamps) {
+                recentHeartTimestamps.add(System.currentTimeMillis())
             }
         }
     }
@@ -247,21 +285,28 @@ class MessageStore private constructor(context: Context) :
     }
 
     /**
-     * Get messages for exchange with a peer, sorted by priority.
-     * 
+     * Get messages for exchange with a peer.
+     *
+     * When [usePriorityOrdering] is enabled, messages are sorted by combinedPriority()
+     * (trust + recency + hearts). Otherwise, uses insertion order (legacy behavior).
+     *
      * @param mutualFriends Number of mutual friends with the peer
      * @param limit Maximum number of messages to return
      */
     fun getMessagesForExchange(mutualFriends: Int, limit: Int = 100): List<RangzenMessage> {
-        // Match legacy behavior: filter by hop/minContacts and order by insertion.
         val messages = mutableListOf<RangzenMessage>()
-        // Capture current time for expiration filtering.
         val now = System.currentTimeMillis()
+
+        // Filter by hop/minContacts and expiration
         val selection =
             "(($COL_HOP_COUNT = 0 AND $COL_MIN_CONTACTS > 0 AND $COL_MIN_CONTACTS <= ?) " +
                 "OR ($COL_MIN_CONTACTS <= 0)) " +
                 "AND ($COL_EXPIRATION = 0 OR $COL_EXPIRATION > ?)"
         val args = arrayOf(mutualFriends.toString(), now.toString())
+
+        // When priority ordering is enabled, fetch more messages so we can sort and pick top N
+        val fetchLimit = if (usePriorityOrdering) limit * 3 else limit
+
         val cursor = readableDatabase.query(
             TABLE_MESSAGES,
             null,
@@ -269,49 +314,85 @@ class MessageStore private constructor(context: Context) :
             args,
             null,
             null,
-            "$COL_ID DESC",
-            limit.toString()
+            "$COL_ID DESC",  // Initial fetch by recency
+            fetchLimit.toString()
         )
         cursor.use {
             while (it.moveToNext()) {
-                // Convert each row to a message object.
                 messages.add(cursorToMessage(it))
             }
         }
-        return messages
+
+        // Log priority distribution for telemetry
+        if (messages.isNotEmpty()) {
+            val priorities = messages.map { it.combinedPriority() }
+            val heartsCount = messages.count { it.likes > 0 }
+            val lowTrustCount = messages.count { it.trustScore < 0.3 }
+
+            Timber.d(
+                "Exchange priority distribution: min=%.3f, max=%.3f, mean=%.3f, " +
+                    "count=%d, hearts>0=%d, trust<0.3=%d, priorityOrdering=%s",
+                priorities.minOrNull() ?: 0.0,
+                priorities.maxOrNull() ?: 0.0,
+                priorities.average(),
+                messages.size,
+                heartsCount,
+                lowTrustCount,
+                usePriorityOrdering
+            )
+
+            TelemetryClient.getInstance()?.trackPriorityDistribution(
+                priorities = priorities,
+                heartsCount = heartsCount,
+                lowTrustCount = lowTrustCount,
+                messageCount = messages.size
+            )
+        }
+
+        // Sort by combinedPriority if enabled, then take top N
+        return if (usePriorityOrdering && messages.isNotEmpty()) {
+            Timber.d("Sorting ${messages.size} messages by combinedPriority, returning top $limit")
+            messages.sortedByDescending { it.combinedPriority() }.take(limit)
+        } else {
+            messages.take(limit)
+        }
     }
 
     /**
      * Update a message's heart (Casific's "endorsement") status.
-     * 
+     *
      * This is idempotent: only changes the count (+1/-1) when the liked state
      * actually changes. Repeated taps do not inflate the count.
-     * 
-     * This matches Casific's MessageStore.likeMessage() behavior.
-     * 
+     *
+     * Rate limited: Max 5 hearts per hour to prevent gaming.
+     *
      * @param messageId The message to heart/unheart
      * @param liked True to heart, false to unheart
-     * @return True if state changed, false if already in target state or error
+     * @return True if state changed, false if rate limited, already in target state, or error
      */
     fun likeMessage(messageId: String, liked: Boolean): Boolean {
+        // Rate limit adding hearts (not removing)
+        if (liked && isHeartRateLimited()) {
+            Timber.w("Heart rate limited - max $HEARTS_RATE_LIMIT hearts per hour reached")
+            return false
+        }
+
         // Get current message state
         val message = getMessage(messageId) ?: return false
-        
+
         // Check if message is already in the target state (idempotent)
-        // Only update if the state is actually changing
         if (message.isLiked == liked) {
-            // Already in target state - no change needed (prevents inflation)
             Timber.d("Heart already in target state for ${messageId}: liked=$liked")
             return false
         }
-        
+
         // State is changing - update liked flag and adjust heart count
         val newHearts = if (liked) {
             message.likes + 1
         } else {
             maxOf(0, message.likes - 1)
         }
-        
+
         val values = ContentValues().apply {
             put(COL_LIKED, if (liked) 1 else 0)
             put(COL_LIKES, newHearts)
@@ -325,6 +406,10 @@ class MessageStore private constructor(context: Context) :
         )
 
         if (rows > 0) {
+            // Track heart action for rate limiting
+            if (liked) {
+                recordHeartAction()
+            }
             Timber.d("Heart toggled for ${messageId}: liked=$liked, hearts=$newHearts")
             refreshMessages()
             return true

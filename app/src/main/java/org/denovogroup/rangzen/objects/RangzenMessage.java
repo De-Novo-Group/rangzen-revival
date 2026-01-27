@@ -312,34 +312,90 @@ public class RangzenMessage {
     /**
      * Calculate the propagation priority of this message.
      * Higher priority messages are sent first when bandwidth is limited.
-     * 
+     *
      * NOTE: This is separate from the heart count (stored in `priority` field).
      * This method computes a normalized 0-1 score for message ordering based on:
      * - Trust score (higher = more priority)
      * - Recency (newer = more priority)
      * - Hearts (Casific's "endorsement") (more = more priority)
-     * 
+     *
      * @return Priority value between 0 and 1
+     * @deprecated Use {@link #combinedPriority()} instead for exchange ordering.
      */
+    @Deprecated
     public double calculatePriority() {
         // Weight factors
         final double TRUST_WEIGHT = 0.5;
         final double RECENCY_WEIGHT = 0.3;
         final double HEARTS_WEIGHT = 0.2;
-        
+
         // Trust component (already 0-1)
         double trustComponent = trustScore * TRUST_WEIGHT;
-        
+
         // Recency component - messages from last hour get full score
         long ageMillis = System.currentTimeMillis() - timestamp;
         long hourMillis = 60 * 60 * 1000;
         double recencyComponent = Math.max(0, 1.0 - (double) ageMillis / (24 * hourMillis)) * RECENCY_WEIGHT;
-        
+
         // Hearts (Casific's "endorsement") component - logarithmic scale
         // Uses priority field which holds the heart count
         double heartsComponent = Math.min(1.0, Math.log10(priority + 1) / 3) * HEARTS_WEIGHT;
-        
+
         return trustComponent + recencyComponent + heartsComponent;
+    }
+
+    /**
+     * Calculate combined priority for exchange ordering.
+     *
+     * This method determines which messages get sent first during peer exchanges.
+     * The formula balances three factors:
+     *
+     * Formula: trust_weight * trust + recency_weight * recency + hearts_weight * bounded_hearts
+     *
+     * Key safety properties:
+     * - Trust DOMINATES: Low trust (< 0.3) caps total priority regardless of hearts.
+     *   This prevents malicious actors from boosting low-trust messages via hearts.
+     * - Hearts bounded: Logarithmic curve saturates quickly (prevents gaming).
+     *   10 hearts ≈ max contribution; 1000 hearts ≈ same as 100 hearts.
+     * - Time decay: 8-hour half-life on recency boost keeps fresh content flowing.
+     * - Minimum floor: 0.01 ensures no message is ever truly zero priority.
+     *
+     * @return Priority value between 0.01 and 1.0
+     */
+    public double combinedPriority() {
+        // Configuration weights (can tune later based on field feedback)
+        final double TRUST_WEIGHT = 0.5;
+        final double RECENCY_WEIGHT = 0.25;
+        final double HEARTS_WEIGHT = 0.25;
+        final double DECAY_HALF_LIFE_MS = 8 * 60 * 60 * 1000; // 8 hours
+        final double MIN_PRIORITY = 0.01;
+        final double LOW_TRUST_THRESHOLD = 0.3;
+
+        // 1. Trust component (already 0-1, dominates if low)
+        double trustComponent = trustScore * TRUST_WEIGHT;
+
+        // 2. Recency component with exponential decay
+        // Fresh messages get full boost; after 8 hours, boost is halved; after 16 hours, quartered.
+        long ageMs = System.currentTimeMillis() - timestamp;
+        double decayFactor = Math.pow(0.5, (double) ageMs / DECAY_HALF_LIFE_MS);
+        double recencyComponent = decayFactor * RECENCY_WEIGHT;
+
+        // 3. Hearts component - bounded via log (saturates at ~10 hearts)
+        // log10(1) = 0, log10(10) = 1, log10(100) = 2
+        // Dividing by 2.0 means: 0 hearts → 0, 10 hearts → 0.5, 100 hearts → 1.0 (capped)
+        double boundedHearts = Math.min(1.0, Math.log10(priority + 1) / 2.0);
+        double heartsComponent = boundedHearts * HEARTS_WEIGHT;
+
+        // 4. Combine all components
+        double raw = trustComponent + recencyComponent + heartsComponent;
+
+        // 5. Trust gate: if trust < 0.3, cap total priority at 0.3
+        // This prevents low-trust messages from rising via hearts manipulation.
+        if (trustScore < LOW_TRUST_THRESHOLD) {
+            raw = Math.min(raw, LOW_TRUST_THRESHOLD);
+        }
+
+        return Math.max(MIN_PRIORITY, raw);
     }
 
     // Casific trust model constants (MurmurMessage.java app design).
