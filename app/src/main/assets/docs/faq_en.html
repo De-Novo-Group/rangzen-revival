@@ -311,6 +311,27 @@
         </div>
         
         <div class="section">
+            <div class="section-title">Message Lifetime</div>
+
+            <div class="faq-item">
+                <div class="faq-question">How long do messages live?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Messages have two independent expiration clocks:</p>
+                        <p><strong>Propagation expiry</strong> — After <strong>3 days</strong>, a message stops being forwarded to new peers during exchanges. It will no longer spread through the mesh network. This limits how long old content circulates.</p>
+                        <p><strong>Local expiry</strong> — Messages are eventually removed from your device based on how many hearts they have:</p>
+                        <ul>
+                            <li><strong>0 hearts</strong> — removed after <strong>3 days</strong></li>
+                            <li><strong>1 heart</strong> — removed after <strong>1 week</strong></li>
+                            <li><strong>2+ hearts</strong> — removed after <strong>2 weeks</strong></li>
+                        </ul>
+                        <p>This means a message can still be visible on your phone after it stops spreading — it just won't reach new people anymore. Hearting a message keeps it on your device longer.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
             <div class="section-title">Features</div>
             
             <div class="faq-item">

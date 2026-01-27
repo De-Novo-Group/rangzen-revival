@@ -1260,6 +1260,8 @@ class RangzenService : Service() {
     }
 
     private fun cleanupMessageStore() {
+        // Heart-based expiration: 0 hearts=3d, 1 heart=7d, 2+ hearts=14d.
+        messageStore.cleanupByHearts()
         // Run legacy auto-delete logic based on config.
         messageStore.deleteOutdatedOrIrrelevant(
             autodeleteEnabled = AppConfig.autodeleteEnabled(this),
