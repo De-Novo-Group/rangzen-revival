@@ -368,7 +368,7 @@ class LanTransport {
         friendStore: FriendStore
     ): ExchangeResult = withContext(Dispatchers.IO) {
         val peerIdHash = peer.deviceId.take(16)
-        val exchangeCtx = ExchangeContext.create("lan", peerIdHash, context)
+        val exchangeCtx = ExchangeContext.create(TelemetryEvent.TRANSPORT_WLAN, peerIdHash, context)
         var socket: Socket? = null
 
         try {
@@ -749,7 +749,7 @@ class LanTransport {
             }
             TelemetryClient.getInstance()?.track(
                 eventType = "lan_transport_$eventType",
-                transport = "lan",
+                transport = TelemetryEvent.TRANSPORT_WLAN,
                 payload = payload
             )
         } catch (e: Exception) {

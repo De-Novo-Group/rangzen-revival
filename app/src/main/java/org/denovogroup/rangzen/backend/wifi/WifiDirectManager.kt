@@ -39,6 +39,7 @@ import org.denovogroup.rangzen.backend.AppConfig
 import org.denovogroup.rangzen.backend.DeviceIdentity
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import timber.log.Timber
 import java.net.InetAddress
 import kotlin.coroutines.resume
@@ -449,7 +450,7 @@ class WifiDirectManager(private val context: Context) {
             }
             TelemetryClient.getInstance()?.track(
                 eventType = "wifi_direct_$eventType",
-                transport = "wifi_direct",
+                transport = TelemetryEvent.TRANSPORT_WIFI_DIRECT,
                 payload = payload
             )
         } catch (e: Exception) {

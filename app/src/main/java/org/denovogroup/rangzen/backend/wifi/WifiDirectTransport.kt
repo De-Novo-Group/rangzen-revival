@@ -161,7 +161,7 @@ class WifiDirectTransport {
     ): ExchangeResult? = withContext(Dispatchers.IO) {
         var socket: Socket? = null
         val peerIdHash = groupOwnerAddress.hostAddress?.take(16) ?: "unknown"
-        val exchangeCtx = context?.let { ExchangeContext.create("wifi_direct", peerIdHash, it) }
+        val exchangeCtx = context?.let { ExchangeContext.create(TelemetryEvent.TRANSPORT_WIFI_DIRECT, peerIdHash, it) }
 
         try {
             Timber.i("$TAG: Connecting to ${groupOwnerAddress.hostAddress}:$TRANSPORT_PORT")
@@ -379,7 +379,7 @@ class WifiDirectTransport {
             params.forEach { (key, value) -> payload[key] = value }
             TelemetryClient.getInstance()?.track(
                 eventType = "wifi_direct_transport_$event",
-                transport = "wifi_direct",
+                transport = TelemetryEvent.TRANSPORT_WIFI_DIRECT,
                 payload = payload
             )
         } catch (e: Exception) {

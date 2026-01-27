@@ -6,6 +6,8 @@
  */
 package org.denovogroup.rangzen.backend.discovery
 
+import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
+
 /**
  * Enum representing the different transport mechanisms for peer discovery and exchange.
  */
@@ -43,9 +45,9 @@ enum class TransportType {
      * String identifier for telemetry and logging.
      */
     fun identifier(): String = when (this) {
-        BLE -> "ble"
-        WIFI_DIRECT -> "wifi_direct"
-        WIFI_AWARE -> "wifi_aware"
-        LAN -> "lan"
+        BLE -> TelemetryEvent.TRANSPORT_BLE
+        WIFI_DIRECT -> TelemetryEvent.TRANSPORT_WIFI_DIRECT
+        WIFI_AWARE -> TelemetryEvent.TRANSPORT_WIFI_AWARE
+        LAN -> TelemetryEvent.TRANSPORT_WLAN
     }
 }
