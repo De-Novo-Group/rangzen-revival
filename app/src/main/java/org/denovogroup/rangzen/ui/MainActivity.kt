@@ -7,6 +7,7 @@
 package org.denovogroup.rangzen.ui
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -28,10 +29,16 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.MessageStore
 import org.denovogroup.rangzen.backend.RangzenService
+import org.denovogroup.rangzen.backend.update.UpdateClient
+import org.denovogroup.rangzen.backend.update.UpdateState
 import org.denovogroup.rangzen.databinding.ActivityMainBinding
 import timber.log.Timber
 
@@ -166,6 +173,78 @@ class MainActivity : AppCompatActivity() {
             unbindService(serviceConnection)
             serviceBound = false
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Check for OTA updates when app comes to foreground (if QA mode enabled)
+        checkForUpdate()
+    }
+
+    /** Track if we've already shown the update dialog in this session */
+    private var updateDialogShown = false
+
+    /**
+     * Check for OTA updates and show dialog if available.
+     * Only runs if QA mode is enabled.
+     */
+    private fun checkForUpdate() {
+        if (updateDialogShown) return
+
+        val prefs = getSharedPreferences("rangzen_prefs", MODE_PRIVATE)
+        if (!prefs.getBoolean("qa_mode", false)) return
+
+        val updateClient = UpdateClient.getInstance() ?: return
+
+        // First check for already downloaded update
+        val pending = updateClient.checkPendingInstall()
+        if (pending != null) {
+            val (release, apkFile) = pending
+            updateDialogShown = true
+            showUpdateDialog(release.versionName, apkFile, release)
+            return
+        }
+
+        // Check for new updates in background
+        CoroutineScope(Dispatchers.IO).launch {
+            val update = updateClient.checkForUpdate()
+            if (update != null) {
+                // Wait for download to complete (poll with timeout)
+                val startTime = System.currentTimeMillis()
+                val timeoutMs = 60_000L
+                while (System.currentTimeMillis() - startTime < timeoutMs) {
+                    val state = updateClient.state.value
+                    when (state) {
+                        is UpdateState.ReadyToInstall -> {
+                            runOnUiThread {
+                                if (!updateDialogShown && !isFinishing) {
+                                    updateDialogShown = true
+                                    showUpdateDialog(state.release.versionName, state.apkFile, state.release)
+                                }
+                            }
+                            return@launch
+                        }
+                        is UpdateState.Error, is UpdateState.Idle -> return@launch
+                        else -> delay(500)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showUpdateDialog(
+        versionName: String,
+        apkFile: java.io.File,
+        release: org.denovogroup.rangzen.backend.update.ReleaseInfo
+    ) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.update_available)
+            .setMessage(getString(R.string.update_message, versionName))
+            .setPositiveButton(R.string.update_install) { _, _ ->
+                UpdateClient.getInstance()?.promptInstall(apkFile, release)
+            }
+            .setNegativeButton(R.string.update_later, null)
+            .show()
     }
 
     private fun setupBottomNavigation() {
