@@ -170,6 +170,12 @@ class MessageStore private constructor(context: Context) :
      * Returns true if added or merged, false on error.
      */
     fun addMessage(message: RangzenMessage): Boolean {
+        // Reject messages older than propagation TTL (3 days)
+        val propagationCutoff = System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(3)
+        if (message.timestamp > 0 && message.timestamp < propagationCutoff) {
+            Timber.d("Rejecting old message ${message.messageId}: age exceeds propagation TTL")
+            return false
+        }
         // Check for existing message to handle merge case
         val existing = getMessage(message.messageId)
         if (existing != null) {
@@ -293,16 +299,18 @@ class MessageStore private constructor(context: Context) :
      * @param mutualFriends Number of mutual friends with the peer
      * @param limit Maximum number of messages to return
      */
-    fun getMessagesForExchange(mutualFriends: Int, limit: Int = 100): List<RangzenMessage> {
+    fun getMessagesForExchange(mutualFriends: Int, limit: Int = 100, propagationTtlDays: Int = 3): List<RangzenMessage> {
         val messages = mutableListOf<RangzenMessage>()
         val now = System.currentTimeMillis()
+        val ageCutoff = now - java.util.concurrent.TimeUnit.DAYS.toMillis(propagationTtlDays.toLong())
 
-        // Filter by hop/minContacts and expiration
+        // Filter by hop/minContacts, expiration, and propagation age
         val selection =
             "(($COL_HOP_COUNT = 0 AND $COL_MIN_CONTACTS > 0 AND $COL_MIN_CONTACTS <= ?) " +
                 "OR ($COL_MIN_CONTACTS <= 0)) " +
-                "AND ($COL_EXPIRATION = 0 OR $COL_EXPIRATION > ?)"
-        val args = arrayOf(mutualFriends.toString(), now.toString())
+                "AND ($COL_EXPIRATION = 0 OR $COL_EXPIRATION > ?) " +
+                "AND $COL_TIMESTAMP > ?"
+        val args = arrayOf(mutualFriends.toString(), now.toString(), ageCutoff.toString())
 
         // When priority ordering is enabled, fetch more messages so we can sort and pick top N
         val fetchLimit = if (usePriorityOrdering) limit * 3 else limit
@@ -489,6 +497,33 @@ class MessageStore private constructor(context: Context) :
             return true
         }
         return false
+    }
+
+    /**
+     * Delete messages based on heart count and age.
+     * 0 hearts: 3 days, 1 heart: 7 days, 2+ hearts: 14 days.
+     */
+    fun cleanupByHearts(): Int {
+        val now = System.currentTimeMillis()
+        val threeDays = now - java.util.concurrent.TimeUnit.DAYS.toMillis(3)
+        val oneWeek = now - java.util.concurrent.TimeUnit.DAYS.toMillis(7)
+        val twoWeeks = now - java.util.concurrent.TimeUnit.DAYS.toMillis(14)
+
+        val whereClause =
+            "($COL_LIKES = 0 AND $COL_TIMESTAMP < ?) OR " +
+            "($COL_LIKES = 1 AND $COL_TIMESTAMP < ?) OR " +
+            "($COL_LIKES >= 2 AND $COL_TIMESTAMP < ?)"
+        val args = arrayOf(
+            threeDays.toString(),
+            oneWeek.toString(),
+            twoWeeks.toString()
+        )
+        val rows = writableDatabase.delete(TABLE_MESSAGES, whereClause, args)
+        if (rows > 0) {
+            refreshMessages()
+            Timber.d("Heart-based cleanup removed $rows messages")
+        }
+        return rows
     }
 
     /**
