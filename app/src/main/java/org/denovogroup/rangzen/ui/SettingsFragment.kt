@@ -134,16 +134,35 @@ class SettingsFragment : Fragment() {
             CoroutineScope(Dispatchers.IO).launch {
                 val update = updateClient.checkForUpdate()
                 // The UpdateClient will auto-download if configured
-                // After download completes, state will be ReadyToInstall
+                // Wait for state to become ReadyToInstall (with timeout)
                 if (update != null) {
-                    // Observe state for ReadyToInstall
-                    kotlinx.coroutines.delay(2000) // Give time for download to complete
-                    val state = updateClient.state.value
-                    if (state is UpdateState.ReadyToInstall) {
-                        activity?.runOnUiThread {
-                            showUpdateDialog(state.release.versionName, state.apkFile, state.release)
+                    // Poll state until ReadyToInstall or timeout (60 seconds for large APKs)
+                    val startTime = System.currentTimeMillis()
+                    val timeoutMs = 60_000L
+                    while (System.currentTimeMillis() - startTime < timeoutMs) {
+                        val state = updateClient.state.value
+                        when (state) {
+                            is UpdateState.ReadyToInstall -> {
+                                activity?.runOnUiThread {
+                                    showUpdateDialog(state.release.versionName, state.apkFile, state.release)
+                                }
+                                return@launch
+                            }
+                            is UpdateState.Error -> {
+                                Timber.w("Update check failed: ${state.message}")
+                                return@launch
+                            }
+                            is UpdateState.Idle -> {
+                                // Check completed but no update - shouldn't happen since we got update
+                                return@launch
+                            }
+                            else -> {
+                                // Still checking or downloading, wait a bit
+                                kotlinx.coroutines.delay(500)
+                            }
                         }
                     }
+                    Timber.w("Update download timed out after ${timeoutMs}ms")
                 }
             }
         }
