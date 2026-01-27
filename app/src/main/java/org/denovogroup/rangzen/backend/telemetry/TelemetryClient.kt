@@ -177,7 +177,8 @@ class TelemetryClient private constructor(
             displayName = displayName,
             peerIdHash = peerIdHash,
             transport = transport,
-            payload = enrichedPayload
+            payload = enrichedPayload,
+            deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}"
         )
 
         // Drop oldest events if queue is full
