@@ -33,7 +33,10 @@ data class TelemetryEvent(
     val payload: Map<String, Any>? = null,
 
     @SerializedName("app_version")
-    val appVersion: String = BuildConfig.VERSION_NAME
+    val appVersion: String = BuildConfig.VERSION_NAME,
+
+    @SerializedName("device_model")
+    val deviceModel: String? = null
 ) {
     companion object {
         // Event types for exchange lifecycle
