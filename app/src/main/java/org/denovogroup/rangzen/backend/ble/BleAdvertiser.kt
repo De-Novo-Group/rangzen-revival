@@ -455,9 +455,11 @@ class BleAdvertiser(private val context: Context) {
         }
 
         // Start BLE advertising with scan response containing publicId prefix.
+        Log.i(LOG_TAG, "Starting BLE advertising with publicIdPrefix=${localPublicId?.take(8) ?: "null"}")
         if (scanResponse != null) {
             bleAdvertiser?.startAdvertising(settings, data, scanResponse, advertiseCallback)
         } else {
+            Log.w(LOG_TAG, "No publicId set for advertising - scan response will be empty")
             bleAdvertiser?.startAdvertising(settings, data, advertiseCallback)
         }
     }

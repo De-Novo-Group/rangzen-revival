@@ -15,6 +15,7 @@ import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,7 @@ import java.security.MessageDigest
 class RangzenService : Service() {
 
     companion object {
+        private const val LOG_TAG = "RangzenService"
         private const val NOTIFICATION_ID = 1001
         const val ACTION_START = "org.denovogroup.rangzen.action.START"
         const val ACTION_STOP = "org.denovogroup.rangzen.action.STOP"
@@ -1130,11 +1132,12 @@ class RangzenService : Service() {
         // Skip BLE exchanges when pairing mode is active to avoid resource contention.
         // The pairing UI needs exclusive access to BLE for verification.
         if (BleAdvertiser.pairingModeActive) {
-            Timber.d("Skipping BLE exchange - pairing mode active")
+            Log.d(LOG_TAG, "Skipping BLE exchange - pairing mode active")
             return
         }
         // Respect cooldown timing unless we are forcing an outbound attempt.
         if (!forceOutbound && !readyToConnect()) {
+            Log.d(LOG_TAG, "Exchange cycle skipped - cooldown not elapsed")
             return
         }
         // Avoid initiating while we are serving an inbound exchange.
@@ -1142,10 +1145,11 @@ class RangzenService : Service() {
         // When respectInbound=false (hard force), we skip this check entirely.
         if (respectInbound && shouldDeferForInboundSession()) {
             // Exit early to avoid BLE contention.
-            Timber.d("Soft force exchange deferred - inbound session active")
+            Log.d(LOG_TAG, "Soft force exchange deferred - inbound session active")
             return
         }
         val currentPeers = bleScanner.peers.value
+        Log.i(LOG_TAG, "Exchange cycle: ${currentPeers.size} BLE peers, force=$forceOutbound")
         // Clean exchange history to keep only active peers.
         exchangeHistory.cleanHistory(currentPeers.map { it.address })
         if (currentPeers.isEmpty()) {
@@ -1153,9 +1157,9 @@ class RangzenService : Service() {
             updateNotification(getString(R.string.status_idle))
             return
         }
-        
+
         updateNotification(getString(R.string.status_peers_found, currentPeers.size))
-        
+
         _status.value = ServiceStatus.EXCHANGING
         // Determine peer selection strategy unless we are forcing outbound.
         val peersToCheck = if (forceOutbound) {
@@ -1172,17 +1176,21 @@ class RangzenService : Service() {
                 currentPeers
             }
         }
+        Log.i(LOG_TAG, "Checking ${peersToCheck.size} peers for exchange")
         // Run exchanges for selected peers.
         for (peer in peersToCheck) {
             // Only initiate if allowed by protocol rules unless forced.
             if (!forceOutbound && !shouldInitiateExchange(peer)) {
+                Log.i(LOG_TAG, "Skipping ${peer.address} (publicId=${peer.publicIdPrefix}) - not initiator")
                 continue
             }
             // Respect backoff rules before starting an exchange unless forced.
             if (!forceOutbound && !shouldAttemptExchange(peer)) {
+                Log.i(LOG_TAG, "Skipping ${peer.address} - backoff active")
                 continue
             }
             try {
+                Log.i(LOG_TAG, "Attempting exchange with ${peer.address} (publicId=${peer.publicIdPrefix})")
                 Timber.i("Attempting to exchange data with ${peer.address}")
                 val result = legacyExchangeClient.exchangeWithPeer(bleScanner, peer)
                 if (result != null) {
@@ -1341,8 +1349,11 @@ class RangzenService : Service() {
         val peerId: String
 
         if (!peer.publicIdPrefix.isNullOrBlank()) {
-            // Preferred: Use publicId on both sides for symmetric comparison
-            localId = DeviceIdentity.getDeviceId(this)
+            // Preferred: Use publicId prefix on both sides for symmetric comparison
+            // IMPORTANT: Compare only the first 8 chars (prefix) of both IDs
+            // Using full ID vs prefix causes asymmetric hashes - each device sees different result!
+            val fullLocalId = DeviceIdentity.getDeviceId(this)
+            localId = fullLocalId.take(8)  // Match prefix length for symmetric comparison
             peerId = peer.publicIdPrefix
         } else {
             // Fallback: Use Android ID vs BLE MAC (legacy asymmetric behavior)
