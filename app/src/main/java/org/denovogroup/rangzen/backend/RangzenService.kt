@@ -659,11 +659,36 @@ class RangzenService : Service() {
         val awarePeers = wifiAwareManager?.getDiscoveredPeers() ?: emptyList()
 
         if (awarePeers.isNotEmpty() && !lanTransport.isExchangeInProgress()) {
+            // Get our local ID for coordination (who initiates NDP)
+            val localId = wifiAwareManager?.getLocalPublicId()?.take(8)
+            // Check if we have responder capability (can accept incoming NDP)
+            val hasResponder = wifiAwareManager?.hasResponderCapability() ?: false
+
             for (awarePeer in awarePeers) {
                 // Deduplicate: skip if we already have a LAN path to this peer
                 val peerDeviceId = awarePeer.publicIdPrefix
                 if (peerDeviceId != null && lanDeviceIds.any { it.startsWith(peerDeviceId) }) {
                     Timber.d("PARALLEL: Skipping WiFi Aware peer ${peerDeviceId} - already reachable via LAN")
+                    continue
+                }
+
+                // Initiator coordination: To avoid both devices racing to connect,
+                // use publicId comparison to decide who initiates.
+                // - Higher ID initiates, lower ID waits to be connected
+                // - Exception: devices without responder MUST initiate (they can't receive)
+                val shouldInitiate = if (!hasResponder) {
+                    // No responder capability - must initiate regardless of ID
+                    true
+                } else if (localId != null && peerDeviceId != null) {
+                    // Compare IDs: higher ID initiates
+                    localId > peerDeviceId
+                } else {
+                    // Can't compare - default to initiating
+                    true
+                }
+
+                if (!shouldInitiate) {
+                    Timber.d("PARALLEL: WiFi Aware peer $peerDeviceId has higher ID, waiting for them to initiate")
                     continue
                 }
 

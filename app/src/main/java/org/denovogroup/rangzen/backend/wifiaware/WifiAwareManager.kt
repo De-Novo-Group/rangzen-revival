@@ -791,6 +791,19 @@ class WifiAwareManager(
         return discoveredPeers.values.toList()
     }
 
+    /**
+     * Get local public ID used for WiFi Aware discovery.
+     */
+    fun getLocalPublicId(): String? = localPublicId
+
+    /**
+     * Check if this device has responder capability (can accept incoming NDP).
+     * Devices with only 1 NDP interface don't run responder to avoid blocking initiator.
+     */
+    fun hasResponderCapability(): Boolean {
+        return maxNdiInterfaces >= MIN_INTERFACES_FOR_RESPONDER
+    }
+
     private fun trackTelemetry(event: String, extras: Map<String, String> = emptyMap()) {
         try {
             val payload = mutableMapOf(
