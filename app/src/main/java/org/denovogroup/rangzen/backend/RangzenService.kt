@@ -177,13 +177,16 @@ class RangzenService : Service() {
         // Keep peer count in sync when the list changes (including stale removals).
         // Also refresh the unified peer registry with fresh timestamps.
         bleScanner.onPeersUpdated = { peers ->
-            // Update the cached count to match the latest list.
-            _peerCount.value = peers.size
+            // Only re-report BLE peers that were scanned recently.
+            // Stale BLE MACs (from MAC rotation) should NOT get their timestamps refreshed.
+            val now = System.currentTimeMillis()
+            val freshPeers = peers.filter { now - it.lastSeen < DiscoveredPeerRegistry.DEFAULT_STALE_MS }
+            // Update the cached count to match fresh peers only.
+            _peerCount.value = freshPeers.size
             // Update the notification to avoid stale peer counts.
             updateNotification(getString(R.string.status_peers_found, _peerCount.value))
-            // Refresh the unified peer registry with all current BLE peers.
-            // This keeps lastSeen timestamps current so peers don't become stale.
-            peers.forEach { peer ->
+            // Refresh the unified peer registry with fresh BLE peers only.
+            freshPeers.forEach { peer ->
                 peerRegistry.reportBlePeer(
                     bleAddress = peer.address,
                     device = peer.device,

@@ -536,8 +536,17 @@ class DiscoveredPeerRegistry {
             }
             Timber.d("$TAG: Pruned stale peer: $peerId")
         }
-        
-        if (toRemove.isNotEmpty()) {
+
+        // Prune orphaned address map entries pointing to removed peers
+        val orphanedKeys = addressToPeerId.entries
+            .filter { (_, targetId) -> !peers.containsKey(targetId) }
+            .map { it.key }
+        orphanedKeys.forEach { addressToPeerId.remove(it) }
+        if (orphanedKeys.isNotEmpty()) {
+            Timber.d("$TAG: Pruned ${orphanedKeys.size} orphaned address map entries")
+        }
+
+        if (toRemove.isNotEmpty() || orphanedKeys.isNotEmpty()) {
             updatePeerList()
         }
     }
