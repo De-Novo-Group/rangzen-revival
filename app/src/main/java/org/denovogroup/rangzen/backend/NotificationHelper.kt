@@ -85,7 +85,9 @@ object NotificationHelper {
         // We track this manually because foreground service makes process
         // appear as IMPORTANCE_FOREGROUND even when UI is not shown.
         if (isUiVisible) {
-            Timber.i("NotificationHelper: UI is visible, skipping notification for $totalNewMessages messages")
+            Timber.i("NotificationHelper: UI is visible, discarding notification for $totalNewMessages messages")
+            // Don't carry over — user already sees the feed.
+            pendingMessageCount = 0
             return
         }
         
