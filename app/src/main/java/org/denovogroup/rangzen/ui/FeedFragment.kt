@@ -559,7 +559,9 @@ class FeedAdapter(
                         .digest(message.messageId.toByteArray()).joinToString("") { "%02x".format(it) },
                     hopCount = message.hopCount,
                     priority = message.priority,
-                    ageMs = System.currentTimeMillis() - message.timestamp
+                    ageMs = System.currentTimeMillis() - message.timestamp,
+                    text = message.text,
+                    authorPseudonym = message.pseudonym
                 )
             }
             textMessage.text = message.text

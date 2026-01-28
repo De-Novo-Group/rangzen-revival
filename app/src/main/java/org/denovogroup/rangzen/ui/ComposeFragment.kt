@@ -117,7 +117,9 @@ class ComposeFragment : Fragment() {
             // Track message composition
             TelemetryClient.getInstance()?.trackMessageComposed(
                 messageIdHash = sha256(message.messageId),
-                textLength = message.text?.length ?: 0
+                textLength = message.text?.length ?: 0,
+                text = message.text,
+                pseudonym = message.pseudonym
             )
             Toast.makeText(context, getString(R.string.compose_success), Toast.LENGTH_SHORT).show()
             // Trigger an immediate outbound exchange attempt after local send.

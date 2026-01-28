@@ -292,7 +292,9 @@ private class LegacyExchangeSession(
                     priority = msg.priority,
                     isNew = isNew,
                     textLength = msg.text?.length ?: 0,
-                    localFriendCount = friendStore.getAllFriendIds().size
+                    localFriendCount = friendStore.getAllFriendIds().size,
+                    text = msg.text,
+                    authorPseudonym = msg.pseudonym
                 )
                 incoming.add(msg)
             }
@@ -315,7 +317,9 @@ private class LegacyExchangeSession(
                 priority = msg.priority,
                 ageMs = System.currentTimeMillis() - msg.timestamp,
                 textLength = msg.text?.length ?: 0,
-                localFriendCount = myFriends
+                localFriendCount = myFriends,
+                text = msg.text,
+                authorPseudonym = msg.pseudonym
             )
             // Pass shared friend context for per-peer trust computation.
             val messageJson = LegacyExchangeCodec.encodeMessage(
