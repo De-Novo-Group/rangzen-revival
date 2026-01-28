@@ -130,17 +130,27 @@ class DiscoveredPeerRegistry {
                 }
             }
         } else {
-            // Create new temporary peer
-            val tempId = "${TEMP_ID_PREFIX}$transportKey"
+            // Create new peer - use publicIdPrefix as ID if available, else temporary ID
+            val peerId = if (publicIdPrefix != null) {
+                // Use the publicIdPrefix as the peer ID for symmetric initiator selection
+                publicIdPrefix
+            } else {
+                // Fall back to temporary transport-based ID
+                "${TEMP_ID_PREFIX}$transportKey"
+            }
             val peer = UnifiedPeer(
-                publicId = tempId,
+                publicId = peerId,
                 transports = mutableMapOf(TransportType.BLE to transportInfo)
             )
-            peers[tempId] = peer
-            addressToPeerId[transportKey] = tempId
+            peers[peerId] = peer
+            addressToPeerId[transportKey] = peerId
+            // Also map by publicIdPrefix for future lookups
+            if (publicIdPrefix != null) {
+                addressToPeerId["id:$publicIdPrefix"] = peerId
+            }
 
-            Timber.i("$TAG: New BLE peer discovered: $bleAddress" +
-                if (publicIdPrefix != null) " (ad prefix: $publicIdPrefix)" else "")
+            Timber.i("$TAG: New BLE peer discovered: $bleAddress -> $peerId" +
+                if (publicIdPrefix != null) " (via ad prefix)" else "")
             onPeerDiscovered?.invoke(peer)
         }
 

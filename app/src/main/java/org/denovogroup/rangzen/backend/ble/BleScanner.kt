@@ -833,6 +833,9 @@ class BleScanner(private val context: Context) {
             val publicIdPrefix = serviceData?.takeIf { it.size >= 4 }
                 ?.take(4)?.joinToString("") { "%02x".format(it) }
 
+            // Always log scan result details for debugging
+            Log.i(LOG_TAG, "Scan: device=${result.device.address} publicIdPrefix=${publicIdPrefix ?: "null"} serviceDataSize=${serviceData?.size ?: -1}")
+
             // Log when publicIdPrefix is missing - helps diagnose scan response issues
             if (publicIdPrefix == null && !discoveredPeers.containsKey(result.device.address)) {
                 // Log ALL service data to diagnose what's actually in the scan response
