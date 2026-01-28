@@ -33,6 +33,29 @@ To deploy a specific version:
 - Only for local development/debugging on your personal device
 - When you need to attach a debugger or see debug logs
 
+## Local Debug Testing (Development Only)
+
+When actively debugging/developing features locally, use the debug deployment script:
+
+```bash
+./scripts/deploy-debug-local.sh --build
+```
+
+This script:
+1. Builds debug APK (with --build flag, or if APK doesn't exist)
+2. Uninstalls existing app on ALL connected devices
+3. Installs debug APK with ALL permissions pre-granted
+4. Launches the app
+5. Shows peer count status after 5 seconds
+
+**CRITICAL**: This is for LOCAL TESTING ONLY. These devices will NOT receive OTA updates
+until you reinstall a release build. Use this when:
+- Iterating on bug fixes locally
+- Testing code changes before committing
+- Debugging with logcat (Timber logs visible in debug builds)
+
+**DO NOT** waste time manually granting permissions - the script handles everything.
+
 ## OTA Updates
 
 OTA updates are delivered via the telemetry server to devices with QA mode enabled.
@@ -51,3 +74,34 @@ Release workflow:
 
 - Public: De-Novo-Group/rangzen-revival
 - Private (OTA server): De-Novo-Group/murmur-telemetry-server
+
+## Current Debugging Focus: BLE Message Exchange
+
+**Problem**: BLE GATT exchanges are timing out before all messages transfer.
+Messages propagate very slowly via BLE (one every ~30 seconds) and often incomplete.
+
+**Key observations**:
+- This is a **protocol issue**, NOT a bandwidth problem (messages are <10 characters)
+- WiFi Aware exchanges work perfectly (sent=10, received=10)
+- BLE exchanges timeout with partial results (e.g., received=3 out of 10)
+- The issue is in **our code** (RangzenService.kt exchange logic), not hardware
+
+**Test setup**:
+- Samsung (BT + WiFi Direct + LAN) - gets messages from network
+- Pixel 5 (BT + WiFi Aware) - should receive from Samsung via BLE
+- Pixel 4a (WiFi Aware only) - receives from Pixel 5 via WiFi Aware
+- Motorola (v0.2.94 from GitHub) - additional BLE peer on network
+
+**Where to look**:
+- `RangzenService.kt`: BLE exchange loop, GATT client/server logic
+- `BleExchangeController.kt`: BLE GATT connection handling
+- Exchange timeout configuration in `config.json` (exchangeSessionTimeoutMs: 30000)
+- Backoff timing: base 10s, max 320s
+
+**Logs to watch**:
+```
+adb logcat -s RangzenService:* BleExchangeController:* BleGattClient:* BleGattServer:*
+```
+
+**Fixed bugs** (already resolved):
+- Asymmetric initiator selection: publicId (64 chars) vs prefix (8 chars) comparison
