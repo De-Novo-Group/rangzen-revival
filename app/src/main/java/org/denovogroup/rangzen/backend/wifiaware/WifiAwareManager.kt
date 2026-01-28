@@ -120,7 +120,11 @@ class WifiAwareManager(
 
             // Register for availability changes
             val filter = IntentFilter(android.net.wifi.aware.WifiAwareManager.ACTION_WIFI_AWARE_STATE_CHANGED)
-            context.registerReceiver(availabilityReceiver, filter)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(availabilityReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(availabilityReceiver, filter)
+            }
 
             Timber.i("$TAG: Initialized, available=${_isAvailable.value}")
         } else {

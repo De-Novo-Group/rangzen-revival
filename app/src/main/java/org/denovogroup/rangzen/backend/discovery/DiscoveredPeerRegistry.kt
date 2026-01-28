@@ -239,7 +239,19 @@ class DiscoveredPeerRegistry {
         publicId: String? = null
     ) {
         val transportKey = "lan:$ipAddress:$port"
-        val existingPeerId = addressToPeerId[transportKey]
+        var existingPeerId = addressToPeerId[transportKey]
+
+        // Cross-transport correlation: check if this public ID is already known
+        if (existingPeerId == null && publicId != null) {
+            if (peers.containsKey(publicId)) {
+                existingPeerId = publicId
+                Timber.d("$TAG: LAN peer $ipAddress correlates with known peer $publicId")
+            }
+            val idKey = "id:$publicId"
+            addressToPeerId[idKey]?.let { mappedPeerId ->
+                existingPeerId = mappedPeerId
+            }
+        }
 
         val transportInfo = PeerTransportInfo(
             transport = TransportType.LAN,
@@ -248,12 +260,30 @@ class DiscoveredPeerRegistry {
             lanPort = port
         )
 
-        if (existingPeerId != null) {
+        val foundPeerId = existingPeerId
+
+        if (foundPeerId != null) {
             // Update existing peer
-            peers[existingPeerId]?.let { peer ->
+            peers[foundPeerId]?.let { peer ->
                 val isNewTransport = !peer.hasTransport(TransportType.LAN)
                 peer.updateTransport(transportInfo)
+                addressToPeerId[transportKey] = foundPeerId
+
+                // Upgrade to verified ID if we now have one
+                if (publicId != null && !peer.handshakeCompleted) {
+                    peers.remove(peer.publicId)
+                    val updatedPeer = peer.copy(
+                        publicId = publicId,
+                        handshakeCompleted = true
+                    )
+                    peers[publicId] = updatedPeer
+                    addressToPeerId[transportKey] = publicId
+                    addressToPeerId["id:$publicId"] = publicId
+                    Timber.i("$TAG: Peer upgraded to verified ID via LAN: $publicId")
+                }
+
                 if (isNewTransport) {
+                    Timber.i("$TAG: Added LAN transport to existing peer: $foundPeerId")
                     onPeerTransportAdded?.invoke(peer, TransportType.LAN)
                 }
             }
@@ -267,6 +297,10 @@ class DiscoveredPeerRegistry {
             )
             peers[peerId] = peer
             addressToPeerId[transportKey] = peerId
+
+            if (publicId != null) {
+                addressToPeerId["id:$publicId"] = peerId
+            }
 
             Timber.i("$TAG: New LAN peer discovered: $ipAddress:$port")
             onPeerDiscovered?.invoke(peer)
