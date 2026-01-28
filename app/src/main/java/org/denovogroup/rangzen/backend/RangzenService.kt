@@ -163,12 +163,13 @@ class RangzenService : Service() {
 
         // Set up callback for when peers are discovered via BLE
         bleScanner.onPeerDiscovered = { peer ->
-            // Report to unified peer registry
+            // Report to unified peer registry with publicId prefix from BLE ad
             peerRegistry.reportBlePeer(
                 bleAddress = peer.address,
                 device = peer.device,
                 rssi = peer.rssi,
-                name = peer.name
+                name = peer.name,
+                publicIdPrefix = peer.publicIdPrefix
             )
             _peerCount.value = bleScanner.peers.value.size
             Timber.i("BLE peer discovered: ${peer.address} (RSSI: ${peer.rssi}) - Total BLE peers: ${_peerCount.value}")
@@ -191,7 +192,8 @@ class RangzenService : Service() {
                     bleAddress = peer.address,
                     device = peer.device,
                     rssi = peer.rssi,
-                    name = peer.name
+                    name = peer.name,
+                    publicIdPrefix = peer.publicIdPrefix
                 )
             }
         }
@@ -353,6 +355,8 @@ class RangzenService : Service() {
     }
 
     private fun startBleOperations() {
+        // Set publicId on advertiser so BLE ads include identity for cross-transport correlation
+        bleAdvertiser.localPublicId = DeviceIdentity.getDeviceId(this)
         bleAdvertiser.startAdvertising()
         bleScanner.startScanning()
 

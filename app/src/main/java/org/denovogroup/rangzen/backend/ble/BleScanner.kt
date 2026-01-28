@@ -825,12 +825,17 @@ class BleScanner(private val context: Context) {
     private fun handleScanResult(result: ScanResult) {
         if (result.scanRecord?.serviceUuids?.contains(ParcelUuid(RANGZEN_SERVICE_UUID)) == true) {
             Timber.d("Scan result from device: ${result.device.address}")
+            // Extract public ID prefix from service data (4 bytes -> 8 hex chars)
+            val serviceData = result.scanRecord?.getServiceData(ParcelUuid(RANGZEN_SERVICE_UUID))
+            val publicIdPrefix = serviceData?.takeIf { it.size >= 4 }
+                ?.take(4)?.joinToString("") { "%02x".format(it) }
             val peer = DiscoveredPeer(
                 address = result.device.address,
                 name = result.device.name,
                 rssi = result.rssi,
                 lastSeen = System.currentTimeMillis(),
-                device = result.device
+                device = result.device,
+                publicIdPrefix = publicIdPrefix
             )
             if (!discoveredPeers.containsKey(peer.address)) {
                 onPeerDiscovered?.invoke(peer)
@@ -870,5 +875,7 @@ data class DiscoveredPeer(
     val name: String?,
     val rssi: Int,
     val lastSeen: Long,
-    val device: BluetoothDevice
+    val device: BluetoothDevice,
+    /** Public ID prefix from BLE service data (8 hex chars, or null if not advertised) */
+    val publicIdPrefix: String? = null
 )
