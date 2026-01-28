@@ -198,7 +198,9 @@ class BleScanner(private val context: Context) {
 
         bleScanner = bluetoothAdapter.bluetoothLeScanner
         val filters = listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(RANGZEN_SERVICE_UUID)).build())
-        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build()
+        // Use LOW_LATENCY mode to ensure we receive scan responses containing publicIdPrefix.
+        // BALANCED mode may skip scan requests, preventing scan response reception.
+        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         
         // Start scanning with filter and settings.
         bleScanner?.startScan(filters, settings, scanCallback)
@@ -826,9 +828,16 @@ class BleScanner(private val context: Context) {
         if (result.scanRecord?.serviceUuids?.contains(ParcelUuid(RANGZEN_SERVICE_UUID)) == true) {
             Timber.d("Scan result from device: ${result.device.address}")
             // Extract public ID prefix from service data (4 bytes -> 8 hex chars)
+            // The publicIdPrefix is included in the scan response by the advertiser.
             val serviceData = result.scanRecord?.getServiceData(ParcelUuid(RANGZEN_SERVICE_UUID))
             val publicIdPrefix = serviceData?.takeIf { it.size >= 4 }
                 ?.take(4)?.joinToString("") { "%02x".format(it) }
+
+            // Log when publicIdPrefix is missing - helps diagnose scan response issues
+            if (publicIdPrefix == null && !discoveredPeers.containsKey(result.device.address)) {
+                Timber.w("BLE peer ${result.device.address} has no publicIdPrefix in scan response (serviceData=${serviceData?.size ?: "null"} bytes)")
+            }
+
             val peer = DiscoveredPeer(
                 address = result.device.address,
                 name = result.device.name,
