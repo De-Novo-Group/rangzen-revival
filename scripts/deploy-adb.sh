@@ -72,6 +72,16 @@ for DEVICE in $DEVICES; do
     echo "  Installing release APK..."
     adb -s "$DEVICE" install "$APK_PATH"
 
+    # Grant runtime permissions
+    echo "  Granting permissions..."
+    adb -s "$DEVICE" shell pm grant "$PACKAGE" android.permission.ACCESS_FINE_LOCATION 2>/dev/null || true
+    adb -s "$DEVICE" shell pm grant "$PACKAGE" android.permission.ACCESS_COARSE_LOCATION 2>/dev/null || true
+    adb -s "$DEVICE" shell pm grant "$PACKAGE" android.permission.BLUETOOTH_SCAN 2>/dev/null || true
+    adb -s "$DEVICE" shell pm grant "$PACKAGE" android.permission.BLUETOOTH_ADVERTISE 2>/dev/null || true
+    adb -s "$DEVICE" shell pm grant "$PACKAGE" android.permission.BLUETOOTH_CONNECT 2>/dev/null || true
+    adb -s "$DEVICE" shell pm grant "$PACKAGE" android.permission.NEARBY_WIFI_DEVICES 2>/dev/null || true
+    adb -s "$DEVICE" shell pm grant "$PACKAGE" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+
     # Verify version
     INSTALLED=$(adb -s "$DEVICE" shell dumpsys package "$PACKAGE" | grep versionName | head -1 | tr -d ' ')
     echo "  Installed: $INSTALLED"
