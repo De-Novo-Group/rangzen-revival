@@ -238,6 +238,221 @@ class LegacyExchangeClient(
         }
     }
 
+    /**
+     * V2 exchange using Nordic BLE Library for reliable single-connection exchange.
+     *
+     * This maintains a SINGLE GATT connection for the entire exchange instead of
+     * creating a new connection per frame. This is the proper Android BLE pattern.
+     *
+     * @param bleExchange The BLE exchange implementation (uses Nordic library)
+     * @param device The BLE device to exchange with
+     * @return Exchange result, or null if failed
+     */
+    suspend fun exchangeWithPeerV2(
+        bleExchange: org.denovogroup.rangzen.backend.ble.BleExchange,
+        device: android.bluetooth.BluetoothDevice,
+        peerAddress: String,
+        rssi: Int = 0
+    ): LegacyExchangeResult? {
+        val peerIdHash = sha256(peerAddress)
+        val exchangeCtx = ExchangeContext.create(transport, peerIdHash, context)
+        exchangeCtx.rssi = rssi
+
+        TelemetryClient.getInstance()?.trackExchangeStart(peerIdHash, transport)
+
+        return try {
+            withTimeout(AppConfig.exchangeSessionTimeoutMs(context)) {
+                // Use single connection for entire exchange
+                val result = bleExchange.exchange(device) { sendRequest ->
+                    doExchangeProtocol(sendRequest, exchangeCtx, peerIdHash)
+                }
+
+                if (result != null) {
+                    exchangeCtx.advanceStage(ExchangeStage.COMPLETE)
+                    TelemetryClient.getInstance()?.trackExchangeSuccess(exchangeCtx)
+                }
+
+                result
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "V2 exchange failed with $peerAddress")
+            TelemetryClient.getInstance()?.trackExchangeFailure(exchangeCtx, e)
+            null
+        }
+    }
+
+    /**
+     * Execute the exchange protocol over a single connection.
+     *
+     * @param sendRequest Function to send request and receive response (provided by BleExchange)
+     * @param exchangeCtx Telemetry context
+     * @param peerIdHash Hash of peer address for telemetry
+     * @return Exchange result
+     */
+    private suspend fun doExchangeProtocol(
+        sendRequest: suspend (ByteArray) -> ByteArray?,
+        exchangeCtx: ExchangeContext,
+        peerIdHash: String
+    ): LegacyExchangeResult? {
+        exchangeCtx.advanceStage(ExchangeStage.CONNECTED)
+
+        val useTrust = SecurityManager.useTrust(context)
+        val localFriends = friendStore.getAllFriendIds()
+        friendStore.getMyPublicId()?.let { myId -> localFriends.add(myId) }
+        val clientPSI = Crypto.PrivateSetIntersection(localFriends)
+        val serverPSI = Crypto.PrivateSetIntersection(localFriends)
+        exchangeCtx.localFriendCount = localFriends.size
+
+        // Helper to send JSON and receive JSON response
+        suspend fun sendJsonFrame(json: JSONObject): JSONObject? {
+            val payload = LegacyExchangeCodec.encodeLengthValue(json)
+            val response = sendRequest(payload) ?: return null
+            return LegacyExchangeCodec.decodeLengthValue(response)
+        }
+
+        // --- Stage 1: PSI Init ---
+        exchangeCtx.advanceStage(ExchangeStage.PSI_INIT)
+        val blindedFriends = if (useTrust) clientPSI.encodeBlindedItems() else emptyList()
+        val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
+        val myPublicId = org.denovogroup.rangzen.backend.DeviceIdentity.getDeviceId(context)
+        val friendsRequest = LegacyExchangeCodec.encodeClientMessage(
+            emptyList(), blindedFriends,
+            deviceIdHash = myDeviceIdHash,
+            exchangeId = exchangeCtx.exchangeId,
+            publicId = myPublicId
+        )
+        val friendsResponse = sendJsonFrame(friendsRequest) ?: run {
+            TelemetryClient.getInstance()?.trackExchangeFailure(
+                exchangeCtx, ErrorCategory.CONNECTION_RESET, "No response to PSI init"
+            )
+            return null
+        }
+        val serverClientMsg = LegacyExchangeCodec.decodeClientMessage(friendsResponse)
+        exchangeCtx.peerDeviceIdHash = serverClientMsg.deviceIdHash
+        val peerPublicId = serverClientMsg.publicId
+        serverClientMsg.exchangeId?.let { exchangeCtx.sharedExchangeId = it }
+        val remoteFriends = if (useTrust) serverClientMsg.blindedFriends else emptyList()
+
+        // --- Stage 2: PSI Exchange ---
+        exchangeCtx.advanceStage(ExchangeStage.PSI_EXCHANGE)
+        val serverReply = serverPSI.replyToBlindedItems(ArrayList(remoteFriends))
+        val serverRequest = LegacyExchangeCodec.encodeServerMessage(
+            serverReply.doubleBlindedItems,
+            serverReply.hashedBlindedItems
+        )
+        val serverResponse = sendJsonFrame(serverRequest) ?: run {
+            TelemetryClient.getInstance()?.trackExchangeFailure(
+                exchangeCtx, ErrorCategory.CONNECTION_RESET, "No response to PSI exchange"
+            )
+            return null
+        }
+        val remoteServerMessage = LegacyExchangeCodec.decodeServerMessage(serverResponse)
+
+        exchangeCtx.advanceStage(ExchangeStage.PSI_COMPLETE)
+
+        val commonFriends = if (useTrust) {
+            clientPSI.getCardinality(
+                Crypto.PrivateSetIntersection.ServerReplyTuple(
+                    ArrayList(remoteServerMessage.doubleBlindedFriends),
+                    ArrayList(remoteServerMessage.hashedBlindedFriends)
+                )
+            )
+        } else {
+            0
+        }
+
+        exchangeCtx.advanceStage(ExchangeStage.TRUST_COMPUTED)
+        exchangeCtx.mutualFriends = commonFriends
+        exchangeCtx.trustScore = if (localFriends.isNotEmpty()) commonFriends.toDouble() / localFriends.size else 0.0
+
+        val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)
+        if (useTrust && commonFriends < minSharedContacts) {
+            Timber.w("Exchange rejected: sharedContacts=$commonFriends minRequired=$minSharedContacts")
+            TelemetryClient.getInstance()?.trackExchangeFailure(
+                exchangeCtx,
+                ErrorCategory.PSI_TRUST_REJECTED,
+                "Trust rejected: $commonFriends shared < $minSharedContacts required"
+            )
+            return null
+        }
+
+        // --- Stage 3: Message Count ---
+        exchangeCtx.advanceStage(ExchangeStage.SENDING_MESSAGES)
+        val maxMessages = SecurityManager.maxMessagesPerExchange(context)
+        val outboundMessages = messageStore.getMessagesForExchange(commonFriends, maxMessages)
+        val countRequest = LegacyExchangeCodec.encodeExchangeInfo(outboundMessages.size)
+        val countResponse = sendJsonFrame(countRequest) ?: run {
+            TelemetryClient.getInstance()?.trackExchangeFailure(
+                exchangeCtx, ErrorCategory.CONNECTION_RESET, "No response to message count"
+            )
+            return null
+        }
+        val inboundCount = minOf(LegacyExchangeCodec.decodeExchangeInfo(countResponse), maxMessages)
+
+        // --- Stage 4: Message Rounds ---
+        val rounds = maxOf(outboundMessages.size, inboundCount)
+        val receivedMessages = ArrayList<RangzenMessage>()
+        val myFriends = localFriends.size
+
+        for (i in 0 until rounds) {
+            val outbound = if (i < outboundMessages.size) {
+                val msg = outboundMessages[i]
+                TelemetryClient.getInstance()?.trackMessageSent(
+                    peerIdHash = peerIdHash,
+                    transport = transport,
+                    messageIdHash = sha256(msg.messageId),
+                    hopCount = msg.hopCount,
+                    trustScore = msg.trustScore,
+                    priority = msg.priority,
+                    ageMs = System.currentTimeMillis() - msg.timestamp,
+                    textLength = msg.text?.length ?: 0,
+                    localFriendCount = myFriends,
+                    text = msg.text,
+                    authorPseudonym = msg.pseudonym
+                )
+                exchangeCtx.messagesSent++
+                listOf(LegacyExchangeCodec.encodeMessage(context, msg, commonFriends, myFriends))
+            } else {
+                emptyList()
+            }
+
+            exchangeCtx.advanceStage(ExchangeStage.RECEIVING_MESSAGES)
+
+            val messageRequest = LegacyExchangeCodec.encodeClientMessage(outbound, emptyList())
+            val messageResponse = sendJsonFrame(messageRequest) ?: continue
+            val remoteClient = LegacyExchangeCodec.decodeClientMessage(messageResponse)
+            for (json in remoteClient.messages) {
+                val msg = LegacyExchangeCodec.decodeMessage(json)
+                val isNew = !messageStore.hasMessage(msg.messageId)
+                TelemetryClient.getInstance()?.trackMessageReceived(
+                    peerIdHash = peerIdHash,
+                    transport = transport,
+                    messageIdHash = sha256(msg.messageId),
+                    hopCount = msg.hopCount,
+                    trustScore = msg.trustScore,
+                    priority = msg.priority,
+                    isNew = isNew,
+                    textLength = msg.text?.length ?: 0,
+                    localFriendCount = myFriends,
+                    text = msg.text,
+                    authorPseudonym = msg.pseudonym
+                )
+                exchangeCtx.messagesReceived++
+                receivedMessages.add(msg)
+            }
+        }
+
+        mergeIncomingMessages(receivedMessages, commonFriends)
+
+        return LegacyExchangeResult(
+            commonFriends = commonFriends,
+            messagesSent = outboundMessages.size,
+            messagesReceived = receivedMessages.size,
+            peerDeviceIdHash = exchangeCtx.peerDeviceIdHash,
+            peerPublicId = peerPublicId
+        )
+    }
+
     private fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
         return bytes.joinToString("") { "%02x".format(it) }

@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.denovogroup.rangzen.R
 import org.denovogroup.rangzen.RangzenApplication
 import org.denovogroup.rangzen.backend.ble.BleAdvertiser
+import org.denovogroup.rangzen.backend.ble.BleExchange
+import org.denovogroup.rangzen.backend.ble.BleExchangeImpl
 import org.denovogroup.rangzen.backend.ble.BleScanner
 import org.denovogroup.rangzen.backend.ble.DiscoveredPeer
 import org.denovogroup.rangzen.backend.discovery.DiscoveredPeerRegistry
@@ -87,6 +89,9 @@ class RangzenService : Service() {
     private lateinit var messageStore: MessageStore
     private lateinit var legacyExchangeClient: LegacyExchangeClient
     private lateinit var legacyExchangeServer: LegacyExchangeServer
+
+    // Nordic BLE library connection manager for single-connection exchanges
+    private val bleExchange: BleExchange by lazy { BleExchangeImpl(this) }
     private lateinit var exchangeHistory: ExchangeHistoryTracker
     private lateinit var locationHelper: LocationHelper
     private var cleanupJob: Job? = null
@@ -1192,7 +1197,8 @@ class RangzenService : Service() {
             try {
                 Log.i(LOG_TAG, "Attempting exchange with ${peer.address} (publicId=${peer.publicIdPrefix})")
                 Timber.i("Attempting to exchange data with ${peer.address}")
-                val result = legacyExchangeClient.exchangeWithPeer(bleScanner, peer)
+                // Use Nordic BLE library for single-connection exchange (replaces per-frame connections)
+                val result = legacyExchangeClient.exchangeWithPeerV2(bleExchange, peer.device, peer.address, peer.rssi)
                 if (result != null) {
                     // Cross-transport correlation: merge BLE temp peer with WiFi Aware/LAN peer.
                     // LAN registers with full 16-char publicId, WiFi Aware with 8-char prefix.
