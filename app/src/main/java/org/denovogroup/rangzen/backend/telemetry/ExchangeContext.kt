@@ -41,6 +41,9 @@ class ExchangeContext(
     // Retry tracking
     var retryCount: Int = 0
 
+    // GATT diagnostics (populated after BLE exchange attempts)
+    var gattDiagnostics: Map<String, Any>? = null
+
     // Location (if permission granted)
     var location: LocationHelper.LocationData? = null
 
@@ -103,6 +106,9 @@ class ExchangeContext(
             payload["signal_quality"] = signalQuality
         }
 
+        // Add GATT diagnostics if available
+        gattDiagnostics?.let { payload["gatt_diagnostics"] = it }
+
         // Add user context
         payload["user_context"] = UserContextHelper.getContext(appContext)
 
@@ -144,6 +150,9 @@ class ExchangeContext(
 
         // Add retry count if retried
         if (retryCount > 0) payload["retry_count"] = retryCount
+
+        // Add GATT diagnostics if available
+        gattDiagnostics?.let { payload["gatt_diagnostics"] = it }
 
         // Add signal quality
         val signalQuality = buildSignalQualityMap()

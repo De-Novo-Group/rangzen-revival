@@ -57,6 +57,8 @@ class RangzenService : Service() {
         const val ACTION_SOFT_FORCE_EXCHANGE = "org.denovogroup.rangzen.action.SOFT_FORCE_EXCHANGE"
         const val ACTION_RADIO_CONFIG_CHANGED = "org.denovogroup.rangzen.action.RADIO_CONFIG_CHANGED"
         private const val EXCHANGE_INTERVAL_MS = 15_000L // Exchange every 15 seconds
+        /** Swap initiator/responder roles after this many consecutive failures with a peer. */
+        private const val ROLE_SWAP_THRESHOLD = 3
 
         @Volatile
         private var instance: RangzenService? = null
@@ -1064,6 +1066,8 @@ class RangzenService : Service() {
                 Timber.i("Attempting to exchange data with ${peer.address}")
                 val result = legacyExchangeClient.exchangeWithPeer(bleScanner, peer)
                 if (result != null) {
+                    // Clear consecutive failure count on success.
+                    exchangeHistory.resetFailures(peer.address)
                     // Update exchange history on success.
                     updateExchangeHistory(peer.address, result.messagesReceived > 0)
                     // Refresh messages when we receive data to update the UI feed.
@@ -1077,11 +1081,15 @@ class RangzenService : Service() {
                             "sent=${result.messagesSent} received=${result.messagesReceived}"
                     )
                 } else {
+                    // Record consecutive failure for role-swap logic.
+                    exchangeHistory.recordFailure(peer.address)
                     // Treat failure as an attempt for backoff purposes.
                     updateExchangeHistory(peer.address, hasNewMessages = false)
                     Timber.w("Exchange failed or timed out with ${peer.address}")
                 }
             } catch (e: Exception) {
+                // Record consecutive failure for role-swap logic.
+                exchangeHistory.recordFailure(peer.address)
                 // Record the attempt for backoff logic.
                 updateExchangeHistory(peer.address, hasNewMessages = false)
                 Timber.e(e, "Error during BLE exchange with ${peer.address}")
@@ -1196,8 +1204,20 @@ class RangzenService : Service() {
         val initiator = whichInitiates(localId, peer.address)
         // If initiator is unknown, allow initiation to avoid deadlock.
         if (initiator.isNullOrBlank()) return true
-        // Only initiate when we are the selected initiator.
-        return initiator == localId
+        var shouldInitiate = (initiator == localId)
+
+        // Role-swap: if we've failed with this peer multiple times in a row,
+        // swap roles so the other device gets a chance as GATT client.
+        val history = exchangeHistory.getHistoryItem(peer.address)
+        if (history != null && history.consecutiveFailures >= ROLE_SWAP_THRESHOLD) {
+            shouldInitiate = !shouldInitiate
+            Timber.i(
+                "Role-swap active for ${peer.address}: " +
+                    "failures=${history.consecutiveFailures}, now ${if (shouldInitiate) "initiating" else "waiting"}"
+            )
+        }
+
+        return shouldInitiate
     }
 
     private fun bluetoothAddressOrNull(): String? {

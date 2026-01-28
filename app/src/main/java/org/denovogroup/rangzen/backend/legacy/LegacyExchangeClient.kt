@@ -63,6 +63,7 @@ class LegacyExchangeClient(
                 val blindedFriends = if (useTrust) clientPSI.encodeBlindedItems() else emptyList()
                 val friendsRequest = LegacyExchangeCodec.encodeClientMessage(emptyList(), blindedFriends)
                 val friendsResponse = sendFrame(bleScanner, peer, friendsRequest) ?: run {
+                    exchangeCtx.gattDiagnostics = bleScanner.lastExchangeDiagnostics?.toMap()
                     TelemetryClient.getInstance()?.trackExchangeFailure(
                         exchangeCtx, ErrorCategory.CONNECTION_RESET, "No response to PSI init"
                     )
@@ -84,6 +85,7 @@ class LegacyExchangeClient(
                     serverReply.hashedBlindedItems
                 )
                 val serverResponse = sendFrame(bleScanner, peer, serverRequest) ?: run {
+                    exchangeCtx.gattDiagnostics = bleScanner.lastExchangeDiagnostics?.toMap()
                     TelemetryClient.getInstance()?.trackExchangeFailure(
                         exchangeCtx, ErrorCategory.CONNECTION_RESET, "No response to PSI exchange"
                     )
@@ -188,6 +190,7 @@ class LegacyExchangeClient(
                 mergeIncomingMessages(receivedMessages, commonFriends)
 
                 exchangeCtx.advanceStage(ExchangeStage.COMPLETE)
+                exchangeCtx.gattDiagnostics = bleScanner.lastExchangeDiagnostics?.toMap()
 
                 // Track exchange success with rich context
                 TelemetryClient.getInstance()?.trackExchangeSuccess(exchangeCtx)
@@ -199,6 +202,7 @@ class LegacyExchangeClient(
                 )
             } catch (e: Exception) {
                 Timber.e(e, "Legacy exchange failed with ${peer.address}")
+                exchangeCtx.gattDiagnostics = bleScanner.lastExchangeDiagnostics?.toMap()
                 // Track exchange failure with rich context
                 TelemetryClient.getInstance()?.trackExchangeFailure(exchangeCtx, e)
                 null

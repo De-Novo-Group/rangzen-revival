@@ -108,6 +108,22 @@ class ExchangeHistoryTracker private constructor(private val context: Context) {
     }
 
     /**
+     * Record a consecutive failure for a peer.
+     */
+    fun recordFailure(address: String) {
+        val item = history.firstOrNull { it.address == address } ?: return
+        item.consecutiveFailures += 1
+    }
+
+    /**
+     * Reset consecutive failures on success.
+     */
+    fun resetFailures(address: String) {
+        val item = history.firstOrNull { it.address == address } ?: return
+        item.consecutiveFailures = 0
+    }
+
+    /**
      * Increment the global exchange count.
      */
     fun incrementExchangeCount() {
@@ -143,6 +159,8 @@ class ExchangeHistoryTracker private constructor(private val context: Context) {
         var storeVersion: String,
         var lastExchangeTime: Long,
         var attempts: Int = 0,
-        var lastPicked: Long = 0
+        var lastPicked: Long = 0,
+        /** Consecutive exchange failures with this peer (reset on success). */
+        var consecutiveFailures: Int = 0
     )
 }
