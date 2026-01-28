@@ -1,9 +1,9 @@
 {
-  "gattReadFallbackDelayMs": 1500,
-  "initialWriteDelayMs": 1500,
+  "gattReadFallbackDelayMs": 500,
+  "initialWriteDelayMs": 300,
   "gattMaxAttributeLength": 512,
   "maxMessagesPerExchange": 50,
-  "exchangeSessionTimeoutMs": 30000,
+  "exchangeSessionTimeoutMs": 90000,
   "bleMtu": 247,
   "useTrust": true,
   "minSharedContactsForExchange": 0,
