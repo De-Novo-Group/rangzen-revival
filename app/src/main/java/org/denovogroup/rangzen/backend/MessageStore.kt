@@ -552,17 +552,23 @@ class MessageStore private constructor(context: Context) :
             twoWeeks.toString()
         )
 
-        // Collect message IDs before deleting so we can record tombstones
-        val toDelete = mutableListOf<String>()
+        // Collect message info before deleting so we can record tombstones and telemetry
+        data class ExpiredMsg(val id: String, val timestamp: Long, val hopCount: Int, val priority: Int)
+        val toDelete = mutableListOf<ExpiredMsg>()
         readableDatabase.query(
             TABLE_MESSAGES,
-            arrayOf(COL_MESSAGE_ID),
+            arrayOf(COL_MESSAGE_ID, COL_TIMESTAMP, COL_HOP_COUNT, COL_LIKES),
             whereClause,
             args,
             null, null, null
         ).use { cursor ->
             while (cursor.moveToNext()) {
-                toDelete.add(cursor.getString(0))
+                toDelete.add(ExpiredMsg(
+                    id = cursor.getString(0),
+                    timestamp = cursor.getLong(1),
+                    hopCount = cursor.getInt(2),
+                    priority = cursor.getInt(3)
+                ))
             }
         }
 
@@ -572,9 +578,9 @@ class MessageStore private constructor(context: Context) :
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for (messageId in toDelete) {
+            for (msg in toDelete) {
                 val tombstone = ContentValues().apply {
-                    put(COL_TOMBSTONE_MESSAGE_ID, messageId)
+                    put(COL_TOMBSTONE_MESSAGE_ID, msg.id)
                     put(COL_TOMBSTONE_DELETED_AT, now)
                 }
                 db.insertWithOnConflict(TABLE_TOMBSTONES, null, tombstone, SQLiteDatabase.CONFLICT_REPLACE)
@@ -583,6 +589,25 @@ class MessageStore private constructor(context: Context) :
             db.setTransactionSuccessful()
             refreshMessages()
             Timber.d("Heart-based cleanup removed $rows messages, recorded $rows tombstones")
+
+            // Track expired messages
+            val telemetry = org.denovogroup.rangzen.backend.telemetry.TelemetryClient.getInstance()
+            for (msg in toDelete) {
+                val reason = when {
+                    msg.priority == 0 -> "no_hearts_5d"
+                    msg.priority == 1 -> "low_hearts_7d"
+                    else -> "aged_14d"
+                }
+                telemetry?.trackMessageExpired(
+                    messageIdHash = java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(msg.id.toByteArray()).joinToString("") { "%02x".format(it) },
+                    reason = reason,
+                    ageMs = now - msg.timestamp,
+                    hopCount = msg.hopCount,
+                    priority = msg.priority
+                )
+            }
+
             return rows
         } finally {
             db.endTransaction()

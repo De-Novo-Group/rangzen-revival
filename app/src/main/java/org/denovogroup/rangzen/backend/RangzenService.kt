@@ -578,50 +578,29 @@ class RangzenService : Service() {
             
             if (exchangeData != null) {
                 val wifiJob = serviceScope.launch {
-                    val startTime = System.currentTimeMillis()
                     try {
                         Timber.i("PARALLEL: WiFi Direct exchange with group owner at ${groupOwnerAddress.hostAddress}")
-                        
+
                         val result = wifiDirectTransport.connectAndExchange(
                             groupOwnerAddress = groupOwnerAddress,
                             localPublicId = localId,
-                            data = exchangeData
+                            data = exchangeData,
+                            context = this@RangzenService,
+                            location = location
                         )
-                        
-                        val durationMs = System.currentTimeMillis() - startTime
-                        
+
                         if (result != null) {
-                            // Process the response
-                            val received = legacyExchangeClient.processExchangeResponse(result.responseData)
-                            
-                            TelemetryClient.getInstance()?.trackExchangeWithLocation(
-                                success = true,
-                                peerIdHash = result.peerPublicId.hashCode().toString(),
-                                transport = TelemetryEvent.TRANSPORT_WIFI_DIRECT,
-                                location = location,
-                                durationMs = durationMs,
-                                messagesSent = 0,  // Count not easily available
-                                messagesReceived = received
+                            val received = legacyExchangeClient.processExchangeResponse(
+                                result.responseData,
+                                result.peerPublicId.hashCode().toString()
                             )
-                            
                             Timber.i("PARALLEL: WiFi Direct exchange complete with ${result.peerPublicId.take(8)}...")
-                            
+
                             if (received > 0) {
                                 messageStore.refreshMessagesNow()
                             }
                         }
                     } catch (e: Exception) {
-                        val durationMs = System.currentTimeMillis() - startTime
-                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
-                            success = false,
-                            peerIdHash = "wifi_direct",
-                            transport = TelemetryEvent.TRANSPORT_WIFI_DIRECT,
-                            location = location,
-                            durationMs = durationMs,
-                            messagesSent = 0,
-                            messagesReceived = 0,
-                            error = e.message
-                        )
                         Timber.e(e, "PARALLEL: WiFi Direct exchange failed")
                     }
                 }
@@ -636,49 +615,24 @@ class RangzenService : Service() {
             for (lanPeer in allNetworkPeers) {
                 val deviceId = lanPeer.deviceId
                 val job = serviceScope.launch {
-                    val startTime = System.currentTimeMillis()
                     try {
                         val result = lanTransport.exchangeWithPeer(
                             peer = lanPeer,
                             context = this@RangzenService,
                             messageStore = messageStore,
-                            friendStore = friendStore
+                            friendStore = friendStore,
+                            location = location
                         )
-                        
-                        val durationMs = System.currentTimeMillis() - startTime
-                        
-                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
-                            success = result.success,
-                            peerIdHash = deviceId.hashCode().toString(),
-                            transport = TelemetryEvent.TRANSPORT_WLAN,
-                            location = location,
-                            durationMs = durationMs,
-                            messagesSent = result.messagesSent,
-                            messagesReceived = result.messagesReceived
-                        )
-                        
+
                         if (result.success) {
                             Timber.i("PARALLEL: LAN exchange complete with ${deviceId.take(8)}...: " +
                                 "sent=${result.messagesSent}, received=${result.messagesReceived}")
-                            
+
                             if (result.messagesReceived > 0) {
                                 messageStore.refreshMessagesNow()
                             }
                         }
                     } catch (e: Exception) {
-                        val durationMs = System.currentTimeMillis() - startTime
-                        
-                        TelemetryClient.getInstance()?.trackExchangeWithLocation(
-                            success = false,
-                            peerIdHash = deviceId.hashCode().toString(),
-                            transport = TelemetryEvent.TRANSPORT_WLAN,
-                            location = location,
-                            durationMs = durationMs,
-                            messagesSent = 0,
-                            messagesReceived = 0,
-                            error = e.message
-                        )
-                        
                         Timber.e(e, "PARALLEL: LAN exchange failed with ${deviceId.take(8)}...")
                     }
                 }
@@ -883,8 +837,35 @@ class RangzenService : Service() {
         )
 
         Timber.d("Peer snapshot sent: ${peers.size} peers (BLE=$bleCount, WiFiD=$wifiDirectCount, WiFiA=$wifiAwareCount, LAN=$lanCount)")
+
+        // Also emit a node_profile snapshot
+        sendNodeProfile(telemetry)
     }
     
+    /**
+     * Send a node_profile telemetry event with current device state.
+     */
+    private fun sendNodeProfile(telemetry: TelemetryClient) {
+        try {
+            val allMessages = messageStore.getAllMessages()
+            val now = System.currentTimeMillis()
+            val friendCount = friendStore.getAllFriendIds().size
+            val heartedCount = allMessages.count { it.isLiked }
+            val oldestAge = if (allMessages.isNotEmpty()) now - allMessages.minOf { it.timestamp } else 0L
+            val newestAge = if (allMessages.isNotEmpty()) now - allMessages.maxOf { it.timestamp } else 0L
+
+            telemetry.trackNodeProfile(
+                messageCount = allMessages.size,
+                friendCount = friendCount,
+                heartedCount = heartedCount,
+                oldestMessageAgeMs = oldestAge,
+                newestMessageAgeMs = newestAge
+            )
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to send node profile")
+        }
+    }
+
     /**
      * Set up WiFi Direct transport for high-bandwidth message exchange.
      * 
@@ -1330,7 +1311,8 @@ class RangzenService : Service() {
      */
     private suspend fun getLocationForTelemetry(): LocationHelper.LocationData? {
         return try {
-            locationHelper.getCurrentLocation()
+            // Request fresh GPS fix (5s timeout), falling back to cached
+            locationHelper.requestFreshLocation()
         } catch (e: Exception) {
             Timber.w(e, "Failed to get location for telemetry")
             null

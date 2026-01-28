@@ -29,18 +29,19 @@ import java.security.MessageDigest
 class LegacyExchangeClient(
     private val context: Context,
     private val friendStore: FriendStore,
-    private val messageStore: MessageStore
+    private val messageStore: MessageStore,
+    private val transport: String = TelemetryEvent.TRANSPORT_BLE
 ) {
 
     suspend fun exchangeWithPeer(bleScanner: BleScanner, peer: DiscoveredPeer): LegacyExchangeResult? {
         val peerIdHash = sha256(peer.address)
-        val exchangeCtx = ExchangeContext.create(TelemetryEvent.TRANSPORT_BLE, peerIdHash, context)
+        val exchangeCtx = ExchangeContext.create(transport, peerIdHash, context)
 
         // Capture RSSI if available
         exchangeCtx.rssi = peer.rssi
 
         // Track exchange start
-        TelemetryClient.getInstance()?.trackExchangeStart(peerIdHash, TelemetryEvent.TRANSPORT_BLE)
+        TelemetryClient.getInstance()?.trackExchangeStart(peerIdHash, transport)
 
         return withTimeout(AppConfig.exchangeSessionTimeoutMs(context)) {
             try {
@@ -56,12 +57,19 @@ class LegacyExchangeClient(
                 }
                 val clientPSI = Crypto.PrivateSetIntersection(localFriends)
                 val serverPSI = Crypto.PrivateSetIntersection(localFriends)
+                exchangeCtx.localFriendCount = localFriends.size
 
                 exchangeCtx.advanceStage(ExchangeStage.PSI_INIT)
 
                 // Only send blinded friends when trust is enabled.
                 val blindedFriends = if (useTrust) clientPSI.encodeBlindedItems() else emptyList()
-                val friendsRequest = LegacyExchangeCodec.encodeClientMessage(emptyList(), blindedFriends)
+                // Identity contract: include our device_id_hash and exchange_id in the PSI init.
+                val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
+                val friendsRequest = LegacyExchangeCodec.encodeClientMessage(
+                    emptyList(), blindedFriends,
+                    deviceIdHash = myDeviceIdHash,
+                    exchangeId = exchangeCtx.exchangeId
+                )
                 val friendsResponse = sendFrame(bleScanner, peer, friendsRequest) ?: run {
                     exchangeCtx.gattDiagnostics = bleScanner.lastExchangeDiagnostics?.toMap()
                     TelemetryClient.getInstance()?.trackExchangeFailure(
@@ -69,9 +77,15 @@ class LegacyExchangeClient(
                     )
                     return@withTimeout null
                 }
+                // Parse the server's response, extracting identity fields.
+                val serverClientMsg = LegacyExchangeCodec.decodeClientMessage(friendsResponse)
+                // Identity contract: capture peer's device_id_hash for telemetry.
+                exchangeCtx.peerDeviceIdHash = serverClientMsg.deviceIdHash
+                // Exchange pairing: if the server echoed an exchange_id, adopt it.
+                serverClientMsg.exchangeId?.let { exchangeCtx.sharedExchangeId = it }
                 // Only parse remote friends when trust is enabled.
                 val remoteFriends = if (useTrust) {
-                    LegacyExchangeCodec.decodeClientMessage(friendsResponse).blindedFriends
+                    serverClientMsg.blindedFriends
                 } else {
                     emptyList()
                 }
@@ -150,12 +164,14 @@ class LegacyExchangeClient(
                         // Track message sent
                         TelemetryClient.getInstance()?.trackMessageSent(
                             peerIdHash = peerIdHash,
-                            transport = TelemetryEvent.TRANSPORT_BLE,
+                            transport = transport,
                             messageIdHash = sha256(msg.messageId),
                             hopCount = msg.hopCount,
                             trustScore = msg.trustScore,
                             priority = msg.priority,
-                            ageMs = System.currentTimeMillis() - msg.timestamp
+                            ageMs = System.currentTimeMillis() - msg.timestamp,
+                            textLength = msg.text?.length ?: 0,
+                            localFriendCount = myFriends
                         )
                         exchangeCtx.messagesSent++
                         // Pass shared friend context for per-peer trust computation.
@@ -175,12 +191,14 @@ class LegacyExchangeClient(
                         // Track message received
                         TelemetryClient.getInstance()?.trackMessageReceived(
                             peerIdHash = peerIdHash,
-                            transport = TelemetryEvent.TRANSPORT_BLE,
+                            transport = transport,
                             messageIdHash = sha256(msg.messageId),
                             hopCount = msg.hopCount,
                             trustScore = msg.trustScore,
                             priority = msg.priority,
-                            isNew = isNew
+                            isNew = isNew,
+                            textLength = msg.text?.length ?: 0,
+                            localFriendCount = myFriends
                         )
                         exchangeCtx.messagesReceived++
                         receivedMessages.add(msg)
@@ -276,12 +294,12 @@ class LegacyExchangeClient(
      * 
      * @return Serialized exchange data, or null if no messages to send
      */
-    fun prepareExchangeData(): ByteArray? {
+    fun prepareExchangeData(peerIdHash: String? = null): ByteArray? {
         val maxMessages = SecurityManager.maxMessagesPerExchange(context)
         // Use 0 common friends for simplified exchange (no PSI)
         val messages = messageStore.getMessagesForExchange(0, maxMessages)
         if (messages.isEmpty()) return null
-        
+
         val myFriends = friendStore.getAllFriendIds().size
         val json = JSONObject().apply {
             put("protocol", "simplified_v1")
@@ -289,7 +307,17 @@ class LegacyExchangeClient(
             put("message_count", messages.size)
             val msgArray = org.json.JSONArray()
             for (msg in messages) {
-                // Encode without PSI context (0 common friends)
+                if (peerIdHash != null) {
+                    TelemetryClient.getInstance()?.trackMessageSent(
+                        peerIdHash = peerIdHash,
+                        transport = transport,
+                        messageIdHash = sha256(msg.messageId),
+                        hopCount = msg.hopCount,
+                        trustScore = msg.trustScore,
+                        priority = msg.priority,
+                        ageMs = System.currentTimeMillis() - msg.timestamp
+                    )
+                }
                 val encoded = LegacyExchangeCodec.encodeMessage(context, msg, 0, myFriends)
                 msgArray.put(encoded)
             }
@@ -305,18 +333,31 @@ class LegacyExchangeClient(
      * @param data Raw response data from the peer
      * @return Number of new messages received
      */
-    fun processExchangeResponse(data: ByteArray): Int {
+    fun processExchangeResponse(data: ByteArray, peerIdHash: String? = null): Int {
         return try {
             val json = JSONObject(String(data, Charsets.UTF_8))
             val msgArray = json.optJSONArray("messages") ?: return 0
-            
+
             var newCount = 0
             val myFriendsCount = friendStore.getAllFriendIds().size
-            
+
             for (i in 0 until msgArray.length()) {
                 val msgJson = msgArray.getJSONObject(i)
                 val msg = LegacyExchangeCodec.decodeMessage(msgJson)
                 if (msg.text.isNullOrEmpty()) continue
+
+                val isNew = !messageStore.hasMessage(msg.messageId)
+                if (peerIdHash != null) {
+                    TelemetryClient.getInstance()?.trackMessageReceived(
+                        peerIdHash = peerIdHash,
+                        transport = transport,
+                        messageIdHash = sha256(msg.messageId),
+                        hopCount = msg.hopCount,
+                        trustScore = msg.trustScore,
+                        priority = msg.priority,
+                        isNew = isNew
+                    )
+                }
 
                 val existing = messageStore.getMessage(msg.messageId)
                 if (existing != null) {

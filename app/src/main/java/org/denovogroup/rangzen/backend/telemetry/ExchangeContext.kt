@@ -44,8 +44,18 @@ class ExchangeContext(
     // GATT diagnostics (populated after BLE exchange attempts)
     var gattDiagnostics: Map<String, Any>? = null
 
+    // Identity contract: peer's device_id_hash for consistent cross-transport identity
+    var peerDeviceIdHash: String? = null
+
+    // Shared exchange_id: when the peer provides one, adopt it for pairing.
+    // The initiator's exchangeId is authoritative; the responder adopts it.
+    var sharedExchangeId: String? = null
+
     // Location (if permission granted)
     var location: LocationHelper.LocationData? = null
+
+    // Local friend count at time of exchange
+    var localFriendCount: Int = 0
 
     /**
      * Advance to the next stage and record timing for key phases.
@@ -72,14 +82,18 @@ class ExchangeContext(
      */
     fun buildSuccessPayload(): Map<String, Any> {
         val endTime = System.currentTimeMillis()
+        // Use the shared exchange_id if the peer provided one (responder adopts initiator's ID)
+        val effectiveExchangeId = sharedExchangeId ?: exchangeId
         val payload = mutableMapOf<String, Any>(
-            "exchange_id" to exchangeId,
+            "exchange_id" to effectiveExchangeId,
             "duration_total_ms" to (endTime - startTime),
             "final_stage" to currentStage.code,
             "messages_sent" to messagesSent,
             "messages_received" to messagesReceived,
             "mutual_friends" to mutualFriends
         )
+        // Identity contract: include peer's device_id_hash for consistent identity
+        peerDeviceIdHash?.let { payload["peer_device_id_hash"] = it }
 
         // Add phase timing breakdown if available
         connectTime?.let { ct ->
@@ -97,8 +111,15 @@ class ExchangeContext(
         // Add trust score if computed
         trustScore?.let { payload["trust_score"] = it }
 
+        // Add local friend count
+        if (localFriendCount > 0) payload["local_friend_count"] = localFriendCount
+
         // Add location if available (only when permission granted)
-        location?.let { payload["location"] = it.toTelemetryMap() }
+        location?.let {
+            payload["location"] = it.toTelemetryMap()
+            // Location age: how stale the GPS fix is
+            payload["location_age_ms"] = it.ageMs
+        }
 
         // Add signal quality
         val signalQuality = buildSignalQualityMap()
@@ -131,13 +152,15 @@ class ExchangeContext(
      */
     fun buildFailurePayload(category: ErrorCategory, errorMessage: String): Map<String, Any> {
         val endTime = System.currentTimeMillis()
+        val effectiveExchangeId = sharedExchangeId ?: exchangeId
         val payload = mutableMapOf<String, Any>(
-            "exchange_id" to exchangeId,
+            "exchange_id" to effectiveExchangeId,
             "duration_total_ms" to (endTime - startTime),
             "failed_stage" to currentStage.code,
             "error_category" to category.code,
             "error_message" to errorMessage.take(500)
         )
+        peerDeviceIdHash?.let { payload["peer_device_id_hash"] = it }
 
         // Add phase timing breakdown if available
         connectTime?.let { ct ->

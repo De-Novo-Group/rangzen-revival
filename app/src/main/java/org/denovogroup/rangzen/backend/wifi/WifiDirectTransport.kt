@@ -157,11 +157,13 @@ class WifiDirectTransport {
         groupOwnerAddress: InetAddress,
         localPublicId: String,
         data: ByteArray,
-        context: android.content.Context? = null
+        context: android.content.Context? = null,
+        location: org.denovogroup.rangzen.backend.telemetry.LocationHelper.LocationData? = null
     ): ExchangeResult? = withContext(Dispatchers.IO) {
         var socket: Socket? = null
         val peerIdHash = groupOwnerAddress.hostAddress?.take(16) ?: "unknown"
         val exchangeCtx = context?.let { ExchangeContext.create(TelemetryEvent.TRANSPORT_WIFI_DIRECT, peerIdHash, it) }
+        exchangeCtx?.location = location
 
         try {
             Timber.i("$TAG: Connecting to ${groupOwnerAddress.hostAddress}:$TRANSPORT_PORT")
@@ -183,10 +185,13 @@ class WifiDirectTransport {
 
             exchangeCtx?.advanceStage(ExchangeStage.PROTOCOL_VERSION)
 
-            // Send handshake
+            // Send handshake with identity contract fields.
+            val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
             val handshake = PeerHandshake.createHandshake(
                 publicId = localPublicId,
-                availableTransports = listOf(TransportType.WIFI_DIRECT, TransportType.BLE)
+                availableTransports = listOf(TransportType.WIFI_DIRECT, TransportType.BLE),
+                deviceIdHash = myDeviceIdHash,
+                exchangeId = exchangeCtx?.exchangeId
             )
             sendMessage(output, MSG_HANDSHAKE, PeerHandshake.encode(handshake))
 
@@ -208,6 +213,10 @@ class WifiDirectTransport {
                 }
                 return@withContext null
             }
+
+            // Identity contract: capture peer's device_id_hash and exchange_id.
+            exchangeCtx?.peerDeviceIdHash = peerHandshake.deviceIdHash
+            peerHandshake.exchangeId?.let { exchangeCtx?.sharedExchangeId = it }
 
             Timber.i("$TAG: Handshake complete with peer: ${peerHandshake.publicId}")
             trackTelemetry("handshake_complete", "peer_id" to peerHandshake.publicId)
@@ -290,10 +299,13 @@ class WifiDirectTransport {
                 return
             }
             
-            // Send our handshake
+            // Send our handshake with identity contract fields.
+            val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
             val ourHandshake = PeerHandshake.createHandshake(
                 publicId = localPublicId,
-                availableTransports = listOf(TransportType.WIFI_DIRECT, TransportType.BLE)
+                availableTransports = listOf(TransportType.WIFI_DIRECT, TransportType.BLE),
+                deviceIdHash = myDeviceIdHash,
+                exchangeId = peerHandshake.exchangeId
             )
             sendMessage(output, MSG_HANDSHAKE, PeerHandshake.encode(ourHandshake))
             
