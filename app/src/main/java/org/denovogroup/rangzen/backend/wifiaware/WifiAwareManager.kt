@@ -15,10 +15,14 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.RequiresApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import org.denovogroup.rangzen.backend.FriendStore
+import org.denovogroup.rangzen.backend.lan.LanTransport
 import org.denovogroup.rangzen.backend.discovery.DiscoveredPeerRegistry
 import org.denovogroup.rangzen.backend.discovery.TransportCapabilities
 import org.denovogroup.rangzen.backend.telemetry.TelemetryClient
@@ -182,6 +186,138 @@ class WifiAwareManager(
         _isActive.value = false
 
         trackTelemetry("stopped")
+    }
+
+    /**
+     * Request a WiFi Aware network data path to a discovered peer.
+     *
+     * Creates a temporary L3 network between this device and the peer,
+     * returning the peer's IPv6 address for TCP-based message exchange.
+     *
+     * @param peer The discovered WiFi Aware peer to connect to
+     * @param timeoutMs Timeout for network request (default 10 seconds)
+     * @return Peer's InetAddress if successful, null on failure/timeout
+     */
+    suspend fun requestNetworkForPeer(
+        peer: DiscoveredWifiAwarePeer,
+        timeoutMs: Long = 10_000L
+    ): WifiAwareNetworkInfo? = withContext(Dispatchers.IO) {
+        val session = wifiAwareSession
+        if (session == null) {
+            Timber.w("$TAG: Cannot request network - no WiFi Aware session")
+            return@withContext null
+        }
+
+        try {
+            val specifier = WifiAwareNetworkSpecifier.Builder(
+                subscribeSession ?: publishSession ?: run {
+                    Timber.w("$TAG: Cannot request network - no discovery session")
+                    return@withContext null
+                },
+                peer.peerHandle
+            ).build()
+
+            val networkRequest = android.net.NetworkRequest.Builder()
+                .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI_AWARE)
+                .setNetworkSpecifier(specifier)
+                .build()
+
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                as android.net.ConnectivityManager
+
+            val result = suspendCancellableCoroutine<WifiAwareNetworkInfo?> { continuation ->
+                val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: android.net.Network) {
+                        Timber.i("$TAG: WiFi Aware network available for ${peer.sessionId}")
+                    }
+
+                    override fun onCapabilitiesChanged(
+                        network: android.net.Network,
+                        capabilities: android.net.NetworkCapabilities
+                    ) {
+                        val peerAwareInfo = capabilities.transportInfo
+                            as? android.net.wifi.aware.WifiAwareNetworkInfo
+                        if (peerAwareInfo != null) {
+                            val peerAddress = peerAwareInfo.peerIpv6Addr
+                            val peerPort = peerAwareInfo.port
+                            Timber.i("$TAG: Got peer address: $peerAddress, port: $peerPort")
+
+                            if (peerAddress != null && !continuation.isCompleted) {
+                                continuation.resume(
+                                    WifiAwareNetworkInfo(
+                                        network = network,
+                                        peerAddress = peerAddress,
+                                        port = peerPort.takeIf { it > 0 }
+                                            ?: LanTransport.EXCHANGE_PORT,
+                                        callback = this
+                                    )
+                                ) {}
+                            }
+                        }
+                    }
+
+                    override fun onLost(network: android.net.Network) {
+                        Timber.w("$TAG: WiFi Aware network lost for ${peer.sessionId}")
+                        if (!continuation.isCompleted) {
+                            continuation.resume(null) {}
+                        }
+                    }
+
+                    override fun onUnavailable() {
+                        Timber.w("$TAG: WiFi Aware network unavailable for ${peer.sessionId}")
+                        if (!continuation.isCompleted) {
+                            continuation.resume(null) {}
+                        }
+                    }
+                }
+
+                connectivityManager.requestNetwork(networkRequest, callback, mainHandler, timeoutMs.toInt())
+
+                continuation.invokeOnCancellation {
+                    try {
+                        connectivityManager.unregisterNetworkCallback(callback)
+                    } catch (e: Exception) {
+                        Timber.w(e, "$TAG: Failed to unregister callback on cancellation")
+                    }
+                }
+            }
+
+            if (result != null) {
+                trackTelemetry("network_established", mapOf(
+                    "peer_id" to (peer.publicIdPrefix ?: peer.sessionId),
+                    "peer_address" to (result.peerAddress.hostAddress ?: "unknown")
+                ))
+            } else {
+                trackTelemetry("network_failed", mapOf(
+                    "peer_id" to (peer.publicIdPrefix ?: peer.sessionId)
+                ))
+            }
+
+            result
+        } catch (e: Exception) {
+            Timber.e(e, "$TAG: Failed to request network for ${peer.sessionId}")
+            trackTelemetry("network_error", mapOf(
+                "peer_id" to (peer.publicIdPrefix ?: peer.sessionId),
+                "error" to (e.message ?: "unknown")
+            ))
+            null
+        }
+    }
+
+    /**
+     * Release a previously requested WiFi Aware network.
+     * Must be called after exchange completes to free resources.
+     */
+    fun releaseNetwork(networkInfo: WifiAwareNetworkInfo) {
+        try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                as android.net.ConnectivityManager
+            connectivityManager.unregisterNetworkCallback(networkInfo.callback)
+            Timber.i("$TAG: Released WiFi Aware network")
+            trackTelemetry("network_released")
+        } catch (e: Exception) {
+            Timber.w(e, "$TAG: Failed to release WiFi Aware network")
+        }
     }
 
     /**
@@ -465,6 +601,16 @@ class WifiAwareManager(
 /**
  * Represents a peer discovered via WiFi Aware.
  */
+/**
+ * Info about an established WiFi Aware network data path.
+ */
+data class WifiAwareNetworkInfo(
+    val network: android.net.Network,
+    val peerAddress: java.net.Inet6Address,
+    val port: Int,
+    internal val callback: android.net.ConnectivityManager.NetworkCallback
+)
+
 data class DiscoveredWifiAwarePeer(
     val peerHandle: PeerHandle,
     val sessionId: String,
