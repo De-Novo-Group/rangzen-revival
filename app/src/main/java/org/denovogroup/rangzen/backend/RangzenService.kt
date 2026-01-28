@@ -1000,6 +1000,29 @@ class RangzenService : Service() {
                 Timber.d("WiFi Aware: Peer lost: $sessionId")
             }
 
+            // Handle incoming data paths (we are the publisher/responder)
+            wifiAwareManager?.onIncomingConnection = { peerAddress, port ->
+                serviceScope.launch {
+                    try {
+                        val lanPeer = LanDiscoveryManager.LanPeer(
+                            ipAddress = peerAddress,
+                            port = port,
+                            deviceId = "wifi_aware_responder"
+                        )
+                        Timber.i("WiFi Aware responder: exchanging with ${peerAddress.hostAddress}")
+                        lanTransport.exchangeWithPeer(
+                            peer = lanPeer,
+                            context = this@RangzenService,
+                            messageStore = messageStore,
+                            friendStore = friendStore,
+                            transport = TelemetryEvent.TRANSPORT_WIFI_AWARE
+                        )
+                    } catch (e: Exception) {
+                        Timber.e(e, "WiFi Aware responder exchange failed")
+                    }
+                }
+            }
+
             // Log capability info
             val summary = TransportCapabilities.getSupportedTransportsSummary(this)
             Timber.i("WiFi Aware initialized. Device supports: $summary")

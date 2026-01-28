@@ -91,9 +91,14 @@ class WifiAwareManager(
     private val _peerCount = MutableStateFlow(0)
     val peerCount: StateFlow<Int> = _peerCount.asStateFlow()
 
+    // Responder (publisher) network accept state
+    private var responderCallback: android.net.ConnectivityManager.NetworkCallback? = null
+
     // Callbacks
     var onPeerDiscovered: ((DiscoveredWifiAwarePeer) -> Unit)? = null
     var onPeerLost: ((String) -> Unit)? = null
+    /** Called when an incoming data path is established (publisher/responder side). */
+    var onIncomingConnection: ((java.net.Inet6Address, Int) -> Unit)? = null
 
     // Broadcast receiver for WiFi Aware availability changes
     private val availabilityReceiver = object : BroadcastReceiver() {
@@ -175,6 +180,8 @@ class WifiAwareManager(
      */
     fun stop() {
         Timber.i("$TAG: Stopping WiFi Aware discovery")
+
+        stopResponderAccept()
 
         publishSession?.close()
         publishSession = null
@@ -389,11 +396,84 @@ class WifiAwareManager(
         Timber.d("$TAG: Publishing service with ID ${id.take(8)}...")
     }
 
+    /**
+     * Accept incoming WiFi Aware data paths on the publisher side.
+     *
+     * When another device (subscriber) initiates a data path to us,
+     * we need a standing network request to accept it. Without this,
+     * the system rejects incoming NDP requests with "can't find a request".
+     */
+    private fun startResponderAccept() {
+        val session = publishSession ?: return
+        stopResponderAccept()
+
+        try {
+            val specifier = WifiAwareNetworkSpecifier.Builder(session)
+                .build()
+
+            val networkRequest = android.net.NetworkRequest.Builder()
+                .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI_AWARE)
+                .setNetworkSpecifier(specifier)
+                .build()
+
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                as android.net.ConnectivityManager
+
+            val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    Timber.i("$TAG: Responder - incoming data path available")
+                }
+
+                override fun onCapabilitiesChanged(
+                    network: android.net.Network,
+                    capabilities: android.net.NetworkCapabilities
+                ) {
+                    val peerAwareInfo = capabilities.transportInfo
+                        as? android.net.wifi.aware.WifiAwareNetworkInfo
+                    val peerAddress = peerAwareInfo?.peerIpv6Addr
+                    if (peerAddress != null) {
+                        Timber.i("$TAG: Responder - peer connected: $peerAddress")
+                        trackTelemetry("responder_connection", mapOf(
+                            "peer_address" to (peerAddress.hostAddress ?: "unknown")
+                        ))
+                        onIncomingConnection?.invoke(peerAddress, localPort)
+                    }
+                }
+
+                override fun onLost(network: android.net.Network) {
+                    Timber.d("$TAG: Responder - data path lost")
+                }
+            }
+
+            connectivityManager.requestNetwork(networkRequest, callback, mainHandler)
+            responderCallback = callback
+            Timber.i("$TAG: Responder accept started on port $localPort")
+            trackTelemetry("responder_started")
+        } catch (e: Exception) {
+            Timber.e(e, "$TAG: Failed to start responder accept")
+        }
+    }
+
+    private fun stopResponderAccept() {
+        responderCallback?.let { cb ->
+            try {
+                val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
+                    as android.net.ConnectivityManager
+                connectivityManager.unregisterNetworkCallback(cb)
+            } catch (e: Exception) {
+                // Ignore
+            }
+            responderCallback = null
+        }
+    }
+
     private val publishCallback = object : DiscoverySessionCallback() {
         override fun onPublishStarted(session: PublishDiscoverySession) {
             Timber.i("$TAG: Publish started")
             publishSession = session
             trackTelemetry("publish_started")
+            // Accept incoming data paths from subscribers
+            startResponderAccept()
         }
 
         override fun onSessionConfigFailed() {
