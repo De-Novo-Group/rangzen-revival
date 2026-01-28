@@ -497,6 +497,7 @@ class RangzenService : Service() {
         parallelExchangeJob = serviceScope.launch {
             while (isActive) {
                 delay(20_000L) // Check for exchange opportunities every 20 seconds
+                peerRegistry.dumpPeers()
                 attemptParallelExchanges()
             }
         }

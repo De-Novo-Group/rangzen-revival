@@ -552,4 +552,26 @@ class DiscoveredPeerRegistry {
         Timber.v("$TAG: updatePeerList: ${list.size} reachable peers (raw: ${peers.size})")
         onPeersUpdated?.invoke(list)
     }
+
+    /**
+     * Dump peer registry state to logcat (uses android.util.Log for release builds).
+     * Call periodically or on-demand for diagnostics.
+     */
+    fun dumpPeers() {
+        val reachable = peers.values.filter { it.isReachable() }
+        android.util.Log.i(TAG, "=== PeerRegistry dump: ${reachable.size} reachable / ${peers.size} total ===")
+        peers.forEach { (peerId, peer) ->
+            val transports = peer.transports.entries.joinToString(", ") { (type, info) ->
+                "${type.identifier()}(${info.connectionId() ?: "?"})"
+            }
+            val stale = if (peer.isReachable()) "" else " [STALE]"
+            val hs = if (peer.handshakeCompleted) " [HS]" else ""
+            android.util.Log.i(TAG, "  peer=$peerId transports=[$transports]$hs$stale")
+        }
+        android.util.Log.i(TAG, "  addressMap entries: ${addressToPeerId.size}")
+        addressToPeerId.forEach { (key, peerId) ->
+            android.util.Log.i(TAG, "    $key -> $peerId")
+        }
+        android.util.Log.i(TAG, "=== end dump ===")
+    }
 }
