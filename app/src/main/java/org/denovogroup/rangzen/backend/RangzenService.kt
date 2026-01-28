@@ -609,6 +609,9 @@ class RangzenService : Service() {
 
                             if (received > 0) {
                                 messageStore.refreshMessagesNow()
+                                // Trigger BLE redistribution for cross-transport propagation
+                                Timber.i("WiFi Direct: Triggering BLE redistribution for $received new messages")
+                                triggerImmediateExchange(respectInbound = true)
                             }
                         }
                     } catch (e: Exception) {
@@ -618,7 +621,7 @@ class RangzenService : Service() {
                 allJobs.add(wifiJob)
             }
         }
-        
+
         // =====================================================================
         // LAN/NSD Exchanges (parallel with WiFi Direct)
         // =====================================================================
@@ -641,6 +644,9 @@ class RangzenService : Service() {
 
                             if (result.messagesReceived > 0) {
                                 messageStore.refreshMessagesNow()
+                                // Trigger BLE redistribution for cross-transport propagation
+                                Timber.i("LAN: Triggering BLE redistribution for ${result.messagesReceived} new messages")
+                                triggerImmediateExchange(respectInbound = true)
                             }
                         }
                     } catch (e: Exception) {
@@ -650,7 +656,7 @@ class RangzenService : Service() {
                 allJobs.add(job)
             }
         }
-        
+
         // =====================================================================
         // WiFi Aware Exchanges (infrastructure-free, no user dialogs)
         // =====================================================================
@@ -1055,12 +1061,22 @@ class RangzenService : Service() {
 
     /**
      * Handle WiFi Aware exchange completion.
+     *
+     * When new messages are received, we trigger a BLE exchange to redistribute them
+     * to other nearby peers. This is critical for cross-transport propagation:
+     * - WiFi Aware has limited range but higher bandwidth
+     * - BLE has better range and works on more devices
+     * - Messages received via WiFi Aware should flow to BLE peers immediately
      */
     private fun handleWifiAwareExchangeComplete(peerId: String, result: WifiAwareExchange.ExchangeResult) {
         if (result.success) {
             Timber.i("WiFi Aware exchange complete with $peerId: sent=${result.messagesSent}, received=${result.messagesReceived}")
             if (result.messagesReceived > 0) {
                 messageStore.refreshMessagesNow()
+                // Trigger BLE exchange to redistribute newly received messages.
+                // Use soft force (respectInbound=true) to avoid interrupting active BLE sessions.
+                Timber.i("WiFi Aware: Triggering BLE redistribution for ${result.messagesReceived} new messages")
+                triggerImmediateExchange(respectInbound = true)
             }
         } else {
             Timber.w("WiFi Aware exchange failed with $peerId: ${result.errorReason}")
