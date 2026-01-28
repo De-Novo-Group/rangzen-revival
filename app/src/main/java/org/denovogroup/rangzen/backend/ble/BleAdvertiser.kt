@@ -299,30 +299,38 @@ class BleAdvertiser(private val context: Context) {
                         }
                         // If request is incomplete, send ACK and wait for more data.
                         if (session.receivedLength < session.expectedLength) {
+                            Log.i(LOG_TAG, "Request incomplete: received=${session.receivedLength}/${session.expectedLength}, sending ACK")
                             sendAck(device, characteristic)
                             return
                         }
                         // Build the full request payload.
                         val requestPayload = session.requestBuffer.toByteArray()
                         // Process the request - pairing mode callback takes priority, but falls back to regular handler
+                        Log.i(LOG_TAG, "Processing request from ${device.address}, size=${requestPayload.size}, pairingModeCallback=${pairingModeCallback != null}, onDataReceived=${onDataReceived != null}")
                         Timber.i("Processing request from ${device.address}, size=${requestPayload.size}, pairingModeCallback=${pairingModeCallback != null}")
                         var responsePayload: ByteArray? = null
                         if (pairingModeCallback != null) {
+                            Log.i(LOG_TAG, "Trying pairingModeCallback for ${device.address}")
                             Timber.i("Trying pairingModeCallback for ${device.address}")
                             responsePayload = pairingModeCallback?.invoke(device, requestPayload)
+                            Log.i(LOG_TAG, "pairingModeCallback returned ${responsePayload?.size ?: "null"} bytes")
                             Timber.i("pairingModeCallback returned ${responsePayload?.size ?: "null"} bytes")
                         }
                         // Fall back to regular handler if pairing callback returns null or isn't set
                         if (responsePayload == null) {
+                            Log.i(LOG_TAG, "Falling back to onDataReceived for ${device.address}, callback=${onDataReceived != null}")
                             Timber.i("Falling back to onDataReceived for ${device.address}")
                             responsePayload = onDataReceived?.invoke(device, requestPayload)
+                            Log.i(LOG_TAG, "onDataReceived returned ${responsePayload?.size ?: "null"} bytes")
                         }
                         if (responsePayload == null) {
+                            Log.e(LOG_TAG, "No response generated for ${device.address}; rejecting request")
                             Timber.e("No response generated for ${device.address}; rejecting request")
                             clearSession(device)
                             return
                         }
                         // Store response bytes and send the first chunk.
+                        Log.i(LOG_TAG, "Sending response ${responsePayload.size} bytes to ${device.address}")
                         session.responseBytes = responsePayload
                         session.responseOffset = 0
                         sendResponseChunk(device, characteristic, session)
