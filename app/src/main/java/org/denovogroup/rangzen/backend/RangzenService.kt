@@ -38,6 +38,8 @@ import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import org.denovogroup.rangzen.backend.wifi.WifiDirectManager
 import org.denovogroup.rangzen.backend.wifi.WifiDirectTransport
 import org.denovogroup.rangzen.backend.wifiaware.WifiAwareManager
+import org.denovogroup.rangzen.backend.wifiaware.WifiAwareExchange
+import org.denovogroup.rangzen.backend.legacy.LegacyExchangeCodec
 import org.denovogroup.rangzen.backend.discovery.TransportCapabilities
 import org.denovogroup.rangzen.ui.MainActivity
 import timber.log.Timber
@@ -652,18 +654,14 @@ class RangzenService : Service() {
         // =====================================================================
         // WiFi Aware Exchanges (infrastructure-free, no user dialogs)
         // =====================================================================
-        // WiFi Aware discovered peers get a dedicated data path for TCP exchange.
-        // Skip peers already exchanged via LAN (same device ID).
+        // Uses message-based exchange via discovery layer (not NDP) for reliability.
+        // This works on all devices regardless of NDP interface count.
+        // See WIFI_AWARE_MESSAGE_PLAN.md for details.
         // =====================================================================
         val lanDeviceIds = allNetworkPeers.map { it.deviceId }.toSet()
         val awarePeers = wifiAwareManager?.getDiscoveredPeers() ?: emptyList()
 
-        if (awarePeers.isNotEmpty() && !lanTransport.isExchangeInProgress()) {
-            // Get our local ID for coordination (who initiates NDP)
-            val localId = wifiAwareManager?.getLocalPublicId()?.take(8)
-            // Check if we have responder capability (can accept incoming NDP)
-            val hasResponder = wifiAwareManager?.hasResponderCapability() ?: false
-
+        if (awarePeers.isNotEmpty()) {
             for (awarePeer in awarePeers) {
                 // Deduplicate: skip if we already have a LAN path to this peer
                 val peerDeviceId = awarePeer.publicIdPrefix
@@ -672,69 +670,19 @@ class RangzenService : Service() {
                     continue
                 }
 
-                // Initiator coordination: To avoid both devices racing to connect,
-                // use publicId comparison to decide who initiates.
-                // - Higher ID initiates, lower ID waits to be connected
-                // - Exception: devices without responder MUST initiate (they can't receive)
-                val shouldInitiate = if (!hasResponder) {
-                    // No responder capability - must initiate regardless of ID
-                    true
-                } else if (localId != null && peerDeviceId != null) {
-                    // Compare IDs: higher ID initiates
-                    localId > peerDeviceId
-                } else {
-                    // Can't compare - default to initiating
-                    true
-                }
-
-                if (!shouldInitiate) {
-                    Timber.d("PARALLEL: WiFi Aware peer $peerDeviceId has higher ID, waiting for them to initiate")
+                // Skip if exchange already in progress with this peer
+                if (wifiAwareManager?.isExchangeInProgress(awarePeer.sessionId) == true) {
+                    Timber.d("PARALLEL: WiFi Aware exchange already in progress with ${awarePeer.sessionId}")
                     continue
                 }
 
-                val job = serviceScope.launch {
-                    var networkInfo: org.denovogroup.rangzen.backend.wifiaware.WifiAwareNetworkInfo? = null
-                    try {
-                        Timber.i("PARALLEL: Requesting WiFi Aware network for ${awarePeer.sessionId}")
-                        networkInfo = wifiAwareManager?.requestNetworkForPeer(awarePeer)
-
-                        if (networkInfo == null) {
-                            Timber.w("PARALLEL: WiFi Aware network request failed for ${awarePeer.sessionId}")
-                            return@launch
-                        }
-
-                        // Create a LanPeer from the WiFi Aware network info
-                        val lanPeer = LanDiscoveryManager.LanPeer(
-                            deviceId = awarePeer.publicIdPrefix ?: awarePeer.sessionId,
-                            ipAddress = networkInfo.peerAddress,
-                            port = networkInfo.port,
-                            lastSeen = System.currentTimeMillis()
-                        )
-
-                        val result = lanTransport.exchangeWithPeer(
-                            peer = lanPeer,
-                            context = this@RangzenService,
-                            messageStore = messageStore,
-                            friendStore = friendStore,
-                            location = location,
-                            transport = TelemetryEvent.TRANSPORT_WIFI_AWARE
-                        )
-
-                        if (result.success) {
-                            Timber.i("PARALLEL: WiFi Aware exchange complete with ${awarePeer.sessionId}: " +
-                                "sent=${result.messagesSent}, received=${result.messagesReceived}")
-
-                            if (result.messagesReceived > 0) {
-                                messageStore.refreshMessagesNow()
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e, "PARALLEL: WiFi Aware exchange failed with ${awarePeer.sessionId}")
-                    } finally {
-                        networkInfo?.let { wifiAwareManager?.releaseNetwork(it) }
-                    }
+                // Start message-based exchange (handles initiator coordination internally)
+                // startExchange() returns false if peer has higher ID and should initiate
+                val started = wifiAwareManager?.startExchange(awarePeer) ?: false
+                if (started) {
+                    Timber.i("PARALLEL: Started WiFi Aware message exchange with ${awarePeer.sessionId}")
                 }
-                allJobs.add(job)
+                // Exchange completion is handled asynchronously via onExchangeComplete callback
             }
         }
 
@@ -1012,7 +960,8 @@ class RangzenService : Service() {
      * WiFi Aware provides WiFi-speed peer connections WITHOUT user confirmation dialogs.
      * It's preferred over WiFi Direct when available.
      *
-     * Downgrade logic: If WiFi Aware is not supported, we fall back to WiFi Direct.
+     * Uses message-based exchange (not NDP) for reliability across all devices.
+     * See WIFI_AWARE_MESSAGE_PLAN.md for details.
      */
     @Suppress("NewApi")
     private fun initializeWifiAware(localPublicId: String) {
@@ -1033,35 +982,88 @@ class RangzenService : Service() {
                 Timber.d("WiFi Aware: Peer lost: $sessionId")
             }
 
-            // Handle incoming data paths (we are the publisher/responder)
-            wifiAwareManager?.onIncomingConnection = { peerAddress, port ->
-                serviceScope.launch {
-                    try {
-                        val lanPeer = LanDiscoveryManager.LanPeer(
-                            ipAddress = peerAddress,
-                            port = port,
-                            deviceId = "wifi_aware_responder"
-                        )
-                        Timber.i("WiFi Aware responder: exchanging with ${peerAddress.hostAddress}")
-                        lanTransport.exchangeWithPeer(
-                            peer = lanPeer,
-                            context = this@RangzenService,
-                            messageStore = messageStore,
-                            friendStore = friendStore,
-                            transport = TelemetryEvent.TRANSPORT_WIFI_AWARE
-                        )
-                    } catch (e: Exception) {
-                        Timber.e(e, "WiFi Aware responder exchange failed")
-                    }
-                }
+            // Provider for messages to send during exchange
+            wifiAwareManager?.getMessagesToSend = {
+                prepareMessagesForWifiAwareExchange()
+            }
+
+            // Handle received messages from exchange
+            wifiAwareManager?.onMessageReceived = { peerId, messageData ->
+                handleWifiAwareMessageReceived(peerId, messageData)
+            }
+
+            // Handle exchange completion
+            wifiAwareManager?.onExchangeComplete = { peerId, result ->
+                handleWifiAwareExchangeComplete(peerId, result)
             }
 
             // Log capability info
             val summary = TransportCapabilities.getSupportedTransportsSummary(this)
-            Timber.i("WiFi Aware initialized. Device supports: $summary")
+            Timber.i("WiFi Aware initialized with message-based exchange. Device supports: $summary")
         } catch (e: Exception) {
             Timber.e(e, "Failed to initialize WiFi Aware")
             wifiAwareManager = null
+        }
+    }
+
+    /**
+     * Prepare messages for WiFi Aware message-based exchange.
+     * Converts RangzenMessages to the MessageToSend format.
+     */
+    private fun prepareMessagesForWifiAwareExchange(): List<WifiAwareExchange.MessageToSend> {
+        val maxMessages = SecurityManager.maxMessagesPerExchange(this)
+        val messages = messageStore.getMessagesForExchange(0, maxMessages)
+        val myFriends = friendStore.getAllFriendIds().size
+
+        return messages.map { msg ->
+            // Encode message as JSON
+            val encoded = LegacyExchangeCodec.encodeMessage(this, msg, 0, myFriends)
+            val data = encoded.toString().toByteArray(Charsets.UTF_8)
+
+            // Create hash from message ID for deduplication
+            val md = MessageDigest.getInstance("SHA-256")
+            val hash = md.digest(msg.messageId.toByteArray(Charsets.UTF_8)).copyOf(8)
+
+            WifiAwareExchange.MessageToSend(hash = hash, data = data)
+        }
+    }
+
+    /**
+     * Handle a message received during WiFi Aware exchange.
+     */
+    private fun handleWifiAwareMessageReceived(peerId: String, messageData: ByteArray) {
+        try {
+            val jsonStr = String(messageData, Charsets.UTF_8)
+            val json = org.json.JSONObject(jsonStr)
+            val msg = LegacyExchangeCodec.decodeMessage(json)
+
+            if (msg.text.isNullOrEmpty()) {
+                Timber.w("WiFi Aware: Received empty message from $peerId")
+                return
+            }
+
+            // Add to store - returns false if duplicate or tombstoned
+            if (messageStore.addMessage(msg)) {
+                Timber.i("WiFi Aware: Stored new message from $peerId: ${msg.text?.take(30)}...")
+            } else {
+                Timber.d("WiFi Aware: Duplicate/rejected message from $peerId: ${msg.messageId}")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "WiFi Aware: Failed to process message from $peerId")
+        }
+    }
+
+    /**
+     * Handle WiFi Aware exchange completion.
+     */
+    private fun handleWifiAwareExchangeComplete(peerId: String, result: WifiAwareExchange.ExchangeResult) {
+        if (result.success) {
+            Timber.i("WiFi Aware exchange complete with $peerId: sent=${result.messagesSent}, received=${result.messagesReceived}")
+            if (result.messagesReceived > 0) {
+                messageStore.refreshMessagesNow()
+            }
+        } else {
+            Timber.w("WiFi Aware exchange failed with $peerId: ${result.errorReason}")
         }
     }
     

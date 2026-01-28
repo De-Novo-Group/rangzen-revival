@@ -15,12 +15,10 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.RequiresApi
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 import org.denovogroup.rangzen.backend.FriendStore
 import org.denovogroup.rangzen.backend.lan.LanTransport
 import org.denovogroup.rangzen.backend.discovery.DiscoveredPeerRegistry
@@ -30,6 +28,7 @@ import org.denovogroup.rangzen.backend.telemetry.TelemetryEvent
 import timber.log.Timber
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.resume
 
 /**
  * Manager for WiFi Aware (Neighbor Awareness Networking) discovery.
@@ -114,6 +113,46 @@ class WifiAwareManager(
     // Track discovered peers by their session+handle
     private val discoveredPeers = ConcurrentHashMap<String, DiscoveredWifiAwarePeer>()
 
+    // Active message exchanges per peer (sessionId -> Exchange)
+    private val activeExchanges = ConcurrentHashMap<String, WifiAwareExchange>()
+
+    // ==================================================================================
+    // WiFi Aware PeerHandle Asymmetry - Critical Implementation Note
+    // ==================================================================================
+    //
+    // WiFi Aware has a non-obvious behavior: the PeerHandle you DISCOVER a peer with
+    // is different from the PeerHandle that incoming MESSAGES arrive from.
+    //
+    // Example flow:
+    //   1. We discover peer via onServiceDiscovered() -> PeerHandle A (e.g., nan_186)
+    //   2. We send HELLO to PeerHandle A (this works - we can only send to discovered handles)
+    //   3. Peer receives our HELLO and sends HELLO_ACK back
+    //   4. We receive HELLO_ACK from PeerHandle B (e.g., nan_188) - DIFFERENT handle!
+    //   5. Subsequent MESSAGE/ACK packets also arrive from PeerHandle B
+    //
+    // WiFi Aware restriction: sendMessage() only works with handles from discovery callbacks.
+    // Attempting to send to an "incoming" handle fails with "address didn't match/contact us".
+    //
+    // Solution: We track the mapping from incoming handles to peer publicIds, and from
+    // publicIds to exchange sessions. This allows us to route incoming messages correctly
+    // even when they arrive from different handles than we discovered.
+    //
+    // The publicId (first 8 chars of device's identity hash) is included in HELLO/HELLO_ACK
+    // payloads and remains constant for each device across handle changes.
+    // ==================================================================================
+
+    // Map publicId -> sessionId: Routes messages by peer identity regardless of handle
+    // Populated when we start an exchange (we know the peer's publicId from discovery or HELLO)
+    private val publicIdToSessionId = ConcurrentHashMap<String, String>()
+
+    // Map incoming handle hash -> publicId: Correlates incoming handles to peer identity
+    // Populated when we receive HELLO/HELLO_ACK (which contain publicId in payload)
+    // Used to route MESSAGE/MESSAGE_ACK/DONE/ERROR which don't include publicId
+    private val incomingHandleToPublicId = ConcurrentHashMap<Int, String>()
+
+    // Coroutine scope for exchanges
+    private val exchangeScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
     // Our identity for publishing
     private var localPublicId: String? = null
     private var localPort: Int = 8765  // Default exchange port
@@ -159,6 +198,17 @@ class WifiAwareManager(
     var onPeerLost: ((String) -> Unit)? = null
     /** Called when an incoming data path is established (publisher/responder side). */
     var onIncomingConnection: ((java.net.Inet6Address, Int) -> Unit)? = null
+
+    // Message exchange callbacks
+    /** Called when a message is received from a peer during exchange. */
+    var onMessageReceived: ((peerId: String, messageData: ByteArray) -> Unit)? = null
+    /** Called when a message exchange completes. */
+    var onExchangeComplete: ((peerId: String, result: WifiAwareExchange.ExchangeResult) -> Unit)? = null
+    /** Provider for messages to send during exchange. */
+    var getMessagesToSend: (() -> List<WifiAwareExchange.MessageToSend>)? = null
+
+    // Pending message send callbacks (for async sendMessage)
+    private val pendingMessageCallbacks = ConcurrentHashMap<Int, CompletableDeferred<Boolean>>()
 
     // Broadcast receiver for WiFi Aware availability changes
     private val availabilityReceiver = object : BroadcastReceiver() {
@@ -243,6 +293,16 @@ class WifiAwareManager(
 
         stopKeepalive()
         stopResponderAccept()
+
+        // Cancel all active exchanges
+        activeExchanges.values.forEach { it.cancel("Manager stopping") }
+        activeExchanges.clear()
+        publicIdToSessionId.clear()
+        incomingHandleToPublicId.clear()
+
+        // Cancel pending message callbacks
+        pendingMessageCallbacks.values.forEach { it.complete(false) }
+        pendingMessageCallbacks.clear()
 
         publishSession?.close()
         publishSession = null
@@ -411,6 +471,7 @@ class WifiAwareManager(
      */
     fun destroy() {
         stop()
+        exchangeScope.cancel()
         try {
             context.unregisterReceiver(availabilityReceiver)
         } catch (e: Exception) {
@@ -465,8 +526,15 @@ class WifiAwareManager(
         }
 
         override fun onAwareSessionTerminated() {
-            Timber.w("$TAG: WiFi Aware session terminated - clearing all peers")
+            Timber.w("$TAG: WiFi Aware session terminated - clearing all peers and exchanges")
             // Session terminated - all PeerHandles are now invalid
+            // Cancel all active exchanges
+            activeExchanges.values.forEach { it.cancel("Session terminated") }
+            activeExchanges.clear()
+            publicIdToSessionId.clear()
+            incomingHandleToPublicId.clear()
+            pendingMessageCallbacks.values.forEach { it.complete(false) }
+            pendingMessageCallbacks.clear()
             discoveredPeers.clear()
             _peerCount.value = 0
             publishSession = null
@@ -592,15 +660,12 @@ class WifiAwareManager(
             Timber.i("$TAG: Publish started")
             publishSession = session
             trackTelemetry("publish_started")
-            // Only accept incoming data paths if we have enough NDP interfaces.
-            // Responder holds an interface, so on single-interface devices
-            // this would block all initiator connections.
-            if (maxNdiInterfaces >= MIN_INTERFACES_FOR_RESPONDER) {
-                Timber.i("$TAG: Starting responder ($maxNdiInterfaces interfaces available)")
-                startResponderAccept()
-            } else {
-                Timber.i("$TAG: Skipping responder - only $maxNdiInterfaces interface(s), need $MIN_INTERFACES_FOR_RESPONDER")
-            }
+            // NDP responder disabled - using message-based exchange instead.
+            // Message exchange uses discovery layer sendMessage() which doesn't
+            // require NDP interfaces, avoiding "no interfaces available" errors
+            // and working reliably on all devices regardless of interface count.
+            // See WIFI_AWARE_MESSAGE_PLAN.md for details.
+            Timber.i("$TAG: Using message-based exchange (NDP responder disabled)")
         }
 
         override fun onSessionConfigFailed() {
@@ -611,6 +676,15 @@ class WifiAwareManager(
         override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
             // Handle incoming messages from peers
             handleIncomingMessage(peerHandle, message)
+        }
+
+        override fun onMessageSendSucceeded(messageId: Int) {
+            pendingMessageCallbacks.remove(messageId)?.complete(true)
+        }
+
+        override fun onMessageSendFailed(messageId: Int) {
+            Timber.w("$TAG: Publish message send failed for id=$messageId")
+            pendingMessageCallbacks.remove(messageId)?.complete(false)
         }
     }
 
@@ -666,6 +740,15 @@ class WifiAwareManager(
 
         override fun onServiceLost(peerHandle: PeerHandle, reason: Int) {
             handlePeerLost(peerHandle)
+        }
+
+        override fun onMessageSendSucceeded(messageId: Int) {
+            pendingMessageCallbacks.remove(messageId)?.complete(true)
+        }
+
+        override fun onMessageSendFailed(messageId: Int) {
+            Timber.w("$TAG: Subscribe message send failed for id=$messageId")
+            pendingMessageCallbacks.remove(messageId)?.complete(false)
         }
     }
 
@@ -737,6 +820,10 @@ class WifiAwareManager(
         if (peer != null) {
             Timber.i("$TAG: Lost peer: ${peer.publicIdPrefix ?: sessionId}")
             _peerCount.value = discoveredPeers.size
+
+            // Cancel any active exchange with this peer
+            activeExchanges.remove(sessionId)?.cancel("Peer lost")
+
             onPeerLost?.invoke(sessionId)
             trackTelemetry("peer_lost")
         }
@@ -744,19 +831,156 @@ class WifiAwareManager(
 
     /**
      * Handle incoming message from a peer.
+     * Routes to active exchange or creates new exchange for incoming HELLO.
+     *
+     * IMPORTANT - WiFi Aware Handle Asymmetry:
+     * The PeerHandle we receive messages FROM is different from the PeerHandle we
+     * DISCOVERED the peer with. For example:
+     *   - We discover peer via onServiceDiscovered() -> handle nan_186
+     *   - We send HELLO to nan_186
+     *   - Peer's HELLO_ACK arrives from nan_188 (different handle!)
+     *   - Subsequent MESSAGE packets also arrive from nan_188
+     *
+     * We can ONLY send to discovered handles (nan_186). Sending to incoming handles
+     * (nan_188) fails with "address didn't match/contact us" error.
+     *
+     * Routing Strategy:
+     * 1. HELLO/HELLO_ACK contain publicId in payload -> extract and record mapping
+     * 2. MESSAGE/MESSAGE_ACK/DONE/ERROR don't contain publicId -> use recorded mapping
+     *
+     * Maps used:
+     * - incomingHandleToPublicId: incoming handle -> publicId (recorded from HELLO/HELLO_ACK)
+     * - publicIdToSessionId: publicId -> sessionId (recorded when exchange starts)
+     * - activeExchanges: sessionId -> exchange instance
      */
     private fun handleIncomingMessage(peerHandle: PeerHandle, message: ByteArray) {
-        val sessionId = "nan_${peerHandle.hashCode()}"
-        Timber.d("$TAG: Received message from $sessionId: ${message.size} bytes")
+        val incomingHandleId = "nan_${peerHandle.hashCode()}"
+        Timber.d("$TAG: Received message from $incomingHandleId: ${message.size} bytes")
 
-        // Update last seen time
-        discoveredPeers[sessionId]?.lastSeen = System.currentTimeMillis()
+        // Parse the message to understand what it is
+        val protoMessage = WifiAwareMessageProtocol.ProtocolMessage.deserialize(message)
+        if (protoMessage == null) {
+            Timber.w("$TAG: Received unparseable message from $incomingHandleId, ignoring")
+            return
+        }
 
-        // TODO: Process protocol messages for exchange
+        val msgTypeName = WifiAwareMessageProtocol.messageTypeName(protoMessage.type)
+
+        // First, check if we have an active exchange that uses this exact incoming handle
+        for ((sessionId, exchange) in activeExchanges) {
+            if (exchange.peerHandle == peerHandle) {
+                Timber.d("$TAG: Routing $msgTypeName to exchange $sessionId (exact handle match)")
+                exchange.onMessage(message)
+                return
+            }
+        }
+
+        // For HELLO and HELLO_ACK, extract publicId to find matching peer/exchange
+        if (protoMessage.type == WifiAwareMessageProtocol.MessageType.HELLO ||
+            protoMessage.type == WifiAwareMessageProtocol.MessageType.HELLO_ACK) {
+
+            val helloPayload = WifiAwareMessageProtocol.HelloPayload.deserialize(protoMessage.payload)
+            if (helloPayload == null) {
+                Timber.w("$TAG: Received $msgTypeName with invalid payload from $incomingHandleId")
+                return
+            }
+
+            val peerPublicId = helloPayload.publicIdPrefix
+            Timber.i("$TAG: Received $msgTypeName from publicId=$peerPublicId (incoming handle=$incomingHandleId)")
+
+            // Track incoming handle -> publicId for routing subsequent messages (MESSAGE, ACK, DONE)
+            // that don't contain publicId in their payload
+            incomingHandleToPublicId[peerHandle.hashCode()] = peerPublicId
+
+            // Find active exchange with this peer by publicId
+            for ((sessionId, exchange) in activeExchanges) {
+                val peer = discoveredPeers[sessionId]
+                if (peer?.publicIdPrefix == peerPublicId) {
+                    Timber.d("$TAG: Routing $msgTypeName to exchange $sessionId (publicId match)")
+                    exchange.onMessage(message)
+                    return
+                }
+            }
+
+            // If HELLO_ACK with no matching exchange, log and ignore (we're not initiating to this peer)
+            if (protoMessage.type == WifiAwareMessageProtocol.MessageType.HELLO_ACK) {
+                Timber.w("$TAG: Received HELLO_ACK from $peerPublicId but no active exchange found")
+                return
+            }
+
+            // Handle new HELLO - find discovered peer and start exchange
+            handleHelloFromPeer(peerPublicId, protoMessage, message)
+            return
+        }
+
+        // For MESSAGE, MESSAGE_ACK, DONE, ERROR: These don't contain publicId in their payload.
+        // We use a two-step lookup:
+        //   1. incomingHandleToPublicId: Look up which publicId this incoming handle belongs to
+        //      (recorded when we received HELLO/HELLO_ACK from this handle earlier)
+        //   2. publicIdToSessionId: Look up which exchange session is for this publicId
+        //      (recorded when we started the exchange)
+        // This allows routing even though the incoming handle differs from the discovered handle.
+        val peerPublicId = incomingHandleToPublicId[peerHandle.hashCode()]
+        if (peerPublicId != null) {
+            val sessionId = publicIdToSessionId[peerPublicId]
+            if (sessionId != null) {
+                val exchange = activeExchanges[sessionId]
+                if (exchange != null) {
+                    Timber.d("$TAG: Routing $msgTypeName to exchange $sessionId via publicId=$peerPublicId")
+                    exchange.onMessage(message)
+                    return
+                } else {
+                    Timber.w("$TAG: Received $msgTypeName for $peerPublicId but exchange $sessionId no longer active")
+                }
+            } else {
+                Timber.w("$TAG: Received $msgTypeName from $peerPublicId but no sessionId mapping found")
+            }
+        } else {
+            Timber.w("$TAG: Received $msgTypeName from unknown handle $incomingHandleId (no publicId recorded)")
+        }
+
+        Timber.w("$TAG: Received $msgTypeName from $incomingHandleId with no matching exchange, ignoring")
     }
 
     /**
-     * Send a message to a peer.
+     * Handle a HELLO message initiating a new exchange.
+     */
+    private fun handleHelloFromPeer(peerPublicId: String, protoMessage: WifiAwareMessageProtocol.ProtocolMessage, rawMessage: ByteArray) {
+        Timber.i("$TAG: Processing HELLO from publicId=$peerPublicId")
+
+        // CRITICAL: Find the DISCOVERED peer by publicId - this is the handle we can send to
+        val discoveredPeer = discoveredPeers.values.find { it.publicIdPrefix == peerPublicId }
+        if (discoveredPeer == null) {
+            // We received a HELLO from a peer we haven't discovered yet.
+            // This can happen if they discovered us but we haven't discovered them.
+            // In this case, we can't respond because we don't have a valid outbound handle.
+            Timber.w("$TAG: Received HELLO from $peerPublicId but no discovered peer found - cannot respond")
+            return
+        }
+
+        val sessionId = discoveredPeer.sessionId
+        Timber.i("$TAG: Found discovered peer for $peerPublicId: session=$sessionId, " +
+                "discovered handle=${discoveredPeer.peerHandle.hashCode()}")
+
+        // Check if we already have an exchange for this peer
+        if (activeExchanges.containsKey(sessionId)) {
+            Timber.d("$TAG: Exchange already in progress for $sessionId, forwarding HELLO")
+            activeExchanges[sessionId]?.onMessage(rawMessage)
+            return
+        }
+
+        // Start exchange as responder using the DISCOVERED peer handle (for sending)
+        Timber.i("$TAG: Starting exchange as responder with $peerPublicId (session=$sessionId)")
+        val newExchange = createExchange(discoveredPeer, isInitiator = false)
+        activeExchanges[sessionId] = newExchange
+        // Track publicId -> sessionId for routing incoming messages
+        publicIdToSessionId[peerPublicId] = sessionId
+        newExchange.start(exchangeScope)
+        newExchange.onMessage(rawMessage)
+    }
+
+    /**
+     * Send a message to a peer (fire and forget).
      */
     fun sendMessage(sessionId: String, message: ByteArray): Boolean {
         val peer = discoveredPeers[sessionId] ?: return false
@@ -770,6 +994,153 @@ class WifiAwareManager(
             false
         }
     }
+
+    /**
+     * Send a message to a peer asynchronously with delivery confirmation.
+     * Uses message ID callback mechanism to confirm delivery.
+     */
+    suspend fun sendMessageAsync(peerHandle: PeerHandle, message: ByteArray): Boolean {
+        val session = subscribeSession ?: publishSession
+        if (session == null) {
+            Timber.w("$TAG: Cannot send message - no discovery session")
+            return false
+        }
+
+        return try {
+            val messageId = System.identityHashCode(message)
+            val deferred = CompletableDeferred<Boolean>()
+            pendingMessageCallbacks[messageId] = deferred
+
+            session.sendMessage(peerHandle, messageId, message)
+
+            // Wait for callback with timeout
+            withTimeoutOrNull(5000L) {
+                deferred.await()
+            } ?: run {
+                Timber.w("$TAG: Message send timeout for messageId=$messageId")
+                pendingMessageCallbacks.remove(messageId)
+                false
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "$TAG: Failed to send message")
+            false
+        }
+    }
+
+    /**
+     * Start a message exchange with a discovered peer.
+     *
+     * @param peer The peer to exchange with
+     * @return true if exchange was started, false if already in progress or peer not found
+     */
+    fun startExchange(peer: DiscoveredWifiAwarePeer): Boolean {
+        val sessionId = peer.sessionId
+
+        // Check if exchange already in progress
+        if (activeExchanges.containsKey(sessionId)) {
+            Timber.d("$TAG: Exchange already in progress with $sessionId")
+            return false
+        }
+
+        // Verify peer is still known
+        if (!discoveredPeers.containsKey(sessionId)) {
+            Timber.w("$TAG: Cannot start exchange - peer $sessionId not found")
+            return false
+        }
+
+        // Determine if we should initiate based on publicId comparison
+        val localId = localPublicId
+        val peerId = peer.publicIdPrefix
+        val shouldInitiate = when {
+            localId == null || peerId == null -> true  // Can't compare, just initiate
+            localId.take(8) > peerId -> true  // Higher ID initiates
+            else -> false  // Wait for peer to initiate
+        }
+
+        if (!shouldInitiate) {
+            Timber.d("$TAG: Waiting for peer $sessionId to initiate (their ID is higher)")
+            return false
+        }
+
+        Timber.i("$TAG: Starting exchange with $sessionId as initiator")
+        val exchange = createExchange(peer, isInitiator = true)
+        activeExchanges[sessionId] = exchange
+        // Track publicId -> sessionId for routing incoming messages
+        peer.publicIdPrefix?.let { publicIdToSessionId[it] = sessionId }
+        exchange.start(exchangeScope)
+
+        trackTelemetry("exchange_started", mapOf(
+            "peer_id" to (peerId ?: "unknown"),
+            "is_initiator" to "true"
+        ))
+
+        return true
+    }
+
+    /**
+     * Create a new exchange instance for a peer.
+     */
+    private fun createExchange(peer: DiscoveredWifiAwarePeer, isInitiator: Boolean): WifiAwareExchange {
+        val sessionId = peer.sessionId
+        val localId = localPublicId ?: ""
+
+        return WifiAwareExchange(
+            peerId = sessionId,
+            peerHandle = peer.peerHandle,
+            localPublicId = localId,
+            isInitiator = isInitiator,
+            sendMessage = { handle, data ->
+                sendMessageAsync(handle, data)
+            },
+            getMessagesToSend = {
+                getMessagesToSend?.invoke() ?: emptyList()
+            },
+            onMessageReceived = { messageData ->
+                onMessageReceived?.invoke(sessionId, messageData)
+            },
+            onExchangeComplete = { result ->
+                handleExchangeComplete(sessionId, result)
+            }
+        )
+    }
+
+    /**
+     * Handle exchange completion.
+     */
+    private fun handleExchangeComplete(sessionId: String, result: WifiAwareExchange.ExchangeResult) {
+        activeExchanges.remove(sessionId)
+        // Clean up publicId -> sessionId mapping and related handle mappings
+        val publicIdToRemove = publicIdToSessionId.entries.find { it.value == sessionId }?.key
+        publicIdToSessionId.entries.removeIf { it.value == sessionId }
+        if (publicIdToRemove != null) {
+            incomingHandleToPublicId.entries.removeIf { it.value == publicIdToRemove }
+        }
+
+        Timber.i("$TAG: Exchange with $sessionId completed: " +
+                "success=${result.success}, sent=${result.messagesSent}, received=${result.messagesReceived}" +
+                (result.errorReason?.let { ", error=$it" } ?: ""))
+
+        trackTelemetry(if (result.success) "exchange_success" else "exchange_failed", mapOf(
+            "peer_id" to sessionId,
+            "messages_sent" to result.messagesSent.toString(),
+            "messages_received" to result.messagesReceived.toString(),
+            "error" to (result.errorReason ?: "none")
+        ))
+
+        onExchangeComplete?.invoke(sessionId, result)
+    }
+
+    /**
+     * Check if an exchange is in progress with the given peer.
+     */
+    fun isExchangeInProgress(sessionId: String): Boolean {
+        return activeExchanges.containsKey(sessionId)
+    }
+
+    /**
+     * Get the number of active exchanges.
+     */
+    fun getActiveExchangeCount(): Int = activeExchanges.size
 
     /**
      * Parse service-specific info string.
