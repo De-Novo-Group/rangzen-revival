@@ -741,9 +741,11 @@ class LanTransport {
                         messageStore.updateTrustScore(msg.messageId, newTrust)
                     }
                 } else {
-                    // New message - add to store
-                    messageStore.addMessage(msg)
-                    received.add(msg)
+                    // New message - add to store (only count if actually added;
+                    // addMessage returns false for tombstoned/TTL-expired messages)
+                    if (messageStore.addMessage(msg)) {
+                        received.add(msg)
+                    }
                 }
             }
             

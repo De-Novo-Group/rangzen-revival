@@ -273,12 +273,14 @@ class LegacyExchangeClient(
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
             } else {
-                // New message - add to store
-                messageStore.addMessage(message)
-                newCount++
+                // New message - add to store (only count if actually added;
+                // addMessage returns false for tombstoned/TTL-expired messages)
+                if (messageStore.addMessage(message)) {
+                    newCount++
+                }
             }
         }
-        
+
         // Show notification for new messages
         if (newCount > 0) {
             Timber.i("LegacyExchangeClient: $newCount new messages received, triggering notification")
@@ -378,9 +380,11 @@ class LegacyExchangeClient(
                         messageStore.updateTrustScore(msg.messageId, msg.trustScore)
                     }
                 } else {
-                    // New message - add to store
-                    messageStore.addMessage(msg)
-                    newCount++
+                    // New message - add to store (only count if actually added;
+                    // addMessage returns false for tombstoned/TTL-expired messages)
+                    if (messageStore.addMessage(msg)) {
+                        newCount++
+                    }
                 }
             }
 
