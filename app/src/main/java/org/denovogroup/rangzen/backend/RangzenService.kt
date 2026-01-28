@@ -1322,12 +1322,39 @@ class RangzenService : Service() {
     }
 
     private fun shouldInitiateExchange(peer: DiscoveredPeer): Boolean {
-        // Fetch the local initiator identifier.
-        val localId = deviceIdForInitiator()
-        // If the ID is unavailable, default to initiating.
-        if (localId.isNullOrBlank()) return true
+        // =============================================================================
+        // Deterministic Initiator Selection for BLE Exchanges
+        // =============================================================================
+        // We need both devices to agree on who initiates the GATT connection.
+        // This is achieved by comparing the same type of identifier on both sides.
+        //
+        // When peer.publicIdPrefix is available (from BLE advertisement):
+        //   - Use DeviceIdentity (our publicId) vs peer's publicIdPrefix
+        //   - This is symmetric: both devices compare their publicId vs the other's
+        //
+        // Fallback when publicIdPrefix is not available:
+        //   - Use Android ID vs BLE MAC address (legacy behavior)
+        //   - Less reliable but prevents deadlock when ads don't include publicId
+        // =============================================================================
+
+        val localId: String
+        val peerId: String
+
+        if (!peer.publicIdPrefix.isNullOrBlank()) {
+            // Preferred: Use publicId on both sides for symmetric comparison
+            localId = DeviceIdentity.getDeviceId(this)
+            peerId = peer.publicIdPrefix
+        } else {
+            // Fallback: Use Android ID vs BLE MAC (legacy asymmetric behavior)
+            localId = deviceIdForInitiator() ?: return true
+            peerId = peer.address
+        }
+
+        // If either ID is unavailable, default to initiating to avoid deadlock.
+        if (localId.isBlank() || peerId.isBlank()) return true
+
         // Use deterministic initiator selection to avoid collisions.
-        val initiator = whichInitiates(localId, peer.address)
+        val initiator = whichInitiates(localId, peerId)
         // If initiator is unknown, allow initiation to avoid deadlock.
         if (initiator.isNullOrBlank()) return true
         var shouldInitiate = (initiator == localId)
