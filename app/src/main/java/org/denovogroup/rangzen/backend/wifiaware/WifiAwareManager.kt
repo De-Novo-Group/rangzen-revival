@@ -68,7 +68,41 @@ class WifiAwareManager(
 
         // Keepalive: re-report peers to registry so they don't go stale (30s threshold)
         const val KEEPALIVE_INTERVAL_MS = 15_000L
+
+        /**
+         * Minimum NDP (NAN Data-path) interfaces required to run responder.
+         *
+         * WiFi Aware uses NDI (NAN Data-path Interface) resources for data path connections.
+         * From AOSP HAL documentation:
+         *   - maxNdiInterfaces: "Maximum number of data interfaces (NDI) which can be
+         *     created concurrently on the device."
+         *   - maxNdpSessions: "Maximum number of data paths (NDP) which can be created
+         *     concurrently on the device, across all data interfaces (NDI)."
+         * Source: https://android.googlesource.com/platform/hardware/interfaces/+/master/wifi/1.0/types.hal
+         *
+         * Our responder calls connectivityManager.requestNetwork() which holds an NDI
+         * interface in state 101 (waiting for connections). On devices with only 1 NDI:
+         *   - Pixel 8 has maxNdiInterfaces=1 (but maxNdpSessions=8)
+         *   - Pixel 4a/5 have maxNdiInterfaces=2 (and maxNdpSessions=2)
+         *
+         * When responder holds the only interface, initiator gets "no interfaces available"
+         * error from WifiAwareDataPathStMgr.selectInterfaceForRequest().
+         *
+         * Solution: Only start responder if device has 2+ NDI interfaces. Single-interface
+         * devices can still initiate connections to multi-interface devices.
+         *
+         * References:
+         * - AOSP WiFi Aware: https://source.android.com/docs/core/connect/wifi-aware
+         * - Android Characteristics class: https://developer.android.com/reference/android/net/wifi/aware/Characteristics
+         * - WiFi HAL NanCapabilities: https://android.googlesource.com/platform/hardware/interfaces/+/master/wifi/1.0/types.hal
+         */
+        const val MIN_INTERFACES_FOR_RESPONDER = 2
     }
+
+    // Device capability info (populated after attach)
+    // See Characteristics.getNumberOfSupportedDataInterfaces() - added in API 31
+    // Source: https://learn.microsoft.com/en-us/dotnet/api/android.net.wifi.aware.characteristics
+    private var maxNdiInterfaces: Int = 0
 
     private var wifiAwareManager: android.net.wifi.aware.WifiAwareManager? = null
     private var wifiAwareSession: WifiAwareSession? = null
@@ -391,6 +425,20 @@ class WifiAwareManager(
             wifiAwareSession = session
             _isActive.value = true
 
+            // Query device capabilities to determine NDP interface count.
+            // Characteristics.getNumberOfSupportedDataInterfaces() returns max NDI count.
+            // This API was added in Android 12 (API 31).
+            // Source: https://developer.android.com/reference/android/net/wifi/aware/Characteristics
+            val characteristics = wifiAwareManager?.characteristics
+            maxNdiInterfaces = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                characteristics?.numberOfSupportedDataInterfaces ?: 0
+            } else {
+                // Pre-Android 12: assume 2 interfaces (conservative - allows responder)
+                // Most WiFi Aware devices have 2, and we can't query pre-API 31
+                2
+            }
+            Timber.i("$TAG: Device has $maxNdiInterfaces NDP interfaces (SDK=${Build.VERSION.SDK_INT})")
+
             // Clear any stale peers from previous session - PeerHandles are session-specific
             if (discoveredPeers.isNotEmpty()) {
                 Timber.w("$TAG: Clearing ${discoveredPeers.size} stale peers from previous session")
@@ -407,7 +455,7 @@ class WifiAwareManager(
             // Start keepalive to prevent discovered peers from going stale
             startKeepalive()
 
-            trackTelemetry("attached")
+            trackTelemetry("attached", mapOf("max_ndi_interfaces" to maxNdiInterfaces.toString()))
         }
 
         override fun onAttachFailed() {
@@ -544,8 +592,15 @@ class WifiAwareManager(
             Timber.i("$TAG: Publish started")
             publishSession = session
             trackTelemetry("publish_started")
-            // Accept incoming data paths from subscribers
-            startResponderAccept()
+            // Only accept incoming data paths if we have enough NDP interfaces.
+            // Responder holds an interface, so on single-interface devices
+            // this would block all initiator connections.
+            if (maxNdiInterfaces >= MIN_INTERFACES_FOR_RESPONDER) {
+                Timber.i("$TAG: Starting responder ($maxNdiInterfaces interfaces available)")
+                startResponderAccept()
+            } else {
+                Timber.i("$TAG: Skipping responder - only $maxNdiInterfaces interface(s), need $MIN_INTERFACES_FOR_RESPONDER")
+            }
         }
 
         override fun onSessionConfigFailed() {
