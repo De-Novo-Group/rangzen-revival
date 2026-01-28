@@ -224,8 +224,8 @@ class BleConnectionManager(context: Context) : BleManager(context) {
                 offset += chunkSize
             }
 
-            // Wait for response via notification - server sends complete response
-            // Response may come in multiple frames, reassemble them
+            // Wait for response via notification - server sends response in chunks
+            // We must send OP_CONTINUE to request more chunks after each notification
             val responseBuffer = java.io.ByteArrayOutputStream()
             var expectedLength = -1
             var receivedLength = 0
@@ -252,6 +252,21 @@ class BleConnectionManager(context: Context) : BleManager(context) {
                     if (receivedLength >= expectedLength) {
                         break
                     }
+
+                    // Request more data by sending OP_CONTINUE
+                    val continueFrame = TransportFrame(
+                        op = TransportProtocol.OP_CONTINUE,
+                        totalLength = expectedLength,
+                        offset = receivedLength,
+                        payload = ByteArray(0)
+                    )
+                    val continueBytes = TransportProtocol.encode(continueFrame)
+                    Log.d(LOG_TAG, "Sending OP_CONTINUE for offset=$receivedLength")
+                    writeCharacteristic(
+                        exchangeCharacteristic,
+                        continueBytes,
+                        BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    ).suspend()
                 }
 
                 val response = responseBuffer.toByteArray()
