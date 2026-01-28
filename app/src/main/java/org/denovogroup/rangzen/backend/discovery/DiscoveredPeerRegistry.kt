@@ -87,11 +87,31 @@ class DiscoveredPeerRegistry {
         bleAddress: String,
         device: BluetoothDevice,
         rssi: Int,
-        name: String? = null
+        name: String? = null,
+        publicIdPrefix: String? = null
     ) {
         val transportKey = "ble:$bleAddress"
-        val existingPeerId = addressToPeerId[transportKey]
-        
+        var existingPeerId = addressToPeerId[transportKey]
+
+        // Cross-transport correlation: if the BLE ad includes a publicId prefix,
+        // check if we already know this peer via LAN/WiFi Aware/WiFi Direct.
+        if (existingPeerId == null && publicIdPrefix != null) {
+            // Check exact match first (WiFi Aware uses 8-char prefix)
+            if (peers.containsKey(publicIdPrefix)) {
+                existingPeerId = publicIdPrefix
+            } else {
+                // Check if any known peer ID starts with this prefix
+                val match = peers.keys.firstOrNull { it.startsWith(publicIdPrefix) }
+                if (match != null) {
+                    existingPeerId = match
+                }
+            }
+            if (existingPeerId != null) {
+                addressToPeerId[transportKey] = existingPeerId
+                Timber.i("$TAG: BLE $bleAddress correlated with peer $existingPeerId via ad prefix $publicIdPrefix")
+            }
+        }
+
         val transportInfo = PeerTransportInfo(
             transport = TransportType.BLE,
             lastSeen = System.currentTimeMillis(),
@@ -99,7 +119,7 @@ class DiscoveredPeerRegistry {
             bleDevice = device,
             bleAddress = bleAddress
         )
-        
+
         if (existingPeerId != null) {
             // Update existing peer
             peers[existingPeerId]?.let { peer ->
@@ -118,11 +138,12 @@ class DiscoveredPeerRegistry {
             )
             peers[tempId] = peer
             addressToPeerId[transportKey] = tempId
-            
-            Timber.i("$TAG: New BLE peer discovered: $bleAddress")
+
+            Timber.i("$TAG: New BLE peer discovered: $bleAddress" +
+                if (publicIdPrefix != null) " (ad prefix: $publicIdPrefix)" else "")
             onPeerDiscovered?.invoke(peer)
         }
-        
+
         updatePeerList()
     }
     

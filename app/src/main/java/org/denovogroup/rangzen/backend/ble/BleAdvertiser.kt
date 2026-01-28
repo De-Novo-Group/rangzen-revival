@@ -59,6 +59,8 @@ class BleAdvertiser(private val context: Context) {
     private var bleAdvertiser: BluetoothLeAdvertiser? = null
     private var gattServer: BluetoothGattServer? = null
     var onDataReceived: ((BluetoothDevice, ByteArray) -> ByteArray?)? = null
+    /** Public ID to include in advertisement for cross-transport correlation */
+    var localPublicId: String? = null
     // Track per-device transport sessions for chunked requests.
     private val sessions = ConcurrentHashMap<String, TransportSession>()
 
@@ -429,10 +431,16 @@ class BleAdvertiser(private val context: Context) {
             .setConnectable(true)
             .build()
 
-        val data = AdvertiseData.Builder()
+        val dataBuilder = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .addServiceUuid(ParcelUuid(BleScanner.RANGZEN_SERVICE_UUID))
-            .build()
+        // Include first 4 bytes of publicId as service data for cross-transport correlation.
+        // This lets the scanner immediately know our identity without waiting for exchange.
+        localPublicId?.let { id ->
+            val idBytes = id.take(8).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            dataBuilder.addServiceData(ParcelUuid(BleScanner.RANGZEN_SERVICE_UUID), idBytes)
+        }
+        val data = dataBuilder.build()
 
         // Start BLE advertising with the configured settings.
         bleAdvertiser?.startAdvertising(settings, data, advertiseCallback)
