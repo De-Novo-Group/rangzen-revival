@@ -223,12 +223,14 @@ private class LegacyExchangeSession(
             emptyList()
         }
         stage = LegacyExchangeStage.WAIT_SERVER_MESSAGE
-        // Echo our device_id_hash and the client's exchange_id back for pairing.
+        // Echo our device_id_hash, exchange_id, and public_id back for pairing/correlation.
         val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
+        val myPublicId = org.denovogroup.rangzen.backend.DeviceIdentity.getDeviceId(context)
         return LegacyExchangeCodec.encodeClientMessage(
             emptyList(), blinded,
             deviceIdHash = myDeviceIdHash,
-            exchangeId = peerExchangeId
+            exchangeId = peerExchangeId,
+            publicId = myPublicId
         )
     }
 

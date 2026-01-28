@@ -413,28 +413,44 @@ class DiscoveredPeerRegistry {
     fun updatePeerIdAfterHandshake(transportKey: String, newPublicId: String) {
         val currentPeerId = addressToPeerId[transportKey] ?: return
         val currentPeer = peers[currentPeerId] ?: return
-        
-        // Check if a peer with this public ID already exists
-        val existingPeer = peers[newPublicId]
-        
+
+        // Check if a peer with this public ID already exists.
+        // Also check prefix matches: WiFi Aware registers with 8-char prefix,
+        // while BLE exchange provides full 16-char ID.
+        var existingPeer = peers[newPublicId]
+        var mergeTargetId = newPublicId
+        if (existingPeer == null) {
+            // Check if any existing peer ID is a prefix of newPublicId or vice versa
+            val prefixMatch = peers.entries.firstOrNull { (peerId, _) ->
+                peerId != currentPeerId && (
+                    newPublicId.startsWith(peerId) || peerId.startsWith(newPublicId)
+                )
+            }
+            if (prefixMatch != null) {
+                existingPeer = prefixMatch.value
+                mergeTargetId = prefixMatch.key
+                Timber.d("$TAG: Prefix match: $newPublicId correlates with ${prefixMatch.key}")
+            }
+        }
+
         if (existingPeer != null && existingPeer != currentPeer) {
             // Merge: move all transports from current peer to existing peer
             currentPeer.transports.forEach { (transport, info) ->
                 existingPeer.updateTransport(info)
             }
-            
+
             // Update address mappings to point to merged peer
             currentPeer.transports.forEach { (transport, info) ->
                 info.connectionId()?.let { connId ->
                     val key = "${transport.identifier()}:$connId"
-                    addressToPeerId[key] = newPublicId
+                    addressToPeerId[key] = mergeTargetId
                 }
             }
-            
+
             // Remove the old temporary peer
             peers.remove(currentPeerId)
-            
-            Timber.i("$TAG: Merged peer $currentPeerId into $newPublicId")
+
+            Timber.i("$TAG: Merged peer $currentPeerId into $mergeTargetId")
         } else {
             // Rename: update the peer's ID
             peers.remove(currentPeerId)
