@@ -431,19 +431,27 @@ class BleAdvertiser(private val context: Context) {
             .setConnectable(true)
             .build()
 
-        val dataBuilder = AdvertiseData.Builder()
+        val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
             .addServiceUuid(ParcelUuid(BleScanner.RANGZEN_SERVICE_UUID))
-        // Include first 4 bytes of publicId as service data for cross-transport correlation.
-        // This lets the scanner immediately know our identity without waiting for exchange.
-        localPublicId?.let { id ->
-            val idBytes = id.take(8).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-            dataBuilder.addServiceData(ParcelUuid(BleScanner.RANGZEN_SERVICE_UUID), idBytes)
-        }
-        val data = dataBuilder.build()
+            .build()
 
-        // Start BLE advertising with the configured settings.
-        bleAdvertiser?.startAdvertising(settings, data, advertiseCallback)
+        // Put publicId prefix in scan response (separate 31-byte payload).
+        // Can't fit in primary ad alongside 128-bit service UUID (exceeds 31 bytes).
+        val scanResponse = localPublicId?.let { id ->
+            val idBytes = id.take(8).chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            AdvertiseData.Builder()
+                .setIncludeDeviceName(false)
+                .addServiceData(ParcelUuid(BleScanner.RANGZEN_SERVICE_UUID), idBytes)
+                .build()
+        }
+
+        // Start BLE advertising with scan response containing publicId prefix.
+        if (scanResponse != null) {
+            bleAdvertiser?.startAdvertising(settings, data, scanResponse, advertiseCallback)
+        } else {
+            bleAdvertiser?.startAdvertising(settings, data, advertiseCallback)
+        }
     }
 
     @SuppressLint("MissingPermission")
