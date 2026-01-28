@@ -246,12 +246,26 @@ class WifiAwareManager(
             return@withContext null
         }
 
+        // Validate peer is still in our discovered list (not stale from previous session)
+        val currentPeer = discoveredPeers[peer.sessionId]
+        if (currentPeer == null) {
+            Timber.w("$TAG: Peer ${peer.sessionId} not in discovered list - may be stale")
+            return@withContext null
+        }
+        if (currentPeer.peerHandle !== peer.peerHandle) {
+            Timber.w("$TAG: Peer ${peer.sessionId} PeerHandle mismatch - using stale handle")
+            return@withContext null
+        }
+
         try {
+            val discoverySession = subscribeSession ?: publishSession
+            if (discoverySession == null) {
+                Timber.w("$TAG: Cannot request network - no discovery session")
+                return@withContext null
+            }
+
             val specifier = WifiAwareNetworkSpecifier.Builder(
-                subscribeSession ?: publishSession ?: run {
-                    Timber.w("$TAG: Cannot request network - no discovery session")
-                    return@withContext null
-                },
+                discoverySession,
                 peer.peerHandle
             ).build()
 
@@ -377,6 +391,13 @@ class WifiAwareManager(
             wifiAwareSession = session
             _isActive.value = true
 
+            // Clear any stale peers from previous session - PeerHandles are session-specific
+            if (discoveredPeers.isNotEmpty()) {
+                Timber.w("$TAG: Clearing ${discoveredPeers.size} stale peers from previous session")
+                discoveredPeers.clear()
+                _peerCount.value = 0
+            }
+
             // Start publishing our service
             startPublish()
 
@@ -393,6 +414,18 @@ class WifiAwareManager(
             Timber.e("$TAG: Failed to attach to WiFi Aware")
             _isActive.value = false
             trackTelemetry("attach_failed")
+        }
+
+        override fun onAwareSessionTerminated() {
+            Timber.w("$TAG: WiFi Aware session terminated - clearing all peers")
+            // Session terminated - all PeerHandles are now invalid
+            discoveredPeers.clear()
+            _peerCount.value = 0
+            publishSession = null
+            subscribeSession = null
+            wifiAwareSession = null
+            _isActive.value = false
+            trackTelemetry("session_terminated")
         }
     }
 
