@@ -110,9 +110,11 @@ class LegacyExchangeServer(
                             messageStore.updateTrustScore(msg.messageId, msg.trustScore)
                         }
                     } else {
-                        // New message - add to store
-                        messageStore.addMessage(msg)
-                        count++
+                        // New message - add to store (only count if actually added;
+                        // addMessage returns false for tombstoned/TTL-expired messages)
+                        if (messageStore.addMessage(msg)) {
+                            count++
+                        }
                     }
                 }
                 count
@@ -369,9 +371,11 @@ private class LegacyExchangeSession(
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
             } else if (message.text != null && message.text.isNotEmpty()) {
-                // New message - add to store
-                messageStore.addMessage(message)
-                newCount++
+                // New message - add to store (only count if actually added;
+                // addMessage returns false for tombstoned/TTL-expired messages)
+                if (messageStore.addMessage(message)) {
+                    newCount++
+                }
             }
         }
         
