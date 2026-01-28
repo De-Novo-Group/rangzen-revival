@@ -667,7 +667,9 @@ class LanTransport {
                         hopCount = msg.hopCount,
                         trustScore = msg.trustScore,
                         priority = msg.priority,
-                        ageMs = System.currentTimeMillis() - msg.timestamp
+                        ageMs = System.currentTimeMillis() - msg.timestamp,
+                        text = msg.text,
+                        authorPseudonym = msg.pseudonym
                     )
                 }
                 val encoded = LegacyExchangeCodec.encodeMessage(context, msg, commonFriends, myFriends)
@@ -717,7 +719,9 @@ class LanTransport {
                         hopCount = msg.hopCount,
                         trustScore = msg.trustScore,
                         priority = msg.priority,
-                        isNew = isNew
+                        isNew = isNew,
+                        text = msg.text,
+                        authorPseudonym = msg.pseudonym
                     )
                 }
 

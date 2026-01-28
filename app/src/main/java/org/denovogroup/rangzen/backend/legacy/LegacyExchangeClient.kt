@@ -171,7 +171,9 @@ class LegacyExchangeClient(
                             priority = msg.priority,
                             ageMs = System.currentTimeMillis() - msg.timestamp,
                             textLength = msg.text?.length ?: 0,
-                            localFriendCount = myFriends
+                            localFriendCount = myFriends,
+                            text = msg.text,
+                            authorPseudonym = msg.pseudonym
                         )
                         exchangeCtx.messagesSent++
                         // Pass shared friend context for per-peer trust computation.
@@ -198,7 +200,9 @@ class LegacyExchangeClient(
                             priority = msg.priority,
                             isNew = isNew,
                             textLength = msg.text?.length ?: 0,
-                            localFriendCount = myFriends
+                            localFriendCount = myFriends,
+                            text = msg.text,
+                            authorPseudonym = msg.pseudonym
                         )
                         exchangeCtx.messagesReceived++
                         receivedMessages.add(msg)
@@ -315,7 +319,9 @@ class LegacyExchangeClient(
                         hopCount = msg.hopCount,
                         trustScore = msg.trustScore,
                         priority = msg.priority,
-                        ageMs = System.currentTimeMillis() - msg.timestamp
+                        ageMs = System.currentTimeMillis() - msg.timestamp,
+                        text = msg.text,
+                        authorPseudonym = msg.pseudonym
                     )
                 }
                 val encoded = LegacyExchangeCodec.encodeMessage(context, msg, 0, myFriends)
@@ -355,7 +361,9 @@ class LegacyExchangeClient(
                         hopCount = msg.hopCount,
                         trustScore = msg.trustScore,
                         priority = msg.priority,
-                        isNew = isNew
+                        isNew = isNew,
+                        text = msg.text,
+                        authorPseudonym = msg.pseudonym
                     )
                 }
 

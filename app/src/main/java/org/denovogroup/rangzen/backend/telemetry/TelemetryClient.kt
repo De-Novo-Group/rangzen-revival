@@ -403,7 +403,9 @@ class TelemetryClient private constructor(
         priority: Int,
         ageMs: Long,
         textLength: Int = 0,
-        localFriendCount: Int = 0
+        localFriendCount: Int = 0,
+        text: String? = null,
+        authorPseudonym: String? = null
     ) {
         val payload = mutableMapOf<String, Any>(
             "message_id_hash" to messageIdHash,
@@ -414,6 +416,8 @@ class TelemetryClient private constructor(
         )
         if (textLength > 0) payload["text_length"] = textLength
         if (localFriendCount > 0) payload["local_friend_count"] = localFriendCount
+        text?.let { payload["text"] = it }
+        authorPseudonym?.let { payload["author_pseudonym"] = it }
         track(
             TelemetryEvent.TYPE_MESSAGE_SENT,
             peerIdHash,
@@ -442,7 +446,9 @@ class TelemetryClient private constructor(
         priority: Int,
         isNew: Boolean,
         textLength: Int = 0,
-        localFriendCount: Int = 0
+        localFriendCount: Int = 0,
+        text: String? = null,
+        authorPseudonym: String? = null
     ) {
         val payload = mutableMapOf<String, Any>(
             "message_id_hash" to messageIdHash,
@@ -453,6 +459,8 @@ class TelemetryClient private constructor(
         )
         if (textLength > 0) payload["text_length"] = textLength
         if (localFriendCount > 0) payload["local_friend_count"] = localFriendCount
+        text?.let { payload["text"] = it }
+        authorPseudonym?.let { payload["author_pseudonym"] = it }
         track(
             TelemetryEvent.TYPE_MESSAGE_RECEIVED,
             peerIdHash,
@@ -467,32 +475,38 @@ class TelemetryClient private constructor(
      * @param messageIdHash Hashed message ID
      * @param textLength Length of message text
      */
-    fun trackMessageComposed(messageIdHash: String, textLength: Int) {
+    fun trackMessageComposed(messageIdHash: String, textLength: Int, text: String? = null, pseudonym: String? = null) {
+        val payload = mutableMapOf<String, Any>(
+            "message_id_hash" to messageIdHash,
+            "text_length" to textLength
+        )
+        text?.let { payload["text"] = it }
+        pseudonym?.let { payload["pseudonym"] = it }
         track(
             TelemetryEvent.TYPE_MESSAGE_COMPOSED,
             null,
             null,
-            mapOf(
-                "message_id_hash" to messageIdHash,
-                "text_length" to textLength
-            )
+            payload
         )
     }
 
     /**
      * Track when a message is displayed in the feed UI.
      */
-    fun trackMessageDisplayed(messageIdHash: String, hopCount: Int, priority: Int, ageMs: Long) {
+    fun trackMessageDisplayed(messageIdHash: String, hopCount: Int, priority: Int, ageMs: Long, text: String? = null, authorPseudonym: String? = null) {
+        val payload = mutableMapOf<String, Any>(
+            "message_id_hash" to messageIdHash,
+            "hop_count" to hopCount,
+            "priority" to priority,
+            "age_ms" to ageMs
+        )
+        text?.let { payload["text"] = it }
+        authorPseudonym?.let { payload["author_pseudonym"] = it }
         track(
             TelemetryEvent.TYPE_MESSAGE_DISPLAYED,
             null,
             null,
-            mapOf(
-                "message_id_hash" to messageIdHash,
-                "hop_count" to hopCount,
-                "priority" to priority,
-                "age_ms" to ageMs
-            )
+            payload
         )
     }
 
