@@ -1423,6 +1423,7 @@ class RangzenService : Service() {
         registryCleanupJob?.cancel()
         peerSnapshotJob?.cancel()
         stopBleOperations()
+        wifiAwareManager?.destroy()
         wifiDirectManager.cleanup()
         lanDiscoveryManager.cleanup()
         nsdDiscoveryManager.cleanup()
