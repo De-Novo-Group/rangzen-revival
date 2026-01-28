@@ -11,8 +11,8 @@ android {
         applicationId "org.denovogroup.rangzen"
         minSdk 26
         targetSdk 35
-        versionCode 92
-        versionName "0.2.92"
+        versionCode 93
+        versionName "0.2.93"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
