@@ -36,9 +36,45 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 
 /**
+ * Diagnostics captured during a single BLE GATT exchange.
+ * Populated by [BleScanner.exchange] for post-exchange telemetry.
+ */
+data class GattExchangeDiagnostics(
+    var connected: Boolean = false,
+    var mtuNegotiated: Int? = null,
+    var servicesDiscovered: Boolean = false,
+    var characteristicFound: Boolean = false,
+    var cccdWritten: Boolean = false,
+    var firstWriteSent: Boolean = false,
+    var firstNotificationReceived: Boolean = false,
+    var disconnectStatus: Int? = null,
+    var failureReason: String? = null
+) {
+    fun toMap(): Map<String, Any> {
+        val map = mutableMapOf<String, Any>(
+            "connected" to connected,
+            "svc_discovered" to servicesDiscovered,
+            "char_found" to characteristicFound,
+            "cccd_written" to cccdWritten,
+            "first_write" to firstWriteSent,
+            "first_notify" to firstNotificationReceived
+        )
+        mtuNegotiated?.let { map["mtu"] = it }
+        disconnectStatus?.let { map["disconnect_status"] = it }
+        failureReason?.let { map["failure_reason"] = it }
+        return map
+    }
+}
+
+/**
  * BLE Scanner for discovering nearby Rangzen peers.
  */
 class BleScanner(private val context: Context) {
+
+    /** Diagnostics from the most recent [exchange] call. */
+    @Volatile
+    var lastExchangeDiagnostics: GattExchangeDiagnostics? = null
+        private set
 
     companion object {
         val RANGZEN_SERVICE_UUID: UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
@@ -189,6 +225,8 @@ class BleScanner(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     suspend fun exchange(peer: DiscoveredPeer, data: ByteArray): ByteArray? = suspendCancellableCoroutine { continuation ->
+        val diag = GattExchangeDiagnostics()
+        lastExchangeDiagnostics = diag
         var responded = false
         // Track if we already issued a read to avoid duplicates.
         var readTriggered = false
@@ -580,6 +618,7 @@ class BleScanner(private val context: Context) {
                 // Trace connection state transitions and status codes.
                 Timber.i("GATT connection state change: status=$status newState=$newState device=${peer.address}")
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    diag.connected = true
                     // Store active GATT connection for fallback reads.
                     activeGatt = gatt
                     // Initialize chunk size before MTU negotiation.
@@ -595,6 +634,8 @@ class BleScanner(private val context: Context) {
                         requestServicesOnce(gatt)
                     }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    diag.disconnectStatus = status
+                    if (!responded) diag.failureReason = "disconnected_status_$status"
                     // Cancel any pending fallback when disconnected.
                     handler.removeCallbacks(readFallbackRunnable)
                     // Cancel any scheduled request start when disconnected.
@@ -612,6 +653,7 @@ class BleScanner(private val context: Context) {
             override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
                 Timber.i("GATT MTU changed: mtu=$mtu status=$status device=${peer.address}")
                 Log.i(LOG_TAG, "GATT MTU changed: mtu=$mtu status=$status device=${peer.address}")
+                diag.mtuNegotiated = mtu
                 // Track the negotiated MTU and update chunk size.
                 negotiatedMtu = mtu
                 updateChunkSize(negotiatedMtu)
@@ -623,9 +665,11 @@ class BleScanner(private val context: Context) {
                 Timber.i("GATT services discovered: status=$status device=${peer.address}")
                 // Also log to Android Log to ensure visibility.
                 Log.i(LOG_TAG, "GATT services discovered: status=$status device=${peer.address}")
+                diag.servicesDiscovered = (status == BluetoothGatt.GATT_SUCCESS)
                 val service = gatt.getService(RANGZEN_SERVICE_UUID)
                 val characteristic = service?.getCharacteristic(BleAdvertiser.RANGZEN_CHARACTERISTIC_UUID)
                 if (characteristic != null) {
+                    diag.characteristicFound = true
                     // Store the characteristic for fallback usage.
                     exchangeCharacteristic = characteristic
                     // Fetch the CCCD descriptor for notifications.
@@ -689,6 +733,7 @@ class BleScanner(private val context: Context) {
                 // Mark write as complete.
                 writeInProgress = false
                 if (status == BluetoothGatt.GATT_SUCCESS) {
+                    diag.firstWriteSent = true
                     // Do not issue an immediate read here.
                     // We rely on notifications for responses to avoid reading stale values.
                     // Allow the fallback read to fire only if notifications never arrive.
@@ -721,6 +766,7 @@ class BleScanner(private val context: Context) {
                 }
                 // Only proceed if this is the CCCD we wrote.
                 if (descriptor.uuid == CCCD_UUID) {
+                    diag.cccdWritten = true
                     // Mark CCCD as acknowledged to stop fallback.
                     cccdWriteAcknowledged = true
                     // Cancel any pending CCCD fallback since we got a callback.
@@ -737,6 +783,7 @@ class BleScanner(private val context: Context) {
                 // Log notification receipt for debugging.
                 Timber.i("GATT notification received uuid=${characteristic.uuid}")
                 Log.i(LOG_TAG, "GATT notification received uuid=${characteristic.uuid}")
+                diag.firstNotificationReceived = true
                 // Cancel any pending fallback since we got a response.
                 handler.removeCallbacks(readFallbackRunnable)
                 // Handle the transport response using the notification payload.
