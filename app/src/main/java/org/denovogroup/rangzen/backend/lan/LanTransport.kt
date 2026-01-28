@@ -354,16 +354,17 @@ class LanTransport {
         context: Context,
         messageStore: MessageStore,
         friendStore: FriendStore,
-        location: org.denovogroup.rangzen.backend.telemetry.LocationHelper.LocationData? = null
+        location: org.denovogroup.rangzen.backend.telemetry.LocationHelper.LocationData? = null,
+        transport: String = TelemetryEvent.TRANSPORT_WLAN
     ): ExchangeResult {
         // Prevent concurrent exchanges
         if (!exchangeInProgress.compareAndSet(false, true)) {
             Timber.w("LAN exchange already in progress, skipping")
             return ExchangeResult(false, 0, 0, "Exchange in progress")
         }
-        
+
         try {
-            return doExchange(peer, context, messageStore, friendStore, location)
+            return doExchange(peer, context, messageStore, friendStore, location, transport)
         } finally {
             exchangeInProgress.set(false)
         }
@@ -377,10 +378,11 @@ class LanTransport {
         context: Context,
         messageStore: MessageStore,
         friendStore: FriendStore,
-        location: org.denovogroup.rangzen.backend.telemetry.LocationHelper.LocationData? = null
+        location: org.denovogroup.rangzen.backend.telemetry.LocationHelper.LocationData? = null,
+        transport: String = TelemetryEvent.TRANSPORT_WLAN
     ): ExchangeResult = withContext(Dispatchers.IO) {
         val peerIdHash = peer.deviceId.take(16)
-        val exchangeCtx = ExchangeContext.create(TelemetryEvent.TRANSPORT_WLAN, peerIdHash, context)
+        val exchangeCtx = ExchangeContext.create(transport, peerIdHash, context)
         exchangeCtx.location = location
         var socket: Socket? = null
 
@@ -517,7 +519,7 @@ class LanTransport {
             exchangeCtx.advanceStage(ExchangeStage.SENDING_MESSAGES)
 
             // Step 9: Send our messages
-            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends, peerIdHash)
+            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends, peerIdHash, transport)
             val messagesSent = try {
                 val json = JSONObject(outgoingData)
                 json.optInt("message_count", 0)
@@ -535,7 +537,8 @@ class LanTransport {
                 messageStore,
                 friendStore,
                 commonFriends,
-                peerIdHash
+                peerIdHash,
+                transport
             )
             exchangeCtx.messagesReceived = receivedMessages.size
 
@@ -646,7 +649,8 @@ class LanTransport {
         messageStore: MessageStore,
         friendStore: FriendStore,
         commonFriends: Int,
-        peerIdHash: String? = null
+        peerIdHash: String? = null,
+        transport: String = TelemetryEvent.TRANSPORT_WLAN
     ): String {
         val maxMessages = SecurityManager.maxMessagesPerExchange(context)
         val messages = messageStore.getMessagesForExchange(commonFriends, maxMessages)
@@ -662,7 +666,7 @@ class LanTransport {
                 if (peerIdHash != null) {
                     TelemetryClient.getInstance()?.trackMessageSent(
                         peerIdHash = peerIdHash,
-                        transport = TelemetryEvent.TRANSPORT_WLAN,
+                        transport = transport,
                         messageIdHash = sha256(msg.messageId),
                         hopCount = msg.hopCount,
                         trustScore = msg.trustScore,
@@ -689,7 +693,8 @@ class LanTransport {
         messageStore: MessageStore,
         friendStore: FriendStore,
         commonFriends: Int,
-        peerIdHash: String? = null
+        peerIdHash: String? = null,
+        transport: String = TelemetryEvent.TRANSPORT_WLAN
     ): List<RangzenMessage> {
         return try {
             val json = JSONObject(data)
@@ -714,7 +719,7 @@ class LanTransport {
                 if (peerIdHash != null) {
                     TelemetryClient.getInstance()?.trackMessageReceived(
                         peerIdHash = peerIdHash,
-                        transport = TelemetryEvent.TRANSPORT_WLAN,
+                        transport = transport,
                         messageIdHash = sha256(msg.messageId),
                         hopCount = msg.hopCount,
                         trustScore = msg.trustScore,

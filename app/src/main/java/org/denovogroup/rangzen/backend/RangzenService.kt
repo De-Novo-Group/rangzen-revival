@@ -537,13 +537,14 @@ class RangzenService : Service() {
             }
         val allNetworkPeers = lanPeers + nsdOnlyPeers
         
-        val totalPeers = allNetworkPeers.size + wifiDirectPeers.size
+        val wifiAwarePeerCount = wifiAwareManager?.getDiscoveredPeers()?.size ?: 0
+        val totalPeers = allNetworkPeers.size + wifiDirectPeers.size + wifiAwarePeerCount
         if (totalPeers == 0) {
             return
         }
-        
+
         Timber.i("PARALLEL EXCHANGE: Found $totalPeers peers " +
-            "(${lanPeers.size} LAN, ${nsdOnlyPeers.size} NSD, ${wifiDirectPeers.size} WiFi Direct)")
+            "(${lanPeers.size} LAN, ${nsdOnlyPeers.size} NSD, ${wifiDirectPeers.size} WiFi Direct, $wifiAwarePeerCount WiFi Aware)")
         
         // Fetch location for QA telemetry (only if enabled)
         val location = if (TelemetryClient.getInstance()?.isEnabled() == true) {
@@ -640,9 +641,73 @@ class RangzenService : Service() {
             }
         }
         
+        // =====================================================================
+        // WiFi Aware Exchanges (infrastructure-free, no user dialogs)
+        // =====================================================================
+        // WiFi Aware discovered peers get a dedicated data path for TCP exchange.
+        // Skip peers already exchanged via LAN (same device ID).
+        // =====================================================================
+        val lanDeviceIds = allNetworkPeers.map { it.deviceId }.toSet()
+        val awarePeers = wifiAwareManager?.getDiscoveredPeers() ?: emptyList()
+
+        if (awarePeers.isNotEmpty() && !lanTransport.isExchangeInProgress()) {
+            for (awarePeer in awarePeers) {
+                // Deduplicate: skip if we already have a LAN path to this peer
+                val peerDeviceId = awarePeer.publicIdPrefix
+                if (peerDeviceId != null && lanDeviceIds.any { it.startsWith(peerDeviceId) }) {
+                    Timber.d("PARALLEL: Skipping WiFi Aware peer ${peerDeviceId} - already reachable via LAN")
+                    continue
+                }
+
+                val job = serviceScope.launch {
+                    var networkInfo: org.denovogroup.rangzen.backend.wifiaware.WifiAwareNetworkInfo? = null
+                    try {
+                        Timber.i("PARALLEL: Requesting WiFi Aware network for ${awarePeer.sessionId}")
+                        networkInfo = wifiAwareManager?.requestNetworkForPeer(awarePeer)
+
+                        if (networkInfo == null) {
+                            Timber.w("PARALLEL: WiFi Aware network request failed for ${awarePeer.sessionId}")
+                            return@launch
+                        }
+
+                        // Create a LanPeer from the WiFi Aware network info
+                        val lanPeer = LanDiscoveryManager.LanPeer(
+                            deviceId = awarePeer.publicIdPrefix ?: awarePeer.sessionId,
+                            ipAddress = networkInfo.peerAddress,
+                            port = networkInfo.port,
+                            lastSeen = System.currentTimeMillis()
+                        )
+
+                        val result = lanTransport.exchangeWithPeer(
+                            peer = lanPeer,
+                            context = this@RangzenService,
+                            messageStore = messageStore,
+                            friendStore = friendStore,
+                            location = location,
+                            transport = TelemetryEvent.TRANSPORT_WIFI_AWARE
+                        )
+
+                        if (result.success) {
+                            Timber.i("PARALLEL: WiFi Aware exchange complete with ${awarePeer.sessionId}: " +
+                                "sent=${result.messagesSent}, received=${result.messagesReceived}")
+
+                            if (result.messagesReceived > 0) {
+                                messageStore.refreshMessagesNow()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "PARALLEL: WiFi Aware exchange failed with ${awarePeer.sessionId}")
+                    } finally {
+                        networkInfo?.let { wifiAwareManager?.releaseNetwork(it) }
+                    }
+                }
+                allJobs.add(job)
+            }
+        }
+
         // Note: BLE exchanges are handled by the separate exchange loop (performExchangeCycle)
         // which runs independently and concurrently with this loop.
-        // This means BLE, LAN, and WiFi Direct exchanges can happen in TRUE parallel.
+        // This means BLE, LAN, WiFi Aware, and WiFi Direct exchanges can happen in TRUE parallel.
         
         // Wait for all exchanges to complete (or timeout)
         if (allJobs.isNotEmpty()) {
