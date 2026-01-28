@@ -835,6 +835,15 @@ class BleScanner(private val context: Context) {
 
             // Log when publicIdPrefix is missing - helps diagnose scan response issues
             if (publicIdPrefix == null && !discoveredPeers.containsKey(result.device.address)) {
+                // Log ALL service data to diagnose what's actually in the scan response
+                val allServiceData = result.scanRecord?.serviceData
+                val allServiceDataStr = allServiceData?.entries?.joinToString("; ") { (uuid, data) ->
+                    "${uuid.uuid}=${data?.size ?: 0}bytes"
+                } ?: "none"
+                Log.w(LOG_TAG, "BLE peer ${result.device.address} has no publicIdPrefix. " +
+                    "serviceData for our UUID=${serviceData?.size ?: "null"} bytes, " +
+                    "allServiceData=[$allServiceDataStr], " +
+                    "bytes=${result.scanRecord?.bytes?.size ?: 0}")
                 Timber.w("BLE peer ${result.device.address} has no publicIdPrefix in scan response (serviceData=${serviceData?.size ?: "null"} bytes)")
             }
 
