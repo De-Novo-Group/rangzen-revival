@@ -80,6 +80,11 @@ data class TelemetryEvent(
         // Priority distribution (hearts integration)
         const val TYPE_PRIORITY_DISTRIBUTION = "priority_distribution"
 
+        // Phase 3: New event types for research dashboard
+        const val TYPE_MESSAGE_DISPLAYED = "message_displayed"
+        const val TYPE_MESSAGE_EXPIRED = "message_expired"
+        const val TYPE_NODE_PROFILE = "node_profile"
+
         // Transport identifiers (match dashboard expectations)
         const val TRANSPORT_BLE = "bt-le"
         const val TRANSPORT_WIFI_DIRECT = "wifi-direct"

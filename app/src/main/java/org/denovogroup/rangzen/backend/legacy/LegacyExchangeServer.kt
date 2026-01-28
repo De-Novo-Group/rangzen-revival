@@ -25,7 +25,8 @@ import java.util.concurrent.ConcurrentHashMap
 class LegacyExchangeServer(
     private val context: Context,
     private val friendStore: FriendStore,
-    private val messageStore: MessageStore
+    private val messageStore: MessageStore,
+    private val transport: String = TelemetryEvent.TRANSPORT_BLE
 ) {
 
     private val sessions = ConcurrentHashMap<String, LegacyExchangeSession>()
@@ -55,7 +56,8 @@ class LegacyExchangeServer(
                 context = context,
                 friendStore = friendStore,
                 messageStore = messageStore,
-                address = address
+                address = address,
+                transport = transport
             )
         }
     }
@@ -165,7 +167,8 @@ private class LegacyExchangeSession(
     private val context: Context,
     private val friendStore: FriendStore,
     private val messageStore: MessageStore,
-    private val address: String
+    private val address: String,
+    private val transport: String = TelemetryEvent.TRANSPORT_BLE
 ) {
 
     var lastActivityMs: Long = System.currentTimeMillis()
@@ -174,6 +177,11 @@ private class LegacyExchangeSession(
     private var serverPSI: Crypto.PrivateSetIntersection? = null
     private var remoteBlindedFriends: List<ByteArray> = emptyList()
     private var commonFriends: Int = 0
+    // Identity contract: peer's device_id_hash and exchange_id from the handshake.
+    var peerDeviceIdHash: String? = null
+        private set
+    var peerExchangeId: String? = null
+        private set
     private var expectedMessages: Int = 0
     private var receivedMessages: Int = 0
     private var outgoingMessages: List<RangzenMessage> = emptyList()
@@ -194,6 +202,10 @@ private class LegacyExchangeSession(
         val clientMessage = LegacyExchangeCodec.decodeClientMessage(json)
         remoteBlindedFriends = if (useTrust) clientMessage.blindedFriends else emptyList()
 
+        // Identity contract: capture the client's device_id_hash and exchange_id.
+        peerDeviceIdHash = clientMessage.deviceIdHash
+        peerExchangeId = clientMessage.exchangeId
+
         val localFriends = friendStore.getAllFriendIds()
         // Paper-aligned: Include our own public ID in the PSI input.
         // This makes direct friends count as "mutual friends" in the trust computation.
@@ -209,7 +221,13 @@ private class LegacyExchangeSession(
             emptyList()
         }
         stage = LegacyExchangeStage.WAIT_SERVER_MESSAGE
-        return LegacyExchangeCodec.encodeClientMessage(emptyList(), blinded)
+        // Echo our device_id_hash and the client's exchange_id back for pairing.
+        val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
+        return LegacyExchangeCodec.encodeClientMessage(
+            emptyList(), blinded,
+            deviceIdHash = myDeviceIdHash,
+            exchangeId = peerExchangeId
+        )
     }
 
     private fun handleServerMessage(json: JSONObject): JSONObject {
@@ -267,12 +285,14 @@ private class LegacyExchangeSession(
                 // Track message received
                 TelemetryClient.getInstance()?.trackMessageReceived(
                     peerIdHash = peerIdHash,
-                    transport = TelemetryEvent.TRANSPORT_BLE,
+                    transport = transport,
                     messageIdHash = sha256(msg.messageId),
                     hopCount = msg.hopCount,
                     trustScore = msg.trustScore,
                     priority = msg.priority,
-                    isNew = isNew
+                    isNew = isNew,
+                    textLength = msg.text?.length ?: 0,
+                    localFriendCount = friendStore.getAllFriendIds().size
                 )
                 incoming.add(msg)
             }
@@ -288,12 +308,14 @@ private class LegacyExchangeSession(
             // Track message sent
             TelemetryClient.getInstance()?.trackMessageSent(
                 peerIdHash = peerIdHash,
-                transport = TelemetryEvent.TRANSPORT_BLE,
+                transport = transport,
                 messageIdHash = sha256(msg.messageId),
                 hopCount = msg.hopCount,
                 trustScore = msg.trustScore,
                 priority = msg.priority,
-                ageMs = System.currentTimeMillis() - msg.timestamp
+                ageMs = System.currentTimeMillis() - msg.timestamp,
+                textLength = msg.text?.length ?: 0,
+                localFriendCount = myFriends
             )
             // Pass shared friend context for per-peer trust computation.
             val messageJson = LegacyExchangeCodec.encodeMessage(

@@ -60,7 +60,12 @@ object LegacyExchangeCodec {
         return json.optInt(MESSAGE_COUNT_KEY, 0)
     }
 
-    fun encodeClientMessage(messages: List<JSONObject>, blindedFriends: List<ByteArray>): JSONObject {
+    fun encodeClientMessage(
+        messages: List<JSONObject>,
+        blindedFriends: List<ByteArray>,
+        deviceIdHash: String? = null,
+        exchangeId: String? = null
+    ): JSONObject {
         val messagesArray = JSONArray()
         for (message in messages) {
             messagesArray.put(message)
@@ -69,9 +74,14 @@ object LegacyExchangeCodec {
         for (friend in blindedFriends) {
             friendsArray.put(Base64.encodeToString(friend, Base64.NO_WRAP))
         }
-        return JSONObject()
+        val json = JSONObject()
             .put("messages", messagesArray)
             .put("friends", friendsArray)
+        // Identity contract: include device_id_hash and exchange_id when available.
+        // These are optional for backwards compatibility with older peers.
+        deviceIdHash?.let { json.put("device_id_hash", it) }
+        exchangeId?.let { json.put("exchange_id", it) }
+        return json
     }
 
     fun decodeClientMessage(json: JSONObject): LegacyClientMessage {
@@ -87,7 +97,10 @@ object LegacyExchangeCodec {
             val base64 = friendsArray.getString(i)
             friends.add(Base64.decode(base64, Base64.NO_WRAP))
         }
-        return LegacyClientMessage(messages, friends)
+        // Identity contract: extract device_id_hash and exchange_id if present.
+        val deviceIdHash = json.optString("device_id_hash", null)
+        val exchangeId = json.optString("exchange_id", null)
+        return LegacyClientMessage(messages, friends, deviceIdHash, exchangeId)
     }
 
     fun encodeServerMessage(doubleBlinded: List<ByteArray>, hashedBlinded: List<ByteArray>): JSONObject {
@@ -166,7 +179,11 @@ object LegacyExchangeCodec {
 
 data class LegacyClientMessage(
     val messages: List<JSONObject>,
-    val blindedFriends: List<ByteArray>
+    val blindedFriends: List<ByteArray>,
+    /** Peer's device_id_hash (null if peer is on older version). */
+    val deviceIdHash: String? = null,
+    /** Shared exchange_id for pairing events (null if peer is on older version). */
+    val exchangeId: String? = null
 )
 
 data class LegacyServerMessage(

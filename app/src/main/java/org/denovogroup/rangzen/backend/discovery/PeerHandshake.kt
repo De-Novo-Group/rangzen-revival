@@ -41,6 +41,8 @@ object PeerHandshake {
     private const val KEY_DISCOVERY_TOKENS = "dt"
     private const val KEY_TRANSPORTS = "tr"
     private const val KEY_TIMESTAMP = "ts"
+    private const val KEY_DEVICE_ID_HASH = "dih"
+    private const val KEY_EXCHANGE_ID = "xid"
     
     /** Nonce size in bytes */
     private const val NONCE_SIZE = 8
@@ -56,7 +58,11 @@ object PeerHandshake {
         val nonce: ByteArray,
         val discoveryTokens: List<String>,
         val availableTransports: List<String>,
-        val timestamp: Long
+        val timestamp: Long,
+        /** Identity contract: device_id_hash for consistent cross-transport identity. */
+        val deviceIdHash: String? = null,
+        /** Exchange pairing: shared exchange_id so both peers emit the same ID. */
+        val exchangeId: String? = null
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -117,18 +123,22 @@ object PeerHandshake {
     fun createHandshake(
         publicId: String,
         discoveryTokens: List<String> = emptyList(),
-        availableTransports: List<TransportType> = emptyList()
+        availableTransports: List<TransportType> = emptyList(),
+        deviceIdHash: String? = null,
+        exchangeId: String? = null
     ): HandshakeMessage {
         val nonce = ByteArray(NONCE_SIZE)
         secureRandom.nextBytes(nonce)
-        
+
         return HandshakeMessage(
             version = PROTOCOL_VERSION,
             publicId = publicId,
             nonce = nonce,
             discoveryTokens = discoveryTokens,
             availableTransports = availableTransports.map { it.identifier() },
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            deviceIdHash = deviceIdHash,
+            exchangeId = exchangeId
         )
     }
     
@@ -143,6 +153,8 @@ object PeerHandshake {
             put(KEY_DISCOVERY_TOKENS, JSONArray(message.discoveryTokens))
             put(KEY_TRANSPORTS, JSONArray(message.availableTransports))
             put(KEY_TIMESTAMP, message.timestamp)
+            message.deviceIdHash?.let { put(KEY_DEVICE_ID_HASH, it) }
+            message.exchangeId?.let { put(KEY_EXCHANGE_ID, it) }
         }
         return json.toString().toByteArray(Charsets.UTF_8)
     }
@@ -177,13 +189,18 @@ object PeerHandshake {
             
             val timestamp = json.optLong(KEY_TIMESTAMP, System.currentTimeMillis())
             
+            val deviceIdHash = json.optString(KEY_DEVICE_ID_HASH, null)
+            val exchangeId = json.optString(KEY_EXCHANGE_ID, null)
+
             HandshakeMessage(
                 version = version,
                 publicId = publicId,
                 nonce = nonce,
                 discoveryTokens = tokens,
                 availableTransports = transports,
-                timestamp = timestamp
+                timestamp = timestamp,
+                deviceIdHash = deviceIdHash,
+                exchangeId = exchangeId
             )
         } catch (e: Exception) {
             Timber.e(e, "$TAG: Failed to decode handshake message")

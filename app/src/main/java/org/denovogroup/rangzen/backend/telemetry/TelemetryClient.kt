@@ -401,19 +401,24 @@ class TelemetryClient private constructor(
         hopCount: Int,
         trustScore: Double,
         priority: Int,
-        ageMs: Long
+        ageMs: Long,
+        textLength: Int = 0,
+        localFriendCount: Int = 0
     ) {
+        val payload = mutableMapOf<String, Any>(
+            "message_id_hash" to messageIdHash,
+            "hop_count" to hopCount,
+            "trust_score" to trustScore,
+            "priority" to priority,
+            "age_ms" to ageMs
+        )
+        if (textLength > 0) payload["text_length"] = textLength
+        if (localFriendCount > 0) payload["local_friend_count"] = localFriendCount
         track(
             TelemetryEvent.TYPE_MESSAGE_SENT,
             peerIdHash,
             transport,
-            mapOf(
-                "message_id_hash" to messageIdHash,
-                "hop_count" to hopCount,
-                "trust_score" to trustScore,
-                "priority" to priority,
-                "age_ms" to ageMs
-            )
+            payload
         )
     }
 
@@ -435,19 +440,24 @@ class TelemetryClient private constructor(
         hopCount: Int,
         trustScore: Double,
         priority: Int,
-        isNew: Boolean
+        isNew: Boolean,
+        textLength: Int = 0,
+        localFriendCount: Int = 0
     ) {
+        val payload = mutableMapOf<String, Any>(
+            "message_id_hash" to messageIdHash,
+            "hop_count" to hopCount,
+            "trust_score" to trustScore,
+            "priority" to priority,
+            "is_new" to isNew
+        )
+        if (textLength > 0) payload["text_length"] = textLength
+        if (localFriendCount > 0) payload["local_friend_count"] = localFriendCount
         track(
             TelemetryEvent.TYPE_MESSAGE_RECEIVED,
             peerIdHash,
             transport,
-            mapOf(
-                "message_id_hash" to messageIdHash,
-                "hop_count" to hopCount,
-                "trust_score" to trustScore,
-                "priority" to priority,
-                "is_new" to isNew
-            )
+            payload
         )
     }
 
@@ -465,6 +475,65 @@ class TelemetryClient private constructor(
             mapOf(
                 "message_id_hash" to messageIdHash,
                 "text_length" to textLength
+            )
+        )
+    }
+
+    /**
+     * Track when a message is displayed in the feed UI.
+     */
+    fun trackMessageDisplayed(messageIdHash: String, hopCount: Int, priority: Int, ageMs: Long) {
+        track(
+            TelemetryEvent.TYPE_MESSAGE_DISPLAYED,
+            null,
+            null,
+            mapOf(
+                "message_id_hash" to messageIdHash,
+                "hop_count" to hopCount,
+                "priority" to priority,
+                "age_ms" to ageMs
+            )
+        )
+    }
+
+    /**
+     * Track when a message expires / is cleaned up.
+     */
+    fun trackMessageExpired(messageIdHash: String, reason: String, ageMs: Long, hopCount: Int, priority: Int) {
+        track(
+            TelemetryEvent.TYPE_MESSAGE_EXPIRED,
+            null,
+            null,
+            mapOf(
+                "message_id_hash" to messageIdHash,
+                "reason" to reason,
+                "age_ms" to ageMs,
+                "hop_count" to hopCount,
+                "priority" to priority
+            )
+        )
+    }
+
+    /**
+     * Track a periodic node profile snapshot.
+     */
+    fun trackNodeProfile(
+        messageCount: Int,
+        friendCount: Int,
+        heartedCount: Int,
+        oldestMessageAgeMs: Long,
+        newestMessageAgeMs: Long
+    ) {
+        track(
+            TelemetryEvent.TYPE_NODE_PROFILE,
+            null,
+            null,
+            mapOf(
+                "message_count" to messageCount,
+                "friend_count" to friendCount,
+                "hearted_count" to heartedCount,
+                "oldest_message_age_ms" to oldestMessageAgeMs,
+                "newest_message_age_ms" to newestMessageAgeMs
             )
         )
     }

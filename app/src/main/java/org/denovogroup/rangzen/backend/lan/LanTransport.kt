@@ -210,11 +210,19 @@ class LanTransport {
             
             Timber.d("LAN handshake from peer: ${peerDeviceId.take(8)}... (v$peerVersion)")
             
+            // Identity contract: extract peer's device_id_hash and exchange_id.
+            val peerDeviceIdHash = handshake.optString("device_id_hash", null)
+            val peerExchangeId = handshake.optString("exchange_id", null)
+
             // Step 2: Send our handshake response
+            val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
             val responseHandshake = JSONObject().apply {
                 put("device_id", localDeviceId)
                 put("nonce", peerNonce)
                 put("version", PROTOCOL_VERSION)
+                // Echo back our device_id_hash and the peer's exchange_id for pairing.
+                myDeviceIdHash?.let { put("device_id_hash", it) }
+                peerExchangeId?.let { put("exchange_id", it) }
             }
             writeFrame(output, responseHandshake.toString().toByteArray(Charsets.UTF_8))
             
@@ -292,11 +300,13 @@ class LanTransport {
             
             // Step 9: Read client's messages
             val clientMessagesFrame = readFrame(input)
+            val serverPeerIdHash = peerDeviceId.take(16)
             val receivedMessages = processIncomingMessages(
                 String(clientMessagesFrame, Charsets.UTF_8),
                 messageStore,
                 friendStore,
-                commonFriends
+                commonFriends,
+                serverPeerIdHash
             )
             
             // Show notification for new messages received via LAN
@@ -306,7 +316,7 @@ class LanTransport {
             }
             
             // Step 10: Send our messages
-            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends)
+            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends, serverPeerIdHash)
             writeFrame(output, outgoingData.toByteArray(Charsets.UTF_8))
             
             val duration = System.currentTimeMillis() - startTime
@@ -343,7 +353,8 @@ class LanTransport {
         peer: LanDiscoveryManager.LanPeer,
         context: Context,
         messageStore: MessageStore,
-        friendStore: FriendStore
+        friendStore: FriendStore,
+        location: org.denovogroup.rangzen.backend.telemetry.LocationHelper.LocationData? = null
     ): ExchangeResult {
         // Prevent concurrent exchanges
         if (!exchangeInProgress.compareAndSet(false, true)) {
@@ -352,7 +363,7 @@ class LanTransport {
         }
         
         try {
-            return doExchange(peer, context, messageStore, friendStore)
+            return doExchange(peer, context, messageStore, friendStore, location)
         } finally {
             exchangeInProgress.set(false)
         }
@@ -365,10 +376,12 @@ class LanTransport {
         peer: LanDiscoveryManager.LanPeer,
         context: Context,
         messageStore: MessageStore,
-        friendStore: FriendStore
+        friendStore: FriendStore,
+        location: org.denovogroup.rangzen.backend.telemetry.LocationHelper.LocationData? = null
     ): ExchangeResult = withContext(Dispatchers.IO) {
         val peerIdHash = peer.deviceId.take(16)
         val exchangeCtx = ExchangeContext.create(TelemetryEvent.TRANSPORT_WLAN, peerIdHash, context)
+        exchangeCtx.location = location
         var socket: Socket? = null
 
         try {
@@ -390,10 +403,14 @@ class LanTransport {
 
             // Step 1: Send handshake
             val nonce = generateNonce()
+            val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
             val handshake = JSONObject().apply {
                 put("device_id", localDeviceId)
                 put("nonce", nonce)
                 put("version", PROTOCOL_VERSION)
+                // Identity contract: include device_id_hash and exchange_id.
+                myDeviceIdHash?.let { put("device_id_hash", it) }
+                put("exchange_id", exchangeCtx.exchangeId)
             }
             writeFrame(output, handshake.toString().toByteArray(Charsets.UTF_8))
 
@@ -406,6 +423,10 @@ class LanTransport {
             if (echoedNonce != nonce) {
                 throw IOException("Nonce mismatch - possible MITM")
             }
+
+            // Identity contract: capture peer's device_id_hash and exchange_id.
+            exchangeCtx.peerDeviceIdHash = response.optString("device_id_hash", null)
+            response.optString("exchange_id", null)?.let { exchangeCtx.sharedExchangeId = it }
 
             Timber.d("LAN handshake verified with peer: ${peerDeviceId.take(8)}...")
 
@@ -496,7 +517,7 @@ class LanTransport {
             exchangeCtx.advanceStage(ExchangeStage.SENDING_MESSAGES)
 
             // Step 9: Send our messages
-            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends)
+            val outgoingData = prepareOutgoingMessages(context, messageStore, friendStore, commonFriends, peerIdHash)
             val messagesSent = try {
                 val json = JSONObject(outgoingData)
                 json.optInt("message_count", 0)
@@ -513,7 +534,8 @@ class LanTransport {
                 String(serverMessagesFrame, Charsets.UTF_8),
                 messageStore,
                 friendStore,
-                commonFriends
+                commonFriends,
+                peerIdHash
             )
             exchangeCtx.messagesReceived = receivedMessages.size
 
@@ -623,11 +645,12 @@ class LanTransport {
         context: Context,
         messageStore: MessageStore,
         friendStore: FriendStore,
-        commonFriends: Int
+        commonFriends: Int,
+        peerIdHash: String? = null
     ): String {
         val maxMessages = SecurityManager.maxMessagesPerExchange(context)
         val messages = messageStore.getMessagesForExchange(commonFriends, maxMessages)
-        
+
         val myFriends = friendStore.getAllFriendIds().size
         val json = JSONObject().apply {
             put("protocol", "psi_v2")
@@ -636,6 +659,17 @@ class LanTransport {
             put("common_friends", commonFriends)
             val msgArray = JSONArray()
             for (msg in messages) {
+                if (peerIdHash != null) {
+                    TelemetryClient.getInstance()?.trackMessageSent(
+                        peerIdHash = peerIdHash,
+                        transport = TelemetryEvent.TRANSPORT_WLAN,
+                        messageIdHash = sha256(msg.messageId),
+                        hopCount = msg.hopCount,
+                        trustScore = msg.trustScore,
+                        priority = msg.priority,
+                        ageMs = System.currentTimeMillis() - msg.timestamp
+                    )
+                }
                 val encoded = LegacyExchangeCodec.encodeMessage(context, msg, commonFriends, myFriends)
                 msgArray.put(encoded)
             }
@@ -652,7 +686,8 @@ class LanTransport {
         data: String,
         messageStore: MessageStore,
         friendStore: FriendStore,
-        commonFriends: Int
+        commonFriends: Int,
+        peerIdHash: String? = null
     ): List<RangzenMessage> {
         return try {
             val json = JSONObject(data)
@@ -672,6 +707,19 @@ class LanTransport {
                 val msgJson = msgArray.getJSONObject(i)
                 val msg = LegacyExchangeCodec.decodeMessage(msgJson)
                 if (msg.text.isNullOrEmpty()) continue
+
+                val isNew = !messageStore.hasMessage(msg.messageId)
+                if (peerIdHash != null) {
+                    TelemetryClient.getInstance()?.trackMessageReceived(
+                        peerIdHash = peerIdHash,
+                        transport = TelemetryEvent.TRANSPORT_WLAN,
+                        messageIdHash = sha256(msg.messageId),
+                        hopCount = msg.hopCount,
+                        trustScore = msg.trustScore,
+                        priority = msg.priority,
+                        isNew = isNew
+                    )
+                }
 
                 val existing = messageStore.getMessage(msg.messageId)
                 if (existing != null) {
@@ -729,6 +777,11 @@ class LanTransport {
         val error: String?
     )
     
+    private fun sha256(input: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
     /**
      * Generate a random nonce for handshake freshness.
      */

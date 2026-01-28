@@ -482,6 +482,7 @@ class FeedAdapter(
     }
 
     private var items = listOf<FeedItem>()
+    private val displayedMessageIds = mutableSetOf<String>()
 
     fun submitList(newItems: List<FeedItem>) {
         items = newItems
@@ -551,6 +552,16 @@ class FeedAdapter(
         private val trustIndicator: View = itemView.findViewById(R.id.trust_indicator)
 
         fun bind(message: RangzenMessage) {
+            // Track message displayed (once per session per message)
+            if (displayedMessageIds.add(message.messageId)) {
+                org.denovogroup.rangzen.backend.telemetry.TelemetryClient.getInstance()?.trackMessageDisplayed(
+                    messageIdHash = java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(message.messageId.toByteArray()).joinToString("") { "%02x".format(it) },
+                    hopCount = message.hopCount,
+                    priority = message.priority,
+                    ageMs = System.currentTimeMillis() - message.timestamp
+                )
+            }
             textMessage.text = message.text
             textPseudonym.text = message.pseudonym ?: itemView.context.getString(R.string.feed_anonymous)
             textTimestamp.text = formatHeaderTimes(

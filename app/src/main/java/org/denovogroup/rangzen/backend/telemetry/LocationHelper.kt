@@ -205,6 +205,63 @@ class LocationHelper(private val context: Context) {
     }
     
     /**
+     * Request a fresh GPS location with a timeout.
+     * If a fresh fix isn't available within the timeout, falls back to last known.
+     * Use this before exchanges so telemetry has current location data.
+     *
+     * @param timeoutMs Maximum time to wait for a fresh fix (default 5s)
+     */
+    @SuppressLint("MissingPermission")
+    suspend fun requestFreshLocation(timeoutMs: Long = 5_000L): LocationData? = withContext(Dispatchers.IO) {
+        if (!hasLocationPermission() || !isLocationServicesEnabled()) {
+            return@withContext null
+        }
+
+        val lm = locationManager ?: return@withContext null
+
+        // If cached location is recent enough (< 2 min), just use it
+        val cached = getBestLastKnownLocationInternal()
+        if (cached != null && cached.ageMs < 120_000) {
+            return@withContext cached
+        }
+
+        // Request a fresh fix
+        val freshLocation = withTimeoutOrNull(timeoutMs) {
+            suspendCancellableCoroutine<Location?> { cont ->
+                val listener = object : android.location.LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        lm.removeUpdates(this)
+                        cont.resume(location)
+                    }
+                    @Deprecated("Deprecated in API")
+                    override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
+                    override fun onProviderEnabled(provider: String) {}
+                    override fun onProviderDisabled(provider: String) {}
+                }
+
+                try {
+                    val provider = when {
+                        lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+                        lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+                        else -> null
+                    }
+                    if (provider != null) {
+                        lm.requestSingleUpdate(provider, listener, android.os.Looper.getMainLooper())
+                        cont.invokeOnCancellation { lm.removeUpdates(listener) }
+                    } else {
+                        cont.resume(null)
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to request fresh location")
+                    cont.resume(null)
+                }
+            }
+        }
+
+        freshLocation?.let { locationToData(it) } ?: cached
+    }
+
+    /**
      * Convert Android Location to our LocationData.
      */
     private fun locationToData(location: Location): LocationData {
