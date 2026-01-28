@@ -26,7 +26,7 @@ class MessageStore private constructor(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "rangzen_messages.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         // Legacy trust bounds for safety.
         private const val MIN_TRUST = 0.01
@@ -50,6 +50,14 @@ class MessageStore private constructor(context: Context) :
         private const val COL_LATLONG = "latlong"
         private const val COL_PARENT = "parent_id"
         private const val COL_BIGPARENT = "bigparent_id"
+
+        // Tombstone table: tracks deleted message IDs so they aren't re-added from peers
+        private const val TABLE_TOMBSTONES = "deleted_messages"
+        private const val COL_TOMBSTONE_MESSAGE_ID = "message_id"
+        private const val COL_TOMBSTONE_DELETED_AT = "deleted_at"
+
+        // Tombstones older than this are pruned (no peer should still have the message)
+        private const val TOMBSTONE_TTL_DAYS = 14L
 
         // Store version for exchange backoff logic.
         private var storeVersion: String? = null
@@ -139,6 +147,14 @@ class MessageStore private constructor(context: Context) :
         """.trimIndent()
         db.execSQL(createTable)
 
+        // Tombstone table for tracking deleted messages
+        db.execSQL("""
+            CREATE TABLE $TABLE_TOMBSTONES (
+                $COL_TOMBSTONE_MESSAGE_ID TEXT PRIMARY KEY,
+                $COL_TOMBSTONE_DELETED_AT INTEGER NOT NULL
+            )
+        """.trimIndent())
+
         // Index for fast lookups
         db.execSQL("CREATE INDEX idx_message_id ON $TABLE_MESSAGES($COL_MESSAGE_ID)")
         db.execSQL("CREATE INDEX idx_timestamp ON $TABLE_MESSAGES($COL_TIMESTAMP)")
@@ -158,6 +174,14 @@ class MessageStore private constructor(context: Context) :
             // Backfill received timestamps with the composed timestamp when missing.
             db.execSQL("UPDATE $TABLE_MESSAGES SET $COL_RECEIVED_TIMESTAMP = $COL_TIMESTAMP WHERE $COL_RECEIVED_TIMESTAMP = 0")
         }
+        if (oldVersion < 4) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS $TABLE_TOMBSTONES (
+                    $COL_TOMBSTONE_MESSAGE_ID TEXT PRIMARY KEY,
+                    $COL_TOMBSTONE_DELETED_AT INTEGER NOT NULL
+                )
+            """.trimIndent())
+        }
     }
 
     /**
@@ -174,6 +198,11 @@ class MessageStore private constructor(context: Context) :
         val propagationCutoff = System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(3)
         if (message.timestamp > 0 && message.timestamp < propagationCutoff) {
             Timber.d("Rejecting old message ${message.messageId}: age exceeds propagation TTL")
+            return false
+        }
+        // Reject messages we previously deleted (tombstone check)
+        if (isTombstoned(message.messageId)) {
+            Timber.d("Rejecting tombstoned message ${message.messageId}")
             return false
         }
         // Check for existing message to handle merge case
@@ -500,12 +529,16 @@ class MessageStore private constructor(context: Context) :
     }
 
     /**
-     * Delete messages based on heart count and age.
-     * 0 hearts: 3 days, 1 heart: 7 days, 2+ hearts: 14 days.
+     * Delete messages based on heart count and age, recording tombstones
+     * so deleted messages aren't re-added from peers.
+     *
+     * Thresholds must exceed the propagation TTL (3 days) to avoid a
+     * delete-then-re-receive loop:
+     *   0 hearts: 5 days, 1 heart: 7 days, 2+ hearts: 14 days.
      */
     fun cleanupByHearts(): Int {
         val now = System.currentTimeMillis()
-        val threeDays = now - java.util.concurrent.TimeUnit.DAYS.toMillis(3)
+        val fiveDays = now - java.util.concurrent.TimeUnit.DAYS.toMillis(5)
         val oneWeek = now - java.util.concurrent.TimeUnit.DAYS.toMillis(7)
         val twoWeeks = now - java.util.concurrent.TimeUnit.DAYS.toMillis(14)
 
@@ -514,14 +547,77 @@ class MessageStore private constructor(context: Context) :
             "($COL_LIKES = 1 AND $COL_TIMESTAMP < ?) OR " +
             "($COL_LIKES >= 2 AND $COL_TIMESTAMP < ?)"
         val args = arrayOf(
-            threeDays.toString(),
+            fiveDays.toString(),
             oneWeek.toString(),
             twoWeeks.toString()
         )
-        val rows = writableDatabase.delete(TABLE_MESSAGES, whereClause, args)
-        if (rows > 0) {
+
+        // Collect message IDs before deleting so we can record tombstones
+        val toDelete = mutableListOf<String>()
+        readableDatabase.query(
+            TABLE_MESSAGES,
+            arrayOf(COL_MESSAGE_ID),
+            whereClause,
+            args,
+            null, null, null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                toDelete.add(cursor.getString(0))
+            }
+        }
+
+        if (toDelete.isEmpty()) return 0
+
+        // Record tombstones then delete
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (messageId in toDelete) {
+                val tombstone = ContentValues().apply {
+                    put(COL_TOMBSTONE_MESSAGE_ID, messageId)
+                    put(COL_TOMBSTONE_DELETED_AT, now)
+                }
+                db.insertWithOnConflict(TABLE_TOMBSTONES, null, tombstone, SQLiteDatabase.CONFLICT_REPLACE)
+            }
+            val rows = db.delete(TABLE_MESSAGES, whereClause, args)
+            db.setTransactionSuccessful()
             refreshMessages()
-            Timber.d("Heart-based cleanup removed $rows messages")
+            Timber.d("Heart-based cleanup removed $rows messages, recorded $rows tombstones")
+            return rows
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Check if a message ID has been tombstoned (previously deleted).
+     */
+    private fun isTombstoned(messageId: String): Boolean {
+        val cursor = readableDatabase.query(
+            TABLE_TOMBSTONES,
+            arrayOf(COL_TOMBSTONE_MESSAGE_ID),
+            "$COL_TOMBSTONE_MESSAGE_ID = ?",
+            arrayOf(messageId),
+            null, null, null
+        )
+        val exists = cursor.use { it.moveToFirst() }
+        return exists
+    }
+
+    /**
+     * Remove tombstones older than [TOMBSTONE_TTL_DAYS].
+     * Called during periodic cleanup so the table doesn't grow unbounded.
+     */
+    fun pruneTombstones(): Int {
+        val cutoff = System.currentTimeMillis() -
+            java.util.concurrent.TimeUnit.DAYS.toMillis(TOMBSTONE_TTL_DAYS)
+        val rows = writableDatabase.delete(
+            TABLE_TOMBSTONES,
+            "$COL_TOMBSTONE_DELETED_AT < ?",
+            arrayOf(cutoff.toString())
+        )
+        if (rows > 0) {
+            Timber.d("Pruned $rows expired tombstones")
         }
         return rows
     }

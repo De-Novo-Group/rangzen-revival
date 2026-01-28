@@ -1260,7 +1260,7 @@ class RangzenService : Service() {
     }
 
     private fun cleanupMessageStore() {
-        // Heart-based expiration: 0 hearts=3d, 1 heart=7d, 2+ hearts=14d.
+        // Heart-based expiration: 0 hearts=5d, 1 heart=7d, 2+ hearts=14d.
         messageStore.cleanupByHearts()
         // Run legacy auto-delete logic based on config.
         messageStore.deleteOutdatedOrIrrelevant(
@@ -1268,6 +1268,8 @@ class RangzenService : Service() {
             autodeleteTrustThreshold = AppConfig.autodeleteTrustThreshold(this),
             autodeleteAgeDays = AppConfig.autodeleteAgeDays(this)
         )
+        // Prune old tombstones so the table doesn't grow unbounded.
+        messageStore.pruneTombstones()
     }
 
     /**
