@@ -173,12 +173,12 @@ class BleConnectionManager(context: Context) : BleManager(context) {
     /**
      * Send request data and wait for response via notification.
      *
-     * This is the core exchange operation - write request, wait for response.
-     * Unlike the old implementation, this does NOT create a new connection.
+     * This uses TransportProtocol framing to be compatible with the existing
+     * BleAdvertiser server which expects framed data.
      *
-     * @param request The request data to send
+     * @param request The request data to send (raw payload, will be framed)
      * @param timeoutMs Timeout for waiting for response
-     * @return Response bytes, or null if timeout/error
+     * @return Response bytes (raw payload, unframed), or null if timeout/error
      */
     suspend fun sendAndReceive(request: ByteArray, timeoutMs: Long = 10000): ByteArray? {
         if (!isReady || exchangeCharacteristic == null) {
@@ -194,17 +194,68 @@ class BleConnectionManager(context: Context) : BleManager(context) {
         Log.d(LOG_TAG, "Sending ${request.size} bytes...")
 
         return try {
-            // Write request
-            writeCharacteristic(
-                exchangeCharacteristic,
-                request,
-                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            ).suspend()
+            // Calculate chunk size (MTU - 3 for ATT header - 9 for transport header)
+            val maxChunkSize = maxOf(lastMtu - 3 - TransportProtocol.headerSize(), 20)
+            var offset = 0
 
-            // Wait for response via notification
+            // Send request in chunks using TransportProtocol framing
+            while (offset < request.size) {
+                val chunkSize = minOf(maxChunkSize, request.size - offset)
+                val chunk = request.copyOfRange(offset, offset + chunkSize)
+                val op = if (offset == 0) TransportProtocol.OP_DATA else TransportProtocol.OP_CONTINUE
+
+                val frame = TransportFrame(
+                    op = op,
+                    totalLength = request.size,
+                    offset = offset,
+                    payload = chunk
+                )
+                val frameBytes = TransportProtocol.encode(frame)
+
+                Log.d(LOG_TAG, "Sending frame: op=$op offset=$offset chunk=${chunk.size} total=${request.size}")
+
+                // Write the frame
+                writeCharacteristic(
+                    exchangeCharacteristic,
+                    frameBytes,
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                ).suspend()
+
+                offset += chunkSize
+            }
+
+            // Wait for response via notification - server sends complete response
+            // Response may come in multiple frames, reassemble them
+            val responseBuffer = java.io.ByteArrayOutputStream()
+            var expectedLength = -1
+            var receivedLength = 0
+
             withTimeoutOrNull(timeoutMs) {
-                val response = responseChannel.receive()
-                Log.d(LOG_TAG, "Received response: ${response.size} bytes")
+                while (true) {
+                    val frameBytes = responseChannel.receive()
+                    val frame = TransportProtocol.decode(frameBytes)
+
+                    if (frame == null) {
+                        Log.e(LOG_TAG, "Failed to decode response frame")
+                        break
+                    }
+
+                    if (expectedLength < 0) {
+                        expectedLength = frame.totalLength
+                    }
+
+                    responseBuffer.write(frame.payload)
+                    receivedLength += frame.payload.size
+
+                    Log.d(LOG_TAG, "Received frame: offset=${frame.offset} payload=${frame.payload.size} total=$expectedLength received=$receivedLength")
+
+                    if (receivedLength >= expectedLength) {
+                        break
+                    }
+                }
+
+                val response = responseBuffer.toByteArray()
+                Log.d(LOG_TAG, "Received complete response: ${response.size} bytes")
                 response
             }
         } catch (e: Exception) {
