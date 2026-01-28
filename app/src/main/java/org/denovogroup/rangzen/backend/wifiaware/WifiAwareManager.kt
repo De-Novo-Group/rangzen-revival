@@ -65,6 +65,9 @@ class WifiAwareManager(
         // Discovery settings
         const val PUBLISH_TTL_SEC = 0  // 0 = until stopped
         const val SUBSCRIBE_TTL_SEC = 0
+
+        // Keepalive: re-report peers to registry so they don't go stale (30s threshold)
+        const val KEEPALIVE_INTERVAL_MS = 15_000L
     }
 
     private var wifiAwareManager: android.net.wifi.aware.WifiAwareManager? = null
@@ -90,6 +93,29 @@ class WifiAwareManager(
 
     private val _peerCount = MutableStateFlow(0)
     val peerCount: StateFlow<Int> = _peerCount.asStateFlow()
+
+    // Keepalive: periodically re-report discovered peers to the registry
+    // so their lastSeen timestamps stay fresh (WiFi Aware's onServiceDiscovered
+    // only fires once per peer, unlike BLE which continuously rescans).
+    private val keepaliveRunnable = object : Runnable {
+        override fun run() {
+            val now = System.currentTimeMillis()
+            discoveredPeers.values.forEach { peer ->
+                peer.lastSeen = now
+                peerRegistry.reportWifiAwarePeer(
+                    sessionId = peer.sessionId,
+                    peerHandleHash = peer.peerHandle.hashCode(),
+                    publicId = peer.publicIdPrefix,
+                    port = peer.port,
+                    rssi = null
+                )
+            }
+            if (discoveredPeers.isNotEmpty()) {
+                Timber.d("$TAG: Keepalive refreshed ${discoveredPeers.size} peers")
+            }
+            mainHandler.postDelayed(this, KEEPALIVE_INTERVAL_MS)
+        }
+    }
 
     // Responder (publisher) network accept state
     private var responderCallback: android.net.ConnectivityManager.NetworkCallback? = null
@@ -181,6 +207,7 @@ class WifiAwareManager(
     fun stop() {
         Timber.i("$TAG: Stopping WiFi Aware discovery")
 
+        stopKeepalive()
         stopResponderAccept()
 
         publishSession?.close()
@@ -356,6 +383,9 @@ class WifiAwareManager(
             // Start subscribing to discover others
             startSubscribe()
 
+            // Start keepalive to prevent discovered peers from going stale
+            startKeepalive()
+
             trackTelemetry("attached")
         }
 
@@ -452,6 +482,15 @@ class WifiAwareManager(
         } catch (e: Exception) {
             Timber.e(e, "$TAG: Failed to start responder accept")
         }
+    }
+
+    private fun startKeepalive() {
+        mainHandler.removeCallbacks(keepaliveRunnable)
+        mainHandler.postDelayed(keepaliveRunnable, KEEPALIVE_INTERVAL_MS)
+    }
+
+    private fun stopKeepalive() {
+        mainHandler.removeCallbacks(keepaliveRunnable)
     }
 
     private fun stopResponderAccept() {
