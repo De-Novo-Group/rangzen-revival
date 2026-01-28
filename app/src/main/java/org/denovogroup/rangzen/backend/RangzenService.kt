@@ -1136,6 +1136,12 @@ class RangzenService : Service() {
                 Timber.i("Attempting to exchange data with ${peer.address}")
                 val result = legacyExchangeClient.exchangeWithPeer(bleScanner, peer)
                 if (result != null) {
+                    // Cross-transport correlation: merge BLE temp peer with WiFi Aware/LAN peer.
+                    // LAN registers with full 16-char publicId, WiFi Aware with 8-char prefix.
+                    // Try full ID first (LAN match), then 8-char prefix (WiFi Aware match).
+                    result.peerPublicId?.let { pubId ->
+                        peerRegistry.updatePeerIdAfterHandshake("ble:${peer.address}", pubId)
+                    }
                     // Clear consecutive failure count on success.
                     exchangeHistory.resetFailures(peer.address)
                     // Update exchange history on success.

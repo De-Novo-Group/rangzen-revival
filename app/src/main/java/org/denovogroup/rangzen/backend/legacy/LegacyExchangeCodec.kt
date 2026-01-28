@@ -64,7 +64,8 @@ object LegacyExchangeCodec {
         messages: List<JSONObject>,
         blindedFriends: List<ByteArray>,
         deviceIdHash: String? = null,
-        exchangeId: String? = null
+        exchangeId: String? = null,
+        publicId: String? = null
     ): JSONObject {
         val messagesArray = JSONArray()
         for (message in messages) {
@@ -81,6 +82,7 @@ object LegacyExchangeCodec {
         // These are optional for backwards compatibility with older peers.
         deviceIdHash?.let { json.put("device_id_hash", it) }
         exchangeId?.let { json.put("exchange_id", it) }
+        publicId?.let { json.put("public_id", it) }
         return json
     }
 
@@ -97,10 +99,11 @@ object LegacyExchangeCodec {
             val base64 = friendsArray.getString(i)
             friends.add(Base64.decode(base64, Base64.NO_WRAP))
         }
-        // Identity contract: extract device_id_hash and exchange_id if present.
+        // Identity contract: extract device_id_hash, exchange_id, and public_id if present.
         val deviceIdHash = json.optString("device_id_hash", null)
         val exchangeId = json.optString("exchange_id", null)
-        return LegacyClientMessage(messages, friends, deviceIdHash, exchangeId)
+        val publicId = json.optString("public_id", null)
+        return LegacyClientMessage(messages, friends, deviceIdHash, exchangeId, publicId)
     }
 
     fun encodeServerMessage(doubleBlinded: List<ByteArray>, hashedBlinded: List<ByteArray>): JSONObject {
@@ -183,7 +186,9 @@ data class LegacyClientMessage(
     /** Peer's device_id_hash (null if peer is on older version). */
     val deviceIdHash: String? = null,
     /** Shared exchange_id for pairing events (null if peer is on older version). */
-    val exchangeId: String? = null
+    val exchangeId: String? = null,
+    /** Peer's public_id for cross-transport correlation (null if peer is on older version). */
+    val publicId: String? = null
 )
 
 data class LegacyServerMessage(

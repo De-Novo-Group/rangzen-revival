@@ -63,12 +63,14 @@ class LegacyExchangeClient(
 
                 // Only send blinded friends when trust is enabled.
                 val blindedFriends = if (useTrust) clientPSI.encodeBlindedItems() else emptyList()
-                // Identity contract: include our device_id_hash and exchange_id in the PSI init.
+                // Identity contract: include our device_id_hash, exchange_id, and public_id in the PSI init.
                 val myDeviceIdHash = TelemetryClient.getInstance()?.deviceIdHash
+                val myPublicId = org.denovogroup.rangzen.backend.DeviceIdentity.getDeviceId(context)
                 val friendsRequest = LegacyExchangeCodec.encodeClientMessage(
                     emptyList(), blindedFriends,
                     deviceIdHash = myDeviceIdHash,
-                    exchangeId = exchangeCtx.exchangeId
+                    exchangeId = exchangeCtx.exchangeId,
+                    publicId = myPublicId
                 )
                 val friendsResponse = sendFrame(bleScanner, peer, friendsRequest) ?: run {
                     exchangeCtx.gattDiagnostics = bleScanner.lastExchangeDiagnostics?.toMap()
@@ -81,6 +83,8 @@ class LegacyExchangeClient(
                 val serverClientMsg = LegacyExchangeCodec.decodeClientMessage(friendsResponse)
                 // Identity contract: capture peer's device_id_hash for telemetry.
                 exchangeCtx.peerDeviceIdHash = serverClientMsg.deviceIdHash
+                // Cross-transport correlation: capture peer's public_id.
+                val peerPublicId = serverClientMsg.publicId
                 // Exchange pairing: if the server echoed an exchange_id, adopt it.
                 serverClientMsg.exchangeId?.let { exchangeCtx.sharedExchangeId = it }
                 // Only parse remote friends when trust is enabled.
@@ -220,7 +224,9 @@ class LegacyExchangeClient(
                 LegacyExchangeResult(
                     commonFriends = commonFriends,
                     messagesSent = outboundMessages.size,
-                    messagesReceived = receivedMessages.size
+                    messagesReceived = receivedMessages.size,
+                    peerDeviceIdHash = exchangeCtx.peerDeviceIdHash,
+                    peerPublicId = peerPublicId
                 )
             } catch (e: Exception) {
                 Timber.e(e, "Legacy exchange failed with ${peer.address}")
@@ -406,7 +412,9 @@ class LegacyExchangeClient(
 data class LegacyExchangeResult(
     val commonFriends: Int,
     val messagesSent: Int,
-    val messagesReceived: Int
+    val messagesReceived: Int,
+    val peerDeviceIdHash: String? = null,
+    val peerPublicId: String? = null
 )
 
 /**
