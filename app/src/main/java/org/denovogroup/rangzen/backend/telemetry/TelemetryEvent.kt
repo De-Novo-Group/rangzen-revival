@@ -86,7 +86,9 @@ data class TelemetryEvent(
         const val TYPE_NODE_PROFILE = "node_profile"
 
         // Transport identifiers (match dashboard expectations)
-        const val TRANSPORT_BLE = "bt-le"
+        // NOTE: Changed from "bt-le" to "ble" for consistency (2026-01-29)
+        // Old telemetry data may have "bt-le" or "lan" from previous versions
+        const val TRANSPORT_BLE = "ble"
         const val TRANSPORT_WIFI_DIRECT = "wifi-direct"
         const val TRANSPORT_WIFI_AWARE = "wifi-aware"
         const val TRANSPORT_WLAN = "wlan"
