@@ -10,7 +10,7 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: 'Vazir', 'Tahoma', -apple-system, sans-serif;
             background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
@@ -19,33 +19,33 @@
             line-height: 1.8;
             direction: rtl;
         }
-        
+
         .container {
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
         }
-        
+
         .hero {
             text-align: center;
             padding: 30px 20px;
             color: white;
         }
-        
+
         .hero h1 {
             font-size: 2em;
             margin-bottom: 8px;
         }
-        
+
         .hero .subtitle {
             opacity: 0.8;
             font-size: 1em;
         }
-        
+
         .section {
             margin-bottom: 20px;
         }
-        
+
         .section-title {
             color: #fff;
             font-size: 0.85em;
@@ -54,7 +54,7 @@
             padding-right: 4px;
             opacity: 0.7;
         }
-        
+
         .faq-item {
             background: white;
             border-radius: 12px;
@@ -62,7 +62,7 @@
             overflow: hidden;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        
+
         .faq-question {
             padding: 16px 20px;
             font-weight: 600;
@@ -73,46 +73,46 @@
             align-items: center;
             transition: background 0.2s;
         }
-        
+
         .faq-question:hover {
             background: #f8f9ff;
         }
-        
+
         .faq-question::after {
             content: '+';
             font-size: 1.5em;
             color: #667eea;
             transition: transform 0.3s;
         }
-        
+
         .faq-item.active .faq-question::after {
             transform: rotate(45deg);
         }
-        
+
         .faq-answer {
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.3s ease-out;
             background: #f8f9ff;
         }
-        
+
         .faq-item.active .faq-answer {
-            max-height: 500px;
+            max-height: 600px;
         }
-        
+
         .faq-answer-content {
             padding: 0 20px 20px;
             color: #555;
         }
-        
+
         .faq-answer-content p {
             margin-bottom: 12px;
         }
-        
+
         .faq-answer-content p:last-child {
             margin-bottom: 0;
         }
-        
+
         .tag {
             display: inline-block;
             padding: 4px 10px;
@@ -121,35 +121,30 @@
             font-weight: 600;
             margin-left: 4px;
         }
-        
+
         .tag.yes {
-            background: #eceff1;
-            color: #455a64;
+            background: #e8f5e9;
+            color: #2e7d32;
         }
-        
+
         .tag.no {
-            background: #eceff1;
-            color: #455a64;
+            background: #ffebee;
+            color: #c62828;
         }
-        
-        .tag.info {
-            background: #e3f2fd;
-            color: #1565c0;
-        }
-        
+
         .warning {
             color: #c62828;
             font-weight: 600;
         }
-        
+
         ul {
             margin: 12px 20px 12px 0;
         }
-        
+
         li {
             margin-bottom: 6px;
         }
-        
+
         .footer {
             text-align: center;
             padding: 30px;
@@ -161,227 +156,250 @@
 <body>
     <div class="container">
         <div class="hero">
-            <h1>❓ سوالات متداول</h1>
+            <h1>سوالات متداول</h1>
             <p class="subtitle">پاسخ به سوالات رایج</p>
         </div>
-        
+
         <div class="section">
-            <div class="section-title">عمومی</div>
-            
+            <div class="section-title">اصول اولیه</div>
+
             <div class="faq-item active">
                 <div class="faq-question">مورمور چیست؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>مورمور یک برنامه <strong>پیام‌رسانی شبکه‌ای با تحمل تأخیر</strong> است. به افراد امکان می‌دهد پیام‌های کوتاه را بدون اینترنت به اشتراک بگذارند.</p>
-                        <p>پیام‌ها از طریق <span class="tag info">بلوتوث</span> و <span class="tag info">وای‌فای</span> وقتی دستگاه‌ها به هم نزدیک می‌شوند پخش می‌شوند.</p>
+                        <p>مورمور یک برنامه پیام‌رسان است که <strong>بدون اینترنت</strong> کار می‌کند.</p>
+                        <p>وقتی دو نفر با مورمور به هم نزدیک می‌شوند، گوشی‌هایشان به‌طور خودکار با بلوتوث و وای‌فای پیام رد و بدل می‌کنند. پیام‌ها از گوشی به گوشی منتقل می‌شوند وقتی مردم در شهر حرکت می‌کنند.</p>
+                        <p>مثل رد و بدل کردن یادداشت در یک جمعیت — فقط گوشی‌تان این کار را بی‌صدا در جیبتان انجام می‌دهد.</p>
                     </div>
                 </div>
             </div>
-            
+
             <div class="faq-item">
                 <div class="faq-question">آیا ناشناس است؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
                         <p><span class="tag yes">بله</span></p>
-                        <p>می‌توانید از هر نامی (نام مستعار) استفاده کنید یا اصلاً نامی نگذارید. برنامه پیام‌ها را به شماره تلفن، ایمیل یا شناسه سخت‌افزاری شما <strong>مرتبط نمی‌کند</strong>.</p>
-                        <p>«هویت» شما یک کلید رمزنگاری است که روی گوشی شما تولید می‌شود.</p>
+                        <p>می‌توانید از هر نامی استفاده کنید یا اصلاً نامی نگذارید. مورمور از شماره تلفن، ایمیل یا هیچ اطلاعات شخصی شما استفاده <strong>نمی‌کند</strong>.</p>
+                        <p>هویت شما فقط یک کد تصادفی است که روی گوشی‌تان ساخته می‌شود — برای هیچ‌کس دیگری معنایی ندارد.</p>
                     </div>
                 </div>
             </div>
-            
+
             <div class="faq-item">
                 <div class="faq-question">آیا از اینترنت استفاده می‌کند؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
                         <p><span class="tag no">خیر</span> پیام‌رسانی کاملاً آفلاین کار می‌کند.</p>
-                        <p><em>توجه: اگر «حالت QA» (برای توسعه‌دهندگان) را فعال کنید، از اینترنت برای تله‌متری استفاده می‌کند. <span class="warning">در محیط‌های محدود فعال نکنید.</span></em></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="section">
-            <div class="section-title">فنی</div>
-            
-            <div class="faq-item">
-                <div class="faq-question">چگونه آفلاین کار می‌کند؟</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>وقتی دو کاربر مورمور به هم نزدیک می‌شوند، گوشی‌هایشان به‌طور خودکار پیام‌ها را با استفاده از روش‌های زیر مبادله می‌کنند:</p>
-                        <ul>
-                            <li><strong>بلوتوث (BLE)</strong> — کشف کاربران نزدیک و تبادل حجم کم داده</li>
-                            <li><strong>وای‌فای دایرکت</strong> — انتقال سریع حجم بیشتر (برد تا ~۱۰۰ متر)</li>
-                            <li><strong>شبکه محلی</strong> — کار روی وای‌فای مشترک (کافه، هات‌اسپات)</li>
-                        </ul>
-                        <p>نیازی به اینترنت نیست. پیام‌ها از گوشی به گوشی می‌پرند.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">چرا آیکون «موقعیت مکانی» می‌بینم؟</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>اندروید برای اسکن دستگاه‌های بلوتوث و وای‌فای به <strong>مجوز موقعیت مکانی</strong> نیاز دارد. این قانون اندروید است، نه ما.</p>
-                        <p>مورمور موقعیت GPS شما را <strong>ردیابی نمی‌کند</strong> و هیچ‌جا ذخیره نمی‌کند. فقط برای یافتن همتایان نزدیک استفاده می‌شود.</p>
+                        <p><em>توجه: اگر «حالت QA» را در تنظیمات فعال کنید (فقط برای توسعه‌دهندگان)، داده‌های استفاده را از طریق اینترنت ارسال می‌کند. <span class="warning">در محیط‌های محدود خاموش نگهش دارید.</span></em></p>
                     </div>
                 </div>
             </div>
 
             <div class="faq-item">
-                <div class="faq-question">روش‌های مختلف اتصال چیست؟</div>
+                <div class="faq-question">پیام‌ها تا چه فاصله‌ای می‌روند؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>مورمور از چند فناوری بی‌سیم برای حداکثر تحویل پیام استفاده می‌کند:</p>
-                        <ul>
-                            <li><span style="color: #3B82F6;">●</span> <strong style="color: #3B82F6;">بلوتوث (BLE)</strong> — کشف همیشه‌فعال. برد کوتاه (~۱۰ متر)، مصرف کم. بی‌صدا در پس‌زمینه کار می‌کند.</li>
-                            <li><span style="color: #F97316;">●</span> <strong style="color: #F97316;">وای‌فای دایرکت</strong> — برد بیشتر (~۱۰۰ متر)، انتقال سریع‌تر. ممکن است در برخی دستگاه‌ها پاپ‌آپ اتصال نشان دهد.</li>
-                            <li><span style="color: #8B5CF6;">●</span> <strong style="color: #8B5CF6;">وای‌فای آگاه (NAN)</strong> — جایگزین مدرن وای‌فای دایرکت. همان برد و سرعت، اما بدون پاپ‌آپ. نیاز به اندروید ۸+ و سخت‌افزار سازگار دارد.</li>
-                            <li><span style="color: #22C55E;">●</span> <strong style="color: #22C55E;">شبکه محلی (LAN)</strong> — روی شبکه‌های وای‌فای مشترک کار می‌کند (خانه، اداره، کافه). سریع‌ترین وقتی هر دو دستگاه روی یک شبکه هستند.</li>
-                        </ul>
-                        <p>برنامه به‌طور خودکار از هر روشی که روی دستگاه شما موجود است استفاده می‌کند. نیازی به تنظیم ندارید.</p>
+                        <p>هر تبادل گوشی به گوشی در فاصله حدود <strong>۱۰ تا ۱۰۰ متر</strong> کار می‌کند، بسته به محیط اطراف.</p>
+                        <p>اما نکته کلیدی اینجاست: پیام‌ها از گوشی به گوشی می‌پرند. پس یک پیام می‌تواند در سراسر شهر سفر کند — فقط زمان می‌برد وقتی مردم حرکت می‌کنند و همدیگر را می‌بینند.</p>
+                        <p>در یک منطقه شلوغ، پیام‌ها سریع پخش می‌شوند. در یک محله ساکت، بیشتر طول می‌کشد.</p>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="section">
-            <div class="section-title">امنیت</div>
-            
+            <div class="section-title">استفاده از برنامه</div>
+
             <div class="faq-item">
-                <div class="faq-question">آیا دولت می‌تواند پیام‌هایم را ببیند؟</div>
+                <div class="faq-question">نقطه‌های رنگی چه معنایی دارند؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>شمارنده «نزدیک» نشان می‌دهد چند کاربر مورمور در برد هستند. نقطه‌های رنگی نشان می‌دهند گوشی‌تان چگونه متصل می‌شود:</p>
+                        <ul>
+                            <li><span style="color: #3B82F6;">&#9679;</span> <strong>آبی</strong> — بلوتوث. رایج‌ترین، در پس‌زمینه کار می‌کند، برد کوتاه.</li>
+                            <li><span style="color: #8B5CF6;">&#9679;</span> <strong>بنفش</strong> — وای‌فای آگاه. سریع‌تر و برد بیشتر. فقط در گوشی‌های جدیدتر.</li>
+                            <li><span style="color: #22C55E;">&#9679;</span> <strong>سبز</strong> — شبکه وای‌فای مشترک (خانه، کافه و غیره).</li>
+                        </ul>
+                        <p>نیازی به انجام کاری ندارید — برنامه خودش بهترین روش را انتخاب می‌کند.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">چرا مجوز «موقعیت مکانی» می‌بینم؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>اندروید برای اسکن دستگاه‌های بلوتوث و وای‌فای به مجوز موقعیت مکانی نیاز دارد. این قانون اندروید است — همه برنامه‌هایی که دستگاه‌های بی‌سیم را جستجو می‌کنند باید این مجوز را بخواهند.</p>
+                        <p>مورمور موقعیت شما را <strong>ردیابی نمی‌کند</strong>. ما فقط از این برای پیدا کردن کاربران دیگر مورمور در نزدیکی استفاده می‌کنیم.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">دکمه قلب چه کار می‌کند؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>قلب‌ها یک دکمه ساده «پسندیدن» هستند.</p>
+                        <ul>
+                            <li><strong>مرتب‌سازی:</strong> می‌توانید فید خود را بر اساس «بیشترین قلب» مرتب کنید تا پیام‌های محبوب را ببینید.</li>
+                            <li><strong>پیام‌ها را بیشتر نگه می‌دارد:</strong> پیام‌های قلب‌خورده قبل از منقضی شدن بیشتر روی گوشی‌تان می‌مانند.</li>
+                            <li><strong>ناشناس:</strong> هیچ‌کس نمی‌داند چه کسی به یک پیام قلب داده.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">نوارهای رنگی روی پیام‌ها چه معنایی دارند؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>نوار رنگی نشان می‌دهد نویسنده پیام چقدر به حلقه اجتماعی شما متصل است:</p>
+                        <ul>
+                            <li><strong style="color: #4caf50;">سبز</strong> — از یک دوست یا دوستِ دوست</li>
+                            <li><strong style="color: #ff9800;">زرد</strong> — ارتباط ضعیف</li>
+                            <li><strong style="color: #f44336;">قرمز</strong> — منبع ناشناخته (شکاک باشید)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">حریم خصوصی و امنیت</div>
+
+            <div class="faq-item">
+                <div class="faq-question">آیا دولت می‌تواند پیام‌هایم را بخواند؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
                         <p><span class="tag no">از راه دور خیر</span></p>
-                        <p>هیچ سرور مرکزی برای هک یا احضار وجود ندارد. پیام‌ها مستقیماً از گوشی به گوشی منتقل می‌شوند — هیچ شرکتی در میان نیست.</p>
-                        <p><strong>اما:</strong> اگر کسی (از جمله مأمور دولت) مورمور را نصب کند و از نظر فیزیکی به کاربران دیگر نزدیک شود، گوشی‌اش مثل هر همتای دیگری پیام دریافت می‌کند. این در هر شبکه مش باز اجتناب‌ناپذیر است.</p>
-                        <p><em><span class="warning">هشدار:</span> اگر کسی گوشی باز شما را بگیرد، می‌تواند پیام‌هایتان را بخواند. از قفل صفحه قوی استفاده کنید.</em></p>
+                        <p>هیچ سروری برای هک کردن یا درخواست داده وجود ندارد. پیام‌ها فقط روی گوشی‌های مردم هستند و مستقیماً بین دستگاه‌ها پخش می‌شوند.</p>
+                        <p><strong>البته:</strong> اگر کسی مورمور را نصب کند و به کاربران دیگر نزدیک شود، گوشی‌اش مثل هر کس دیگری پیام‌ها را دریافت می‌کند. این در هر شبکه باز صادق است — مثل یک تابلوی اعلانات عمومی فکر کنید.</p>
+                        <p><em><span class="warning">مهم:</span> اگر کسی گوشی بدون قفل شما را بگیرد، می‌تواند پیام‌هایتان را بخواند. همیشه از قفل صفحه استفاده کنید.</em></p>
                     </div>
                 </div>
             </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">آیا می‌توانم پیام‌ها را حذف کنم؟</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p><span class="tag no">خیر</span> نمی‌توانید پیام‌ها را از شبکه پس بگیرید.</p>
-                        <p>می‌توانید پیام‌ها را با کشیدن به کنار <strong>پنهان</strong> کنید. این فید شما را خلوت می‌کند اما چیزی پاک نمی‌شود. از «بازگرداندن پنهان‌شده‌ها» برای برگرداندنشان استفاده کنید.</p>
-                        <p>برخی پیام‌ها ممکن است به‌صورت خودکار منقضی شوند. وقتی پیامی به دیگران برسد، از کنترل شما خارج است. این مانع سانسور می‌شود.</p>
-                    </div>
-                </div>
-            </div>
-            
+
             <div class="faq-item">
                 <div class="faq-question">آیا پیام‌ها رمزنگاری شده‌اند؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>پیام‌ها <strong>رمزنگاری نشده‌اند</strong> و <strong>امضا نشده‌اند</strong> — هرکسی در شبکه می‌تواند آن‌ها را بخواند و راهی برای دانستن نویسنده وجود ندارد.</p>
-                        <p>این عمدی است: ناشناس‌بودن کامل یعنی پیام‌ها به نویسنده‌شان قابل ردیابی نیستند. مثل یک تابلوی اعلانات عمومی ناشناس فکر کنید. اسرار را به اشتراک نگذارید.</p>
+                        <p>پیام‌ها <strong>رمزنگاری نشده‌اند</strong> — هرکسی در شبکه می‌تواند آن‌ها را بخواند.</p>
+                        <p>این عمدی است. ناشناس‌بودن کامل یعنی پیام‌ها به نویسنده‌شان قابل ردیابی نیستند. هیچ آدرس «از طرف» وجود ندارد.</p>
+                        <p>به مورمور مثل یک تابلوی اعلانات عمومی ناشناس فکر کنید. اسراری که نمی‌خواهید علنی شوند را به اشتراک نگذارید.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">آیا می‌توانم پیامی که فرستادم را حذف کنم؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><span class="tag no">خیر</span></p>
+                        <p>وقتی پیامی به گوشی‌های دیگر پخش شود، نمی‌توانید آن را پس بگیرید. این از سانسور جلوگیری می‌کند — هیچ‌کس نمی‌تواند حقایق ناخوشایند را پاک کند.</p>
+                        <p>می‌توانید پیام‌ها را <strong>بکشید کنار</strong> تا از فید خودتان پنهان شوند، اما این فقط روی گوشی خودتان تأثیر می‌گذارد.</p>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <div class="section">
-            <div class="section-title">اعتماد و اولویت‌بندی</div>
-            
+            <div class="section-title">دوستان و اعتماد</div>
+
             <div class="faq-item">
-                <div class="faq-question">چگونه با کسی اعتماد برقرار کنم؟</div>
+                <div class="faq-question">چرا اعتماد مهم است؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>از <strong>جفت‌سازی بلوتوث (BLE)</strong> استفاده کنید — هر دو نفر باید از نظر فیزیکی نزدیک هم باشند (در برد بلوتوث، حدود ۱۰ متر).</p>
-                        <p>به تب دوستان بروید، «افزودن دوست نزدیک» را بزنید. هر دو نفر یک کد ۶ رقمی روی صفحه‌شان می‌بینند. کدهای یکدیگر را وارد کنید و بصری تأیید کنید که درست هستند. این یک پیوند اعتماد مستقیم ایجاد می‌کند.</p>
-                        <p><strong>چرا این امن است:</strong> یک مهاجم نمی‌تواند شما را از راه دور اضافه کند. باید از نظر فیزیکی حاضر باشد و تأیید بصری کد را بگذراند. این ترکیب محلی بودن بلوتوث (اثبات نزدیکی) و ورود با کیبورد (اثبات دخالت انسان) برای برقراری اعتماد واقعی فرد-به-فرد است.</p>
-                        <p>پس از اتصال، پیام‌های آن شخص — و افرادی که به آن‌ها اعتماد دارند — در فید شما اولویت پیدا می‌کنند.</p>
+                        <p>وقتی دو گوشی با هم ملاقات می‌کنند، فقط زمان کوتاهی برای تبادل پیام دارند. همه چیز نمی‌تواند به اشتراک گذاشته شود.</p>
+                        <p>مورمور پیام‌های افراد متصل به لیست دوستان شما را اولویت می‌دهد. به این ترتیب، پیام‌های جامعه شما اول به شما می‌رسند.</p>
+                        <p><em>اعتماد شکل می‌دهد چه چیزی پخش شود. شبکه‌تان را با افرادی که می‌شناسید بسازید.</em></p>
                     </div>
                 </div>
             </div>
-            
+
             <div class="faq-item">
-                <div class="faq-question">چرا اعتماد برای تحویل پیام مهم است؟</div>
+                <div class="faq-question">چگونه دوست اضافه کنم؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>وقتی دو گوشی به هم می‌رسند، فقط <strong>پنجره کوتاهی</strong> برای تبادل پیام دارند — شاید چند ثانیه یا دقیقه. همه چیز نمی‌تواند به موقع رد و بدل شود.</p>
-                        <p>مورمور باید تصمیم بگیرد <strong>چه چیزی اول فرستاده شود</strong>. پیام‌های افراد در شبکه اعتماد شما اولویت دارند، تا محتوای مهم سریع‌تر به شما برسد.</p>
-                        <p>این یعنی فید شما به‌طور طبیعی جامعه شما را منعکس می‌کند. کارمند دولتی که مخاطبینش بیشتر مسئولین دیگر هستند، پیام‌های رسمی بیشتری می‌بیند. معترضی که حلقه اعتمادش شامل فعالان است، پیام‌های آن جامعه را بیشتر می‌بیند — و کمتر از بیرون آن.</p>
-                        <p><em>اعتماد شکل می‌دهد چه چیزی پخش شود. شبکه‌تان را آگاهانه بسازید.</em></p>
+                        <p>باید از نظر <strong>فیزیکی نزدیک</strong> آن شخص باشید (در حدود ۱۰ متر).</p>
+                        <p>به <strong>دوستان</strong> بروید و <strong>«افزودن دوست نزدیک»</strong> را بزنید. هر دو نفر یک کد ۶ رقمی می‌بینید. کدهای همدیگر را وارد کنید و تأیید کنید که یکی هستند.</p>
+                        <p><strong>چرا این مهم است:</strong> هیچ‌کس نمی‌تواند از راه دور شما را به عنوان دوست اضافه کند. باید از نظر فیزیکی حاضر باشند. این تضمین می‌کند شبکه اعتماد شما از افراد واقعی که واقعاً ملاقات کرده‌اید ساخته شده.</p>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <div class="section">
             <div class="section-title">عمر پیام</div>
 
             <div class="faq-item">
-                <div class="faq-question">پیام‌ها تا چه مدت زنده می‌مانند؟</div>
+                <div class="faq-question">پیام‌ها چقدر عمر می‌کنند؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>پیام‌ها دو ساعت انقضای مستقل دارند:</p>
-                        <p><strong>انقضای انتشار</strong> — پس از <strong>۳ روز</strong>، پیام دیگر در مبادلات به همتایان جدید ارسال نمی‌شود. دیگر در شبکه مش پخش نخواهد شد. این محدود می‌کند محتوای قدیمی چقدر در گردش باشد.</p>
-                        <p><strong>انقضای محلی</strong> — پیام‌ها در نهایت بر اساس تعداد قلب‌هایشان از دستگاه شما حذف می‌شوند:</p>
+                        <p><strong>انتشار:</strong> پیام‌ها حدود <strong>۳ روز</strong> در شبکه پخش می‌شوند. بعد از آن، گوشی‌ها دیگر آن‌ها را ارسال نمی‌کنند.</p>
+                        <p><strong>روی گوشی شما:</strong> پیام‌ها در نهایت بر اساس تعداد قلب ناپدید می‌شوند:</p>
                         <ul>
-                            <li><strong>۰ قلب</strong> — حذف پس از <strong>۳ روز</strong></li>
-                            <li><strong>۱ قلب</strong> — حذف پس از <strong>۱ هفته</strong></li>
-                            <li><strong>۲+ قلب</strong> — حذف پس از <strong>۲ هفته</strong></li>
+                            <li><strong>۰ قلب</strong> — حذف پس از ۳ روز</li>
+                            <li><strong>۱ قلب</strong> — حذف پس از ۱ هفته</li>
+                            <li><strong>۲+ قلب</strong> — حذف پس از ۲ هفته</li>
                         </ul>
-                        <p>یعنی پیام می‌تواند پس از توقف انتشار همچنان روی گوشی شما قابل مشاهده باشد — فقط دیگر به افراد جدید نمی‌رسد. قلب زدن به پیام باعث می‌شود بیشتر روی دستگاه شما بماند.</p>
+                        <p>قلب دادن به یک پیام آن را بیشتر روی گوشی‌تان نگه می‌دارد.</p>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="section">
-            <div class="section-title">ویژگی‌ها</div>
-            
+            <div class="section-title">اشتراک‌گذاری</div>
+
             <div class="faq-item">
-                <div class="faq-question">دکمه قلب (❤️) چه کار می‌کند؟</div>
+                <div class="faq-question">چگونه بدون اینترنت مورمور را به اشتراک بگذارم؟</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>قلب‌ها یک «پسندیدن» ساده و ناشناس هستند. زدن قلب آن را روشن/خاموش می‌کند و شمارنده روی گوشی شما یک واحد بالا/پایین می‌رود.</p>
+                        <p>به <strong>تنظیمات > اشتراک مورمور</strong> بروید:</p>
                         <ul>
-                            <li><strong>ناشناس:</strong> هیچ هویتی به قلب وصل نیست.</li>
-                            <li><strong>فقط برای نمایش فید:</strong> قلب‌ها فقط نحوه‌ی نمایش را عوض می‌کنند (مثل مرتب‌سازی «بیشترین قلب» و فیلتر «پسندیده‌ها»).</li>
-                            <li><strong>بدون اثر روی امتیاز اعتماد:</strong> قلب‌ها امتیاز/اعتماد را تغییر نمی‌دهند.</li>
+                            <li><strong>Quick Share / Nearby Share</strong> — برنامه را مستقیماً از طریق بلوتوث یا وای‌فای بفرستید.</li>
+                            <li><strong>کد QR</strong> — اگر هر دو گوشی روی یک وای‌فای هستند، می‌توانند کد را اسکن کنند تا دانلود کنند.</li>
                         </ul>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">نشانگر اعتماد چیست؟</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>نوار رنگی سمت چپ هر پیام نشان می‌دهد نویسنده چقدر به حلقه اجتماعی شما نزدیک است:</p>
-                        <ul>
-                            <li><strong style="color: #4caf50;">سبز</strong> — از دوست یا دوستِ دوست</li>
-                            <li><strong style="color: #ff9800;">زرد</strong> — خنثی (ارتباط قوی نیست)</li>
-                            <li><strong style="color: #f44336;">قرمز</strong> — منبع ناشناس (شکاک باشید)</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">چطور بدون اینترنت مورمور را به اشتراک بگذارم؟</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p><strong>اشتراک مورمور</strong> را از تنظیمات باز کنید. دو گزینه دارید:</p>
-                        <ul>
-                            <li><strong>Quick Share / بلوتوث</strong> — بهترین برای دستگاه‌های نزدیک. «اشتراک با Quick Share» را بزنید و روش ارسال را انتخاب کنید.</li>
-                            <li><strong>کد QR</strong> — اگر هر دو دستگاه روی یک WiFi هستند، از گزینه QR استفاده کنید. گیرنده آن را با دوربینش اسکن می‌کند و از مرورگر دانلود می‌کند.</li>
-                        </ul>
-                        <p>گیرنده نیازی به نصب مورمور ندارد — فایل را قبول می‌کند و نصب می‌کند.</p>
+                        <p>طرف مقابل روی فایل می‌زند تا نصب کند.</p>
                     </div>
                 </div>
             </div>
         </div>
-        
+
+        <div class="section">
+            <div class="section-title">رفع مشکل</div>
+
+            <div class="faq-item">
+                <div class="faq-question">چرا باتری‌ام سریع‌تر خالی می‌شود؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>مورمور بلوتوث را فعال نگه می‌دارد تا کاربران نزدیک را پیدا کند. این کمی باتری اضافی مصرف می‌کند — مشابه وصل بودن هدفون بلوتوث.</p>
+                        <p>اگر باتری بحرانی است، می‌توانید مورمور را موقتاً در تنظیمات غیرفعال کنید.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">«همتایی در نزدیکی نیست» — مشکل چیست؟</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>این موارد را بررسی کنید:</p>
+                        <ul>
+                            <li>بلوتوث و وای‌فای روشن باشند</li>
+                            <li>مجوز موقعیت مکانی داده شده باشد</li>
+                            <li>«فعال‌سازی مورمور» در تنظیمات روشن باشد</li>
+                            <li>واقعاً کسی با مورمور در نزدیکی باشد</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="footer">
-            مورمور • پیام‌رسانی شبکه‌ای ناشناس
+            مورمور &bull; پیام‌رسانی شبکه‌ای ناشناس
         </div>
     </div>
-    
+
     <script>
         document.querySelectorAll('.faq-question').forEach(q => {
             q.addEventListener('click', () => {

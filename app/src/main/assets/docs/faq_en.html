@@ -10,7 +10,7 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
@@ -18,33 +18,33 @@
             color: #333;
             line-height: 1.6;
         }
-        
+
         .container {
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
         }
-        
+
         .hero {
             text-align: center;
             padding: 30px 20px;
             color: white;
         }
-        
+
         .hero h1 {
             font-size: 2em;
             margin-bottom: 8px;
         }
-        
+
         .hero .subtitle {
             opacity: 0.8;
             font-size: 1em;
         }
-        
+
         .section {
             margin-bottom: 20px;
         }
-        
+
         .section-title {
             color: #fff;
             font-size: 0.85em;
@@ -54,7 +54,7 @@
             padding-left: 4px;
             opacity: 0.7;
         }
-        
+
         .faq-item {
             background: white;
             border-radius: 12px;
@@ -62,7 +62,7 @@
             overflow: hidden;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        
+
         .faq-question {
             padding: 16px 20px;
             font-weight: 600;
@@ -73,46 +73,46 @@
             align-items: center;
             transition: background 0.2s;
         }
-        
+
         .faq-question:hover {
             background: #f8f9ff;
         }
-        
+
         .faq-question::after {
             content: '+';
             font-size: 1.5em;
             color: #667eea;
             transition: transform 0.3s;
         }
-        
+
         .faq-item.active .faq-question::after {
             transform: rotate(45deg);
         }
-        
+
         .faq-answer {
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.3s ease-out;
             background: #f8f9ff;
         }
-        
+
         .faq-item.active .faq-answer {
-            max-height: 500px;
+            max-height: 600px;
         }
-        
+
         .faq-answer-content {
             padding: 0 20px 20px;
             color: #555;
         }
-        
+
         .faq-answer-content p {
             margin-bottom: 12px;
         }
-        
+
         .faq-answer-content p:last-child {
             margin-bottom: 0;
         }
-        
+
         .tag {
             display: inline-block;
             padding: 4px 10px;
@@ -121,35 +121,30 @@
             font-weight: 600;
             margin-right: 4px;
         }
-        
+
         .tag.yes {
-            background: #eceff1;
-            color: #455a64;
+            background: #e8f5e9;
+            color: #2e7d32;
         }
-        
+
         .tag.no {
-            background: #eceff1;
-            color: #455a64;
+            background: #ffebee;
+            color: #c62828;
         }
-        
-        .tag.info {
-            background: #e3f2fd;
-            color: #1565c0;
-        }
-        
+
         .warning {
             color: #c62828;
             font-weight: 600;
         }
-        
+
         ul {
             margin: 12px 0 12px 20px;
         }
-        
+
         li {
             margin-bottom: 6px;
         }
-        
+
         .footer {
             text-align: center;
             padding: 30px;
@@ -161,227 +156,250 @@
 <body>
     <div class="container">
         <div class="hero">
-            <h1>❓ FAQ</h1>
+            <h1>FAQ</h1>
             <p class="subtitle">Frequently Asked Questions</p>
         </div>
-        
+
         <div class="section">
-            <div class="section-title">General</div>
-            
+            <div class="section-title">The Basics</div>
+
             <div class="faq-item active">
                 <div class="faq-question">What is Murmur?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>Murmur is a <strong>delay-tolerant mesh messaging</strong> app. It lets people share short messages without internet access.</p>
-                        <p>Messages spread person-to-person via <span class="tag info">Bluetooth</span> and <span class="tag info">Wi-Fi</span> when devices come near each other.</p>
+                        <p>Murmur is a messaging app that works <strong>without the internet</strong>.</p>
+                        <p>When two people with Murmur come near each other, their phones automatically exchange messages using Bluetooth and Wi-Fi. Messages spread from person to person as people move around.</p>
+                        <p>Think of it like passing notes in a crowd — except your phone does it silently in your pocket.</p>
                     </div>
                 </div>
             </div>
-            
+
             <div class="faq-item">
                 <div class="faq-question">Is it anonymous?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
                         <p><span class="tag yes">YES</span></p>
-                        <p>You can use any name (pseudonym) or none at all. The app does <strong>not</strong> link messages to your phone number, email, or device hardware ID.</p>
-                        <p>Your "identity" is a cryptographic key generated on your phone.</p>
+                        <p>You can use any name or no name at all. Murmur does <strong>not</strong> use your phone number, email, or any personal information.</p>
+                        <p>Your identity is just a random code created on your phone — it means nothing to anyone else.</p>
                     </div>
                 </div>
             </div>
-            
+
             <div class="faq-item">
                 <div class="faq-question">Does it use the internet?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
                         <p><span class="tag no">NO</span> Messaging works entirely offline.</p>
-                        <p><em>Note: If you enable "QA Mode" (for developers), it will use internet for telemetry. <span class="warning">Do NOT enable in restricted environments.</span></em></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="section">
-            <div class="section-title">Technical</div>
-            
-            <div class="faq-item">
-                <div class="faq-question">How does it work offline?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>When two Murmur users come near each other, their phones automatically exchange messages using:</p>
-                        <ul>
-                            <li><strong>Bluetooth (BLE)</strong> — Discovers nearby users and exchanges small amounts of data</li>
-                            <li><strong>Wi-Fi Direct</strong> — Transfers larger batches quickly (up to ~100m range)</li>
-                            <li><strong>Local Network</strong> — Works over shared Wi-Fi (cafes, hotspots)</li>
-                        </ul>
-                        <p>No internet needed. Messages hop from phone to phone.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">Why do I see a "Location" icon?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>Android requires <strong>Location Permission</strong> to scan for Bluetooth and Wi-Fi devices. This is an Android rule, not ours.</p>
-                        <p>Murmur does <strong>NOT</strong> track your GPS location or store it anywhere. We only use this permission to find nearby peers.</p>
+                        <p><em>Note: If you enable "QA Mode" in settings (only for developers), it will send usage data over the internet. <span class="warning">Keep this OFF in restricted environments.</span></em></p>
                     </div>
                 </div>
             </div>
 
             <div class="faq-item">
-                <div class="faq-question">What are the different connection methods?</div>
+                <div class="faq-question">How far can messages travel?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>Murmur uses multiple wireless technologies to maximize message delivery:</p>
-                        <ul>
-                            <li><span style="color: #3B82F6;">●</span> <strong style="color: #3B82F6;">Bluetooth (BLE)</strong> — Always-on discovery. Short range (~10m), low power. Works silently in background.</li>
-                            <li><span style="color: #F97316;">●</span> <strong style="color: #F97316;">WiFi Direct</strong> — Longer range (~100m), faster transfers. May show a connection popup on some devices.</li>
-                            <li><span style="color: #8B5CF6;">●</span> <strong style="color: #8B5CF6;">WiFi Aware (NAN)</strong> — Modern alternative to WiFi Direct. Same range and speed, but no popups. Requires Android 8+ and compatible hardware.</li>
-                            <li><span style="color: #22C55E;">●</span> <strong style="color: #22C55E;">LAN</strong> — Works over shared WiFi networks (home, office, cafe). Fastest when both devices are on the same network.</li>
-                        </ul>
-                        <p>The app automatically uses whichever methods are available on your device. You don't need to configure anything.</p>
+                        <p>Each phone-to-phone exchange works within about <strong>10-100 meters</strong>, depending on your surroundings.</p>
+                        <p>But here's the key: messages hop from phone to phone. So a message can travel across a city — it just takes time as people move around and encounter each other.</p>
+                        <p>In a crowded area, messages spread quickly. In a quiet neighborhood, it takes longer.</p>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="section">
-            <div class="section-title">Security</div>
-            
-            <div class="faq-item">
-                <div class="faq-question">Can the government see my messages?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p><span class="tag no">NOT FROM A DISTANCE</span></p>
-                        <p>There is no central server to hack or subpoena. Messages move directly from phone to phone — no company in the middle.</p>
-                        <p><strong>However:</strong> If someone (including a government agent) installs Murmur and physically comes near other users, their phone will receive messages like any other peer. This is unavoidable in any open mesh network.</p>
-                        <p><em><span class="warning">Warning:</span> If someone takes your unlocked phone, they can read your messages. Use a strong screen lock.</em></p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">Can I delete messages?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p><span class="tag no">NO</span> You cannot recall messages from the network.</p>
-                        <p>You can <strong>hide</strong> messages by swiping them away. This clears your feed but doesn't erase anything. Use "Restore swiped" to bring them back.</p>
-                        <p>Some messages may expire automatically. Once a message spreads to others, it's out of your control. This prevents censorship.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">Are messages encrypted?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>Messages are <strong>not encrypted</strong> and <strong>not signed</strong> — anyone on the mesh can read them, and there's no way to know who wrote them.</p>
-                        <p>This is intentional: full anonymity means messages cannot be traced back to their author. Think of it like an anonymous public bulletin board. Do not share secrets.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="section">
-            <div class="section-title">Trust & Prioritization</div>
-            
-            <div class="faq-item">
-                <div class="faq-question">How do I establish trust with someone?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>Use <strong>BLE pairing</strong> — both people must be physically nearby (within Bluetooth range, ~10 meters).</p>
-                        <p>Go to the Friends tab, tap "Add Friend Nearby." Both of you will see a 6-digit code on your screens. Enter each other's codes and verify visually that they match. This creates a direct trust link.</p>
-                        <p><strong>Why this is secure:</strong> An adversary cannot add you remotely. They would need to be physically present and pass the visual code verification. This combines Bluetooth locality (proves proximity) with keyboard entry (proves human involvement) to establish genuine person-to-person trust.</p>
-                        <p>Once connected, messages from that person — and people they trust — will be prioritized in your feed.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="faq-item">
-                <div class="faq-question">Why does trust matter for message delivery?</div>
-                <div class="faq-answer">
-                    <div class="faq-answer-content">
-                        <p>When two phones meet, they only have a <strong>brief window</strong> to exchange messages — maybe seconds or minutes. Not everything can be shared in time.</p>
-                        <p>Murmur must decide <strong>what to send first</strong>. It prioritizes messages from people in your trust network, so important content reaches you faster.</p>
-                        <p>This means your feed naturally reflects your community. A government employee whose contacts are mostly other officials will see more official messages. A dissident whose trust circle includes activists will see more from that community — and less from outside it.</p>
-                        <p><em>Trust shapes what spreads. Build your network intentionally.</em></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="section">
-            <div class="section-title">Message Lifetime</div>
+            <div class="section-title">Using the App</div>
 
             <div class="faq-item">
-                <div class="faq-question">How long do messages live?</div>
+                <div class="faq-question">What do the colored dots mean?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>Messages have two independent expiration clocks:</p>
-                        <p><strong>Propagation expiry</strong> — After <strong>3 days</strong>, a message stops being forwarded to new peers during exchanges. It will no longer spread through the mesh network. This limits how long old content circulates.</p>
-                        <p><strong>Local expiry</strong> — Messages are eventually removed from your device based on how many hearts they have:</p>
+                        <p>The "Nearby" counter shows how many Murmur users are within range. The colored dots show how your phone is connecting:</p>
                         <ul>
-                            <li><strong>0 hearts</strong> — removed after <strong>3 days</strong></li>
-                            <li><strong>1 heart</strong> — removed after <strong>1 week</strong></li>
-                            <li><strong>2+ hearts</strong> — removed after <strong>2 weeks</strong></li>
+                            <li><span style="color: #3B82F6;">&#9679;</span> <strong>Blue</strong> — Bluetooth. Most common, works in background, short range.</li>
+                            <li><span style="color: #8B5CF6;">&#9679;</span> <strong>Purple</strong> — Wi-Fi Aware. Faster and longer range. Only on newer phones.</li>
+                            <li><span style="color: #22C55E;">&#9679;</span> <strong>Green</strong> — Same Wi-Fi network (home, cafe, etc.).</li>
                         </ul>
-                        <p>This means a message can still be visible on your phone after it stops spreading — it just won't reach new people anymore. Hearting a message keeps it on your device longer.</p>
+                        <p>You don't need to do anything — the app picks the best method automatically.</p>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="section">
-            <div class="section-title">Features</div>
-            
             <div class="faq-item">
-                <div class="faq-question">What does the Heart (❤️) do?</div>
+                <div class="faq-question">Why do I see a "Location" permission?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>Hearts are a simple, anonymous “like.” Tapping the heart toggles your like on/off and changes the count by +1/-1 on your phone.</p>
+                        <p>Android requires Location Permission to scan for Bluetooth and Wi-Fi devices. This is an Android rule — all apps that scan for wireless devices must ask for it.</p>
+                        <p>Murmur does <strong>NOT</strong> track where you are. We only use this to find other Murmur users nearby.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">What does the heart do?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Hearts are a simple "like" button.</p>
                         <ul>
-                            <li><strong>Anonymous:</strong> no identity is attached to a heart.</li>
-                            <li><strong>Feed only:</strong> hearts only affect how you view the feed (e.g., “Most hearted” sort and “Liked” filter).</li>
-                            <li><strong>No trust impact:</strong> hearts do <strong>not</strong> change Connection Scores.</li>
+                            <li><strong>Sorting:</strong> You can sort your feed by "Most hearted" to see popular messages.</li>
+                            <li><strong>Keeps messages longer:</strong> Hearted messages stay on your phone longer before expiring.</li>
+                            <li><strong>Anonymous:</strong> No one knows who hearted a message.</li>
                         </ul>
                     </div>
                 </div>
             </div>
-            
+
             <div class="faq-item">
-                <div class="faq-question">What is the Trust indicator?</div>
+                <div class="faq-question">What do the colored bars on messages mean?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>The colored bar on the left of each message shows how close the author is to your social circle:</p>
+                        <p>The colored bar shows how connected the message author is to your social circle:</p>
                         <ul>
                             <li><strong style="color: #4caf50;">Green</strong> — From a Friend or Friend-of-Friend</li>
-                            <li><strong style="color: #ff9800;">Yellow</strong> — Neutral (no strong connection)</li>
+                            <li><strong style="color: #ff9800;">Yellow</strong> — Some connection</li>
                             <li><strong style="color: #f44336;">Red</strong> — Unknown source (be skeptical)</li>
                         </ul>
                     </div>
                 </div>
             </div>
-            
+        </div>
+
+        <div class="section">
+            <div class="section-title">Privacy & Security</div>
+
             <div class="faq-item">
-                <div class="faq-question">How do I share Murmur without internet?</div>
+                <div class="faq-question">Can the government read my messages?</div>
                 <div class="faq-answer">
                     <div class="faq-answer-content">
-                        <p>Open <strong>Share Murmur</strong> from Settings. You have two options:</p>
-                        <ul>
-                            <li><strong>Quick Share / Bluetooth</strong> — Best for nearby devices. Tap "Share via Quick Share" and select how to send.</li>
-                            <li><strong>QR Code</strong> — If both devices are on the same WiFi, use the QR option. The receiver scans it with their camera and downloads via browser.</li>
-                        </ul>
-                        <p>The receiver doesn't need Murmur installed — they accept the file and install it.</p>
+                        <p><span class="tag no">NOT REMOTELY</span></p>
+                        <p>There is no server to hack or demand data from. Messages only exist on people's phones and spread directly between devices.</p>
+                        <p><strong>However:</strong> If someone installs Murmur and comes near other users, their phone will receive messages like anyone else's. This is true of any open network — think of a public bulletin board.</p>
+                        <p><em><span class="warning">Important:</span> If someone takes your unlocked phone, they can read your messages. Always use a screen lock.</em></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">Are messages encrypted?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Messages are <strong>not encrypted</strong> — anyone on the network can read them.</p>
+                        <p>This is intentional. Full anonymity means messages cannot be traced back to their author. There's no "from" address.</p>
+                        <p>Think of Murmur as an anonymous public bulletin board. Don't share secrets you wouldn't post publicly.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">Can I delete a message I sent?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><span class="tag no">NO</span></p>
+                        <p>Once a message spreads to other phones, you cannot recall it. This prevents censorship — no one can erase inconvenient truths.</p>
+                        <p>You can <strong>swipe away</strong> messages to hide them from your own feed, but this only affects your phone.</p>
                     </div>
                 </div>
             </div>
         </div>
-        
+
+        <div class="section">
+            <div class="section-title">Friends & Trust</div>
+
+            <div class="faq-item">
+                <div class="faq-question">Why does trust matter?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>When two phones meet, they only have a short time to exchange messages. Not everything can be shared.</p>
+                        <p>Murmur prioritizes messages from people connected to your Friends list. This way, messages from your community reach you first.</p>
+                        <p><em>Trust shapes what spreads. Build your network with people you know.</em></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">How do I add friends?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>You must be <strong>physically near</strong> the person (within about 10 meters).</p>
+                        <p>Go to <strong>Friends</strong> and tap <strong>"Add Friend Nearby"</strong>. You'll both see a 6-digit code. Enter each other's codes and verify they match.</p>
+                        <p><strong>Why this matters:</strong> No one can add you as a friend remotely. They must be physically present. This ensures your trust network is made of real people you've actually met.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Message Lifespan</div>
+
+            <div class="faq-item">
+                <div class="faq-question">How long do messages last?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p><strong>Spreading:</strong> Messages spread through the network for about <strong>3 days</strong>. After that, phones stop forwarding them.</p>
+                        <p><strong>On your phone:</strong> Messages eventually disappear based on hearts:</p>
+                        <ul>
+                            <li><strong>0 hearts</strong> — removed after 3 days</li>
+                            <li><strong>1 heart</strong> — removed after 1 week</li>
+                            <li><strong>2+ hearts</strong> — removed after 2 weeks</li>
+                        </ul>
+                        <p>Hearting a message keeps it on your phone longer.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Sharing</div>
+
+            <div class="faq-item">
+                <div class="faq-question">How do I share Murmur without internet?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Go to <strong>Settings > Share Murmur</strong>:</p>
+                        <ul>
+                            <li><strong>Quick Share / Nearby Share</strong> — Send the app directly via Bluetooth or Wi-Fi.</li>
+                            <li><strong>QR Code</strong> — If both phones are on the same Wi-Fi, they can scan a code to download it.</li>
+                        </ul>
+                        <p>The other person taps the file to install it.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Troubleshooting</div>
+
+            <div class="faq-item">
+                <div class="faq-question">Why is my battery draining faster?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Murmur keeps Bluetooth active to find nearby users. This uses some extra battery — similar to having Bluetooth headphones connected.</p>
+                        <p>If battery is critical, you can disable Murmur temporarily in Settings.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">"No peers nearby" — what's wrong?</div>
+                <div class="faq-answer">
+                    <div class="faq-answer-content">
+                        <p>Check these:</p>
+                        <ul>
+                            <li>Bluetooth and Wi-Fi are turned ON</li>
+                            <li>Location permission is granted</li>
+                            <li>"Enable Murmur" is ON in Settings</li>
+                            <li>Someone else with Murmur is actually nearby</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="footer">
-            Murmur • Anonymous Mesh Messaging
+            Murmur &bull; Anonymous Mesh Messaging
         </div>
     </div>
-    
+
     <script>
         document.querySelectorAll('.faq-question').forEach(q => {
             q.addEventListener('click', () => {
