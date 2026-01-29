@@ -272,15 +272,65 @@ class DiscoveredPeerRegistry {
         val transportKey = "lan:$ipAddress:$port"
         var existingPeerId = addressToPeerId[transportKey]
 
+        // Handle stale mapping: if this IP:port was mapped to a DIFFERENT peer, clean it up.
+        // This happens when an IP address is reassigned to a different device (e.g., DHCP lease change).
+        //
+        // LIMITATION: This cleanup only triggers when we receive a NEW publicId for the same IP.
+        // If a device leaves the network silently (no goodbye), the stale mapping persists until:
+        // (a) another device gets that IP, or (b) the peer times out via pruneStale().
+        // This is acceptable because stale transports don't affect correctness, just memory.
+        if (existingPeerId != null && publicId != null) {
+            val mappedPeer = peers[existingPeerId]
+            val idMismatch = mappedPeer != null &&
+                !existingPeerId.startsWith(publicId) &&
+                !publicId.startsWith(existingPeerId)
+
+            if (idMismatch) {
+                Timber.w("$TAG: LAN address $ipAddress changed from $existingPeerId to $publicId - cleaning up stale mapping")
+                // Remove the transport from the old peer
+                mappedPeer?.removeTransport(TransportType.LAN)
+                // If old peer has no transports left, remove it entirely
+                if (mappedPeer?.transports?.isEmpty() == true) {
+                    peers.remove(existingPeerId)
+                    Timber.i("$TAG: Removed orphaned peer $existingPeerId (no transports remaining)")
+                }
+                // Clear the stale mapping so we can create/find the correct peer
+                addressToPeerId.remove(transportKey)
+                existingPeerId = null
+            }
+        }
+
         // Cross-transport correlation: check if this public ID is already known
         if (existingPeerId == null && publicId != null) {
+            // First try exact match
             if (peers.containsKey(publicId)) {
                 existingPeerId = publicId
-                Timber.d("$TAG: LAN peer $ipAddress correlates with known peer $publicId")
+                Timber.d("$TAG: LAN peer $ipAddress correlates with known peer $publicId (exact)")
             }
-            val idKey = "id:$publicId"
-            addressToPeerId[idKey]?.let { mappedPeerId ->
-                existingPeerId = mappedPeerId
+
+            // Then try prefix matching - correlate with WiFi Aware 8-char prefix peers.
+            // WiFi Aware only exchanges 8-char ID prefixes in service info, while LAN uses full 16-char IDs.
+            //
+            // LIMITATION: Prefix matching assumes IDs are unique in their first 8 chars. With random
+            // 16-char hex IDs (64 bits), collision probability is ~1 in 4 billion per pair, so this
+            // is safe in practice. However, if two devices somehow had IDs starting with the same
+            // 8 chars, they could be incorrectly merged. This is extremely unlikely but not impossible.
+            if (existingPeerId == null) {
+                val prefixMatch = peers.keys.firstOrNull { peerId ->
+                    publicId.startsWith(peerId) || peerId.startsWith(publicId)
+                }
+                if (prefixMatch != null) {
+                    existingPeerId = prefixMatch
+                    Timber.i("$TAG: LAN peer $ipAddress ($publicId) correlates with $prefixMatch (prefix match)")
+                }
+            }
+
+            // Check address mappings
+            if (existingPeerId == null) {
+                val idKey = "id:$publicId"
+                addressToPeerId[idKey]?.let { mappedPeerId ->
+                    existingPeerId = mappedPeerId
+                }
             }
         }
 
@@ -300,21 +350,32 @@ class DiscoveredPeerRegistry {
                 peer.updateTransport(transportInfo)
                 addressToPeerId[transportKey] = foundPeerId
 
-                // Upgrade to verified ID if we now have one
-                if (publicId != null && !peer.handshakeCompleted) {
+                // Upgrade to full ID if we now have one (either from no ID, or from prefix to full).
+                // This handles the case where we first saw a peer via WiFi Aware (8-char prefix)
+                // and now see them via LAN (full 16-char ID).
+                //
+                // LIMITATION: The upgrade removes the old peer entry and creates a new one with the
+                // full ID. Any references to the old ID (e.g., in pending exchanges) become stale.
+                // This is acceptable because exchanges use transport addresses, not peer IDs.
+                val newId = publicId
+                val shouldUpgrade = newId != null && (
+                    !peer.handshakeCompleted ||
+                    (newId.length > peer.publicId.length && newId.startsWith(peer.publicId))
+                )
+                if (shouldUpgrade && newId != null) {
                     peers.remove(peer.publicId)
                     val updatedPeer = peer.copy(
-                        publicId = publicId,
+                        publicId = newId,
                         handshakeCompleted = true
                     )
-                    peers[publicId] = updatedPeer
-                    addressToPeerId[transportKey] = publicId
-                    addressToPeerId["id:$publicId"] = publicId
-                    Timber.i("$TAG: Peer upgraded to verified ID via LAN: $publicId")
+                    peers[newId] = updatedPeer
+                    addressToPeerId[transportKey] = newId
+                    addressToPeerId["id:$newId"] = newId
+                    Timber.i("$TAG: Peer upgraded from ${peer.publicId} to full ID via LAN: $newId")
                 }
 
                 if (isNewTransport) {
-                    Timber.i("$TAG: Added LAN transport to existing peer: $foundPeerId")
+                    Timber.i("$TAG: Added LAN transport to existing peer: ${publicId ?: foundPeerId}")
                     onPeerTransportAdded?.invoke(peer, TransportType.LAN)
                 }
             }
@@ -364,14 +425,32 @@ class DiscoveredPeerRegistry {
 
         // Check if this public ID is already known via another transport
         if (existingPeerId == null && publicId != null) {
+            // First try exact match
             if (peers.containsKey(publicId)) {
                 existingPeerId = publicId
-                Timber.d("$TAG: WiFi Aware peer correlates with known peer $publicId")
+                Timber.d("$TAG: WiFi Aware peer correlates with known peer $publicId (exact)")
             }
 
-            val idKey = "id:$publicId"
-            addressToPeerId[idKey]?.let { mappedPeerId ->
-                existingPeerId = mappedPeerId
+            // Then try prefix matching - WiFi Aware uses 8-char prefix, other transports use 16-char full ID.
+            // See reportLanPeer() for detailed discussion of prefix matching limitations.
+            if (existingPeerId == null) {
+                val prefixMatch = peers.keys.firstOrNull { peerId ->
+                    // Match if publicId (8-char) is prefix of existing peerId (16-char)
+                    // or if existing peerId is prefix of publicId (for consistency)
+                    peerId.startsWith(publicId) || publicId.startsWith(peerId)
+                }
+                if (prefixMatch != null) {
+                    existingPeerId = prefixMatch
+                    Timber.i("$TAG: WiFi Aware peer $publicId correlates with $prefixMatch (prefix match)")
+                }
+            }
+
+            // Also check address mappings
+            if (existingPeerId == null) {
+                val idKey = "id:$publicId"
+                addressToPeerId[idKey]?.let { mappedPeerId ->
+                    existingPeerId = mappedPeerId
+                }
             }
         }
 

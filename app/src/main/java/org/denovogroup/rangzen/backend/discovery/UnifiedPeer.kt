@@ -66,7 +66,15 @@ data class UnifiedPeer(
         transports[info.transport] = info
         lastActivity = maxOf(lastActivity, info.lastSeen)
     }
-    
+
+    /**
+     * Remove a specific transport from this peer.
+     * Used when an address is reassigned to a different device.
+     */
+    fun removeTransport(transport: TransportType) {
+        transports.remove(transport)
+    }
+
     /**
      * Remove stale transport entries.
      */
