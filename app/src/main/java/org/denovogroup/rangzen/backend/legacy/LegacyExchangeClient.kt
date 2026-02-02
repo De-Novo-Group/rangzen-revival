@@ -494,7 +494,17 @@ class LegacyExchangeClient(
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
             } else {
-                // New message - add to store (only count if actually added;
+                // New message - compute trust locally using OUR PSI-Ca result
+                // Per Rangzen paper: trust is based on OUR mutual friends with the sender
+                val localTrust = LegacyExchangeMath.computeNewPriority_sigmoidFractionOfFriends(
+                    priority = 1.0,  // Base priority for new message
+                    sharedFriends = commonFriends,
+                    myFriends = myFriendsCount
+                )
+                // Update message with locally-computed trust before storing
+                message.trustScore = localTrust
+
+                // Add to store (only count if actually added;
                 // addMessage returns false for tombstoned/TTL-expired messages)
                 if (messageStore.addMessage(message)) {
                     newCount++
