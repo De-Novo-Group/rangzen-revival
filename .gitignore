@@ -30,3 +30,4 @@ node_modules/
 # Internal documentation (not for public repo)
 CLAUDE.md
 docs/
+.claude/
