@@ -235,7 +235,6 @@
 
     <!-- Feed filters -->
     <string name="feed_filter_liked">Liked</string>
-    <string name="feed_filter_hide_mine">Hide mine</string>
     <string name="feed_sort_recent">Recent ▼</string>
     <string name="feed_sort_hearts">♥ Hearts ▼</string>
     <string name="feed_restore_swiped">Restore swiped</string>

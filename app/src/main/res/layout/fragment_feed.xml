@@ -147,20 +147,6 @@
                 android:paddingStart="4dp"
                 android:paddingEnd="0dp" />
 
-            <!-- Filter: hide my own messages -->
-            <CheckBox
-                android:id="@+id/check_hide_mine"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:text="@string/feed_filter_hide_mine"
-                android:textSize="13sp"
-                android:textColor="@color/text_secondary"
-                android:minHeight="32dp"
-                android:paddingStart="4dp"
-                android:paddingEnd="0dp"
-                android:checked="true" />
-
             <!-- Spacer -->
             <View
                 android:layout_width="0dp"

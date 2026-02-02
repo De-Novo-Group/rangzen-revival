@@ -56,16 +56,12 @@ class FeedFragment : Fragment() {
     private var cachedBroadcasts: List<Broadcast> = emptyList()
     // Track whether the feed should show only liked (hearted) messages.
     private var onlyLiked = false
-    // Track whether to hide user's own messages (default: true)
-    private var hideMine = true
     // Track current sort mode: false = Recent (by time), true = Most hearted
     private var sortByHearts = false
     // Shared preferences for UI-only hidden messages.
     private lateinit var feedPrefs: SharedPreferences
     // Local cache of hidden message IDs.
     private var hiddenMessageIds: MutableSet<String> = mutableSetOf()
-    // User's pseudonym for filtering own messages.
-    private var myPseudonym: String? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -217,24 +213,12 @@ class FeedFragment : Fragment() {
     }
 
     private fun setupFilters() {
-        // Load user's pseudonym for "hide mine" filter.
-        myPseudonym = requireContext()
-            .getSharedPreferences("rangzen_prefs", Context.MODE_PRIVATE)
-            .getString("default_pseudonym", null)
-        
         // Initialize the toggles with current state.
         binding.switchOnlyLiked.isChecked = onlyLiked
-        binding.checkHideMine.isChecked = hideMine
-        
+
         // Update the feed when liked filter is toggled.
         binding.switchOnlyLiked.setOnCheckedChangeListener { _, isChecked ->
             onlyLiked = isChecked
-            updateUI(buildFeedItems())
-        }
-
-        // Update the feed when "hide mine" filter is toggled.
-        binding.checkHideMine.setOnCheckedChangeListener { _, isChecked ->
-            hideMine = isChecked
             updateUI(buildFeedItems())
         }
 
@@ -284,11 +268,6 @@ class FeedFragment : Fragment() {
         // Filter by liked (hearted) if enabled.
         if (onlyLiked) {
             filteredMessages = filteredMessages.filter { it.isLiked }
-        }
-
-        // Filter out own messages if "hide mine" is checked.
-        if (hideMine && myPseudonym != null) {
-            filteredMessages = filteredMessages.filter { it.pseudonym != myPseudonym }
         }
 
         // Filter out swiped/hidden messages.

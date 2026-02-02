@@ -235,7 +235,6 @@
 
     <!-- Feed filters -->
     <string name="feed_filter_liked">پسندیده</string>
-    <string name="feed_filter_hide_mine">پنهان کردن پیام‌های من</string>
     <string name="feed_sort_recent">اخیر ▼</string>
     <string name="feed_sort_hearts">♥ قلب‌ها ▼</string>
     <string name="feed_restore_swiped">بازگردانی حذف شده‌ها</string>
