@@ -553,6 +553,15 @@ class FeedAdapter(
             btnLike.setImageResource(
                 if (message.isLiked) R.drawable.ic_liked else R.drawable.ic_like
             )
+            // Trust color mapping per Rangzen paper Section 4.3:
+            // - Green (HIGH): Trust >= 0.7 - messages from peers with significant friend overlap
+            // - Yellow (MEDIUM): Trust >= 0.4 - messages from acquaintances/friends-of-friends
+            // - Red (LOW): Trust < 0.4 - messages from strangers or untrusted sources
+            //
+            // The sigmoid function in PSI-Ca maps:
+            // - 0% mutual friends → 0.001 trust (red)
+            // - 30% mutual friends → ~0.5 trust (yellow, sigmoid midpoint)
+            // - >40% mutual friends → >0.7 trust (green)
             val trustColor = when {
                 message.trustScore >= 0.7 -> R.color.trust_high
                 message.trustScore >= 0.4 -> R.color.trust_medium
