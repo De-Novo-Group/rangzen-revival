@@ -107,9 +107,13 @@ class ComposeFragment : Fragment() {
 
         // Create and store message
         val message = RangzenMessage(text, pseudonym).apply {
-            // Own messages have maximum trust
-            trustScore = 1.0
-            // Mark as already read
+            // Trust is computed via PSI-Ca during exchange - do NOT preset to 1.0
+            // Per Rangzen paper: trust is based on mutual friends, not authorship
+            // Default trust (0.5) is appropriate for messages that haven't been
+            // exchanged yet - will be recomputed per-peer during propagation
+            // Note: trustScore is already DEFAULT_TRUST (0.5) from constructor
+
+            // Mark as already read (user just wrote it)
             isRead = true
         }
 
