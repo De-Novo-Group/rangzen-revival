@@ -496,11 +496,18 @@ class LegacyExchangeClient(
             } else {
                 // New message - compute trust locally using OUR PSI-Ca result
                 // Per Rangzen paper: trust is based on OUR mutual friends with the sender
+                val senderTrust = message.trustScore  // Capture sender's trust before overwriting
                 val localTrust = LegacyExchangeMath.computeNewPriority_sigmoidFractionOfFriends(
                     priority = 1.0,  // Base priority for new message
                     sharedFriends = commonFriends,
                     myFriends = myFriendsCount
                 )
+                // Log trust computation for verification
+                Timber.d("Trust computation for ${message.messageId.take(8)}: " +
+                    "senderTrust=$senderTrust, " +
+                    "localTrust=$localTrust, " +
+                    "mutualFriends=$commonFriends, " +
+                    "myFriends=$myFriendsCount")
                 // Update message with locally-computed trust before storing
                 message.trustScore = localTrust
 
