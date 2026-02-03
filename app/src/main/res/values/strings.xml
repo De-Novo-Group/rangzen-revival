@@ -89,6 +89,7 @@
     <!-- BLE Pairing -->
     <string name="pairing_title">Add Friend</string>
     <string name="pairing_nearby_title">Nearby Devices</string>
+    <string name="pairing_waiting_title">Waiting for Selection</string>
     <string name="pairing_enter_code_title">Enter Code</string>
     <string name="pairing_verifying_title">Verifying</string>
     <string name="pairing_nickname_title">Add Nickname</string>
@@ -140,6 +141,62 @@
     <string name="pairing_error_already_friends">You\'re already friends with this person.</string>
 
     <string name="action_add_friend_ble">Add Friend Nearby</string>
+
+    <!-- Two-phase pairing (v2 protocol) -->
+    <string name="pairing_you_are">You are: %1$s</string>
+    <string name="pairing_find_friend">Find your friend and tap their name:</string>
+    <string name="pairing_selected">You selected: %1$s</string>
+    <string name="pairing_waiting_mutual">Waiting for %1$s to select you…</string>
+    <string name="pairing_your_code_display">Your code: %1$s</string>
+    <string name="pairing_enter_code_from">Enter code from %1$s\'s screen:</string>
+    <string name="pairing_mutual_confirmed">Both selected! Now verify codes.</string>
+
+    <!-- Pairing identifier wordlists -->
+    <string-array name="pairing_colors">
+        <item>Red</item>
+        <item>Blue</item>
+        <item>Green</item>
+        <item>Gold</item>
+        <item>Purple</item>
+        <item>Orange</item>
+        <item>Silver</item>
+        <item>Black</item>
+    </string-array>
+
+    <string-array name="pairing_animals">
+        <item>Tiger</item>
+        <item>Lion</item>
+        <item>Eagle</item>
+        <item>Wolf</item>
+        <item>Bear</item>
+        <item>Fox</item>
+        <item>Hawk</item>
+        <item>Owl</item>
+        <item>Deer</item>
+        <item>Horse</item>
+        <item>Rabbit</item>
+        <item>Turtle</item>
+        <item>Dolphin</item>
+        <item>Whale</item>
+        <item>Shark</item>
+        <item>Cobra</item>
+        <item>Dragon</item>
+        <item>Falcon</item>
+        <item>Raven</item>
+        <item>Swan</item>
+        <item>Crane</item>
+        <item>Panther</item>
+        <item>Leopard</item>
+        <item>Cheetah</item>
+        <item>Jaguar</item>
+        <item>Puma</item>
+        <item>Lynx</item>
+        <item>Otter</item>
+        <item>Beaver</item>
+        <item>Badger</item>
+        <item>Moose</item>
+        <item>Bison</item>
+    </string-array>
 
     <!-- Friends list -->
     <string name="friends_count_format">Friends: %1$d</string>

@@ -2,15 +2,21 @@
  * Copyright (c) 2026, De Novo Group
  * All rights reserved.
  *
- * BLE Pairing Fragment - mutual-code pairing flow for adding friends via BLE.
+ * BLE Pairing Fragment - secure two-phase pairing flow for adding friends via BLE.
  *
- * Flow:
- * 1. Show "Your Code" (6 digits) and "Pairing Mode" banner
- * 2. Show Nearby Devices list, user selects one
- * 3. Prompt: "Enter their code" - user types code from other phone
- * 4. "Verifying..." - BLE handshake validates both codes
- * 5. "Friend verified" - ask for optional nickname
- * 6. Success - return to friends list
+ * Protocol v2 Flow:
+ * 1. Show "You are: Blue Tiger" (word identifier) - NEVER show codes yet
+ * 2. Show Nearby Devices list with word identifiers, user selects one
+ * 3. Wait for mutual selection (both users must select each other)
+ * 4. AFTER mutual selection: Show verification code (never broadcast)
+ * 5. Enter code from other person's PHYSICAL screen
+ * 6. "Verifying..." - BLE handshake validates codes
+ * 7. "Friend verified" - ask for optional nickname
+ * 8. Success - return to friends list
+ *
+ * Security improvement: Verification codes are NEVER broadcast over BLE.
+ * They only exist on screen after mutual selection, requiring physical
+ * visual verification of the other person's screen.
  */
 package org.denovogroup.rangzen.ui
 
@@ -60,15 +66,16 @@ class BlePairingFragment : Fragment() {
     private var _binding: FragmentBlePairingBinding? = null
     private val binding get() = _binding!!
 
-    // State machine
+    // State machine for v2 two-phase protocol
     private enum class State {
-        SHOW_CODE,      // Display our pairing code
-        NEARBY_DEVICES, // Show list of nearby devices
-        ENTER_CODE,     // Enter the other person's code
-        VERIFYING,      // BLE handshake in progress
-        NICKNAME,       // Ask for optional nickname
-        SUCCESS,        // Pairing complete
-        ERROR           // Show error with retry
+        SHOW_CODE,              // Display our word identifier (e.g., "Blue Tiger")
+        NEARBY_DEVICES,         // Show list of nearby devices with word IDs
+        WAITING_MUTUAL_SELECT,  // We selected a peer, waiting for them to select us
+        ENTER_CODE,             // Enter code from other person's PHYSICAL screen
+        VERIFYING,              // BLE handshake in progress
+        NICKNAME,               // Ask for optional nickname
+        SUCCESS,                // Pairing complete
+        ERROR                   // Show error with retry
     }
 
     private var currentState = State.SHOW_CODE
@@ -205,11 +212,25 @@ class BlePairingFragment : Fragment() {
         when (currentState) {
             State.SHOW_CODE -> parentFragmentManager.popBackStack()
             State.NEARBY_DEVICES -> showState(State.SHOW_CODE)
-            State.ENTER_CODE -> showState(State.NEARBY_DEVICES)
+            State.WAITING_MUTUAL_SELECT -> {
+                // Cancel selection and go back to nearby devices
+                cancelSelection()
+                showState(State.NEARBY_DEVICES)
+            }
+            State.ENTER_CODE -> showState(State.WAITING_MUTUAL_SELECT)
             State.VERIFYING -> { /* Can't go back during verification */ }
             State.NICKNAME -> { /* Can't go back after verification */ }
             State.SUCCESS -> parentFragmentManager.popBackStack()
             State.ERROR -> showState(State.SHOW_CODE)
+        }
+    }
+
+    private fun cancelSelection() {
+        pairingSession?.let { session ->
+            session.selectedPeerWordId = null
+            session.selectedPeerAddress = null
+            session.peerSelectedUs = false
+            session.verificationCode = null
         }
     }
 
@@ -238,19 +259,42 @@ class BlePairingFragment : Fragment() {
             State.NEARBY_DEVICES -> {
                 binding.layoutNearbyDevices.visibility = View.VISIBLE
                 binding.title.text = getString(R.string.pairing_nearby_title)
+                // Show "You are: Blue Tiger" banner
+                pairingSession?.let { session ->
+                    binding.textMyCodeSmall.text = getString(R.string.pairing_you_are, session.myWordId)
+                }
                 updateDeviceList()
+            }
+            State.WAITING_MUTUAL_SELECT -> {
+                // Reuse nearby devices layout but show waiting message
+                binding.layoutNearbyDevices.visibility = View.VISIBLE
+                binding.title.text = getString(R.string.pairing_waiting_title)
+                pairingSession?.let { session ->
+                    val peerWordId = session.selectedPeerWordId ?: "..."
+                    binding.textMyCodeSmall.text = getString(R.string.pairing_waiting_mutual, peerWordId)
+                }
             }
             State.ENTER_CODE -> {
                 binding.layoutEnterCode.visibility = View.VISIBLE
                 binding.title.text = getString(R.string.pairing_enter_code_title)
                 binding.editCode.text?.clear()
                 binding.btnVerify.isEnabled = false
+                // Show our verification code (generated after mutual selection)
+                pairingSession?.let { session ->
+                    binding.textMyCodeEnterScreen.text = getString(
+                        R.string.pairing_your_code_display,
+                        session.verificationCode ?: "------"
+                    )
+                    // Show whose code to enter
+                    val peerWordId = session.selectedPeerWordId ?: "friend"
+                    binding.textPeerInfo.text = getString(R.string.pairing_enter_code_from, peerWordId)
+                }
             }
             State.VERIFYING -> {
                 binding.layoutVerifying.visibility = View.VISIBLE
                 binding.title.text = getString(R.string.pairing_verifying_title)
-                // Show our code so the other person can still enter it
-                binding.textMyCodeVerifying.text = pairingSession?.myCode ?: ""
+                // Show our verification code so the other person can still enter it
+                binding.textMyCodeVerifying.text = pairingSession?.verificationCode ?: ""
             }
             State.NICKNAME -> {
                 binding.layoutNickname.visibility = View.VISIBLE
@@ -280,13 +324,12 @@ class BlePairingFragment : Fragment() {
             return
         }
 
-        // Create a new pairing session
-        pairingSession = BlePairingProtocol.createSession(myPublicId)
+        // Create a new pairing session with context for localized word identifiers
+        pairingSession = BlePairingProtocol.createSession(myPublicId, requireContext())
 
-        // Update UI with our code
-        binding.textMyCode.text = pairingSession!!.myCode
-        binding.textMyCodeSmall.text = pairingSession!!.myCode
-        binding.textMyCodeEnterScreen.text = pairingSession!!.myCode
+        // Update UI with our word identifier (e.g., "Blue Tiger")
+        // Note: Verification code is NOT set yet - only after mutual selection
+        binding.textMyCode.text = pairingSession!!.myWordId
 
         // Start BLE advertising and scanning
         startBle()
@@ -372,27 +415,7 @@ class BlePairingFragment : Fragment() {
                     // Parse the response - if they're in pairing mode, they'll respond with their announcement
                     if (response != null) {
                         Timber.i("$TAG: Got response from ${peer.address}, size=${response.size}")
-                        val parsed = BlePairingProtocol.parseAnnounceMessage(response)
-                        if (parsed != null) {
-                            val (code, shortId, _) = parsed
-                            Timber.i("$TAG: Peer ${peer.address} is in pairing mode - code=$code, shortId=$shortId")
-                            val pairingPeer = BlePairingProtocol.PairingPeer(
-                                address = peer.address,
-                                shortId = shortId,
-                                code = code,
-                                rssi = peer.rssi,
-                                lastSeen = System.currentTimeMillis()
-                            )
-                            discoveredPairingPeers[peer.address] = pairingPeer
-
-                            withContext(Dispatchers.Main) {
-                                if (currentState == State.NEARBY_DEVICES) {
-                                    updateDeviceList()
-                                }
-                            }
-                        } else {
-                            Timber.d("$TAG: Response from ${peer.address} is not a pairing announcement")
-                        }
+                        handleBleResponse(peer.address, response, peer.rssi)
                     } else {
                         Timber.d("$TAG: No response from ${peer.address}")
                     }
@@ -415,6 +438,94 @@ class BlePairingFragment : Fragment() {
         }
     }
 
+    /**
+     * Handle BLE response from a peer (client-side, from exchange()).
+     */
+    private suspend fun handleBleResponse(address: String, response: ByteArray, rssi: Int) {
+        val messageType = BlePairingProtocol.getMessageType(response)
+        Timber.i("$TAG: handleBleResponse from $address, type=$messageType")
+
+        when (messageType) {
+            BlePairingProtocol.MSG_PAIRING_ANNOUNCE -> {
+                val parsed = BlePairingProtocol.parseAnnounceMessage(response)
+                if (parsed != null) {
+                    val (wordId, shortId, _) = parsed
+                    Timber.i("$TAG: Peer $address is in pairing mode - wordId=$wordId, shortId=$shortId")
+                    val pairingPeer = BlePairingProtocol.PairingPeer(
+                        address = address,
+                        wordId = wordId,
+                        shortId = shortId,
+                        rssi = rssi,
+                        lastSeen = System.currentTimeMillis()
+                    )
+                    discoveredPairingPeers[address] = pairingPeer
+
+                    withContext(Dispatchers.Main) {
+                        if (currentState == State.NEARBY_DEVICES) {
+                            updateDeviceList()
+                        }
+                    }
+                }
+            }
+
+            BlePairingProtocol.MSG_PAIRING_SELECT -> {
+                // Peer selected us! Check if mutual
+                val parsed = BlePairingProtocol.parseSelectMessage(response)
+                if (parsed != null) {
+                    handleSelectMessage(address, parsed)
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle incoming SELECT message - check for mutual selection.
+     */
+    private fun handleSelectMessage(address: String, selectData: BlePairingProtocol.SelectMessageData) {
+        val session = pairingSession ?: return
+
+        Timber.i("$TAG: SELECT from $address: theirWordId=${selectData.theirWordId}, " +
+                "theySelected=${selectData.selectedPeerWordId}, myWordId=${session.myWordId}")
+
+        // Did they select us?
+        if (selectData.selectedPeerWordId == session.myWordId) {
+            Timber.i("$TAG: Peer $address selected us!")
+
+            // Update peer info in discovered list
+            val existingPeer = discoveredPairingPeers[address]
+            if (existingPeer == null) {
+                // Add them if we don't have them yet
+                val newPeer = BlePairingProtocol.PairingPeer(
+                    address = address,
+                    wordId = selectData.theirWordId,
+                    shortId = selectData.theirShortId,
+                    rssi = -50, // Unknown
+                    lastSeen = System.currentTimeMillis()
+                )
+                discoveredPairingPeers[address] = newPeer
+            }
+
+            // Check if we also selected them (mutual selection)
+            if (session.selectedPeerWordId == selectData.theirWordId) {
+                Timber.i("$TAG: MUTUAL SELECTION DETECTED with ${selectData.theirWordId}!")
+                session.peerSelectedUs = true
+
+                // Generate verification code NOW (after mutual selection)
+                session.generateVerificationCode()
+
+                // Transition to code entry
+                activity?.runOnUiThread {
+                    if (currentState == State.WAITING_MUTUAL_SELECT) {
+                        showState(State.ENTER_CODE)
+                    }
+                }
+            } else {
+                // They selected us but we haven't selected them yet
+                session.peerSelectedUs = false
+            }
+        }
+    }
+
     private fun handleIncomingPairingMessage(address: String, data: ByteArray): ByteArray? {
         Timber.i("$TAG: handleIncomingPairingMessage from $address, data size=${data.size}")
         val session = pairingSession
@@ -427,11 +538,11 @@ class BlePairingFragment : Fragment() {
 
         return when (messageType) {
             BlePairingProtocol.MSG_PAIRING_ANNOUNCE -> {
-                // Another device is announcing itself
+                // Another device is announcing itself (v2: wordId instead of code)
                 val parsed = BlePairingProtocol.parseAnnounceMessage(data)
                 if (parsed != null) {
-                    val (code, shortId, timestamp) = parsed
-                    Timber.i("$TAG: Received announcement from $address - code=$code, shortId=$shortId")
+                    val (wordId, shortId, timestamp) = parsed
+                    Timber.i("$TAG: Received announcement from $address - wordId=$wordId, shortId=$shortId")
 
                     // IMPORTANT: The server-side address may differ from scanner address due to BLE
                     // address randomization. Try to find existing entry by shortId to avoid duplicates.
@@ -451,8 +562,8 @@ class BlePairingFragment : Fragment() {
                             Timber.i("$TAG: Adding new pairing peer from server (scanner knows this addr)")
                             val peer = BlePairingProtocol.PairingPeer(
                                 address = address,
+                                wordId = wordId,
                                 shortId = shortId,
-                                code = code,
                                 rssi = scannerPeer.rssi,
                                 lastSeen = System.currentTimeMillis()
                             )
@@ -474,30 +585,82 @@ class BlePairingFragment : Fragment() {
                 BlePairingProtocol.createAnnounceMessage(session)
             }
 
+            BlePairingProtocol.MSG_PAIRING_SELECT -> {
+                // Peer selected us - check for mutual selection
+                val parsed = BlePairingProtocol.parseSelectMessage(data)
+                if (parsed != null) {
+                    Timber.i("$TAG: Received SELECT from $address - theirWordId=${parsed.theirWordId}, theySelected=${parsed.selectedPeerWordId}")
+
+                    // Update/add peer info
+                    val existingPeer = discoveredPairingPeers[address]
+                    if (existingPeer == null) {
+                        val newPeer = BlePairingProtocol.PairingPeer(
+                            address = address,
+                            wordId = parsed.theirWordId,
+                            shortId = parsed.theirShortId,
+                            rssi = -50,
+                            lastSeen = System.currentTimeMillis()
+                        )
+                        discoveredPairingPeers[address] = newPeer
+                    }
+
+                    // Did they select us?
+                    if (parsed.selectedPeerWordId == session.myWordId) {
+                        Timber.i("$TAG: Peer $address selected us!")
+
+                        // Check if we also selected them
+                        if (session.selectedPeerWordId == parsed.theirWordId) {
+                            Timber.i("$TAG: MUTUAL SELECTION! Generating verification code.")
+                            session.peerSelectedUs = true
+                            session.generateVerificationCode()
+
+                            // Transition to code entry
+                            activity?.runOnUiThread {
+                                if (currentState == State.WAITING_MUTUAL_SELECT) {
+                                    showState(State.ENTER_CODE)
+                                }
+                            }
+
+                            // Respond with our own SELECT to confirm mutual selection
+                            BlePairingProtocol.createSelectMessage(session, parsed.theirWordId)
+                        } else {
+                            // They selected us but we haven't selected them yet
+                            // Respond with announce so they know we're here
+                            BlePairingProtocol.createAnnounceMessage(session)
+                        }
+                    } else {
+                        // They selected someone else, just respond with announce
+                        BlePairingProtocol.createAnnounceMessage(session)
+                    }
+                } else {
+                    Timber.w("$TAG: Failed to parse SELECT message")
+                    null
+                }
+            }
+
             BlePairingProtocol.MSG_PAIRING_VERIFY -> {
-                // Peer is trying to verify our code
+                // Peer is trying to verify our code (after mutual selection)
                 Timber.i("$TAG: Received VERIFY from $address")
                 val parsed = BlePairingProtocol.parseVerifyMessage(data)
                 if (parsed != null) {
-                    Timber.i("$TAG: VERIFY parsed - theirCode=${parsed.theirCode}, theirShortId=${parsed.theirShortId}, enteredCode=${parsed.enteredCode}, myCode=${session.myCode}")
+                    val myVerificationCode = session.verificationCode
+                    Timber.i("$TAG: VERIFY parsed - theirWordId=${parsed.theirWordId}, theirShortId=${parsed.theirShortId}, " +
+                            "enteredCode=${parsed.enteredCode}, myVerificationCode=$myVerificationCode")
 
-                    // Check if they entered our code correctly
-                    if (parsed.enteredCode == session.myCode) {
-                        // They verified us correctly! Remember this
-                        peersWhoVerifiedUs[address] = parsed.theirCode
-                        Timber.i("$TAG: Peer $address verified us correctly, their code is ${parsed.theirCode}")
+                    // Check if they entered our verification code correctly
+                    if (myVerificationCode != null && parsed.enteredCode == myVerificationCode) {
+                        // They verified us correctly! Remember this with their wordId
+                        peersWhoVerifiedUs[address] = parsed.theirWordId
+                        Timber.i("$TAG: Peer $address verified us correctly, their wordId is ${parsed.theirWordId}")
 
-                        // Check if we've verified them - ONLY counts if user entered code and tapped Verify
-                        // (session.peerCode is set in verifyCode() when user submits)
-                        // Note: Just selecting a device does NOT count as verification!
-                        val weVerifiedThem = session.peerCode == parsed.theirCode
-                        Timber.i("$TAG: weVerifiedThem=$weVerifiedThem, session.peerCode=${session.peerCode}")
+                        // Check if we've verified them - session.peerCode is set in verifyCode() when user submits
+                        // The peerCode should match what we entered (their verification code from their screen)
+                        val weEnteredTheirCode = session.peerCode != null
+                        Timber.i("$TAG: weEnteredTheirCode=$weEnteredTheirCode, session.peerCode=${session.peerCode}")
 
-                        if (weVerifiedThem) {
+                        if (weEnteredTheirCode) {
                             // Both verified! Send confirmation with our public ID
                             session.verified = true
-                            session.peerShortId = parsed.theirShortId
-                            session.peerCode = parsed.theirCode
 
                             // If their VERIFY includes their public ID, we can complete locally!
                             if (parsed.theirPublicId != null) {
@@ -511,13 +674,17 @@ class BlePairingFragment : Fragment() {
                             }
                             BlePairingProtocol.createConfirmMessage(session)
                         } else {
-                            // We haven't verified them yet, send announce so they know we're active
-                            Timber.d("$TAG: They verified us but we haven't verified them yet")
-                            BlePairingProtocol.createAnnounceMessage(session)
+                            // We haven't verified them yet, send our SELECT to confirm mutual selection
+                            Timber.d("$TAG: They verified us but we haven't entered their code yet")
+                            if (session.selectedPeerWordId != null) {
+                                BlePairingProtocol.createSelectMessage(session, session.selectedPeerWordId!!)
+                            } else {
+                                BlePairingProtocol.createAnnounceMessage(session)
+                            }
                         }
                     } else {
                         // Wrong code
-                        Timber.w("$TAG: Peer entered wrong code: ${parsed.enteredCode} vs ${session.myCode}")
+                        Timber.w("$TAG: Peer entered wrong code: ${parsed.enteredCode} vs $myVerificationCode")
                         BlePairingProtocol.createRejectMessage("invalid_code")
                     }
                 } else {
@@ -530,9 +697,8 @@ class BlePairingFragment : Fragment() {
                 // Peer confirmed pairing and sent their public ID
                 val parsed = BlePairingProtocol.parseConfirmMessage(data)
                 if (parsed != null && session.verified) {
-                    val (publicId, shortId) = parsed
+                    val (publicId, wordId, shortId) = parsed
                     session.peerPublicId = publicId
-                    session.peerShortId = shortId
 
                     // Pairing complete!
                     activity?.runOnUiThread {
@@ -556,7 +722,7 @@ class BlePairingFragment : Fragment() {
 
         Timber.d("$TAG: updateDeviceList - ${blePeers.size} scanner peers, ${discoveredPairingPeers.size} pairing peers")
         blePeers.forEach { p -> Timber.d("$TAG:   scanner peer: ${p.address}") }
-        discoveredPairingPeers.forEach { (addr, p) -> Timber.d("$TAG:   pairing peer: $addr -> ${p.shortId}/${p.code}") }
+        discoveredPairingPeers.forEach { (addr, p) -> Timber.d("$TAG:   pairing peer: $addr -> ${p.shortId}/${p.wordId}") }
 
         // Only show devices that are in pairing mode (sent a pairing announcement)
         val displayPeers = blePeers.mapNotNull { blePeer ->
@@ -565,7 +731,7 @@ class BlePairingFragment : Fragment() {
                 DisplayPeer(
                     blePeer = blePeer,
                     shortId = pairingInfo.shortId,
-                    code = pairingInfo.code
+                    wordId = pairingInfo.wordId
                 )
             } else {
                 null  // Don't show devices not in pairing mode
@@ -588,13 +754,69 @@ class BlePairingFragment : Fragment() {
         selectedPeer = peer.blePeer
         selectedPairingPeer = discoveredPairingPeers[peer.blePeer.address]
 
-        Timber.i("$TAG: Selected device - blePeer.address=${peer.blePeer.address}, shortId=${peer.shortId}, code=${peer.code}")
-        Timber.i("$TAG: selectedPairingPeer=${selectedPairingPeer?.address}, code=${selectedPairingPeer?.code}")
+        Timber.i("$TAG: Selected device - blePeer.address=${peer.blePeer.address}, shortId=${peer.shortId}, wordId=${peer.wordId}")
+        Timber.i("$TAG: selectedPairingPeer=${selectedPairingPeer?.address}, wordId=${selectedPairingPeer?.wordId}")
 
-        // Update the enter code screen with peer info
-        binding.textPeerInfo.text = getString(R.string.pairing_device_format, peer.shortId)
+        // Update session with selection
+        pairingSession?.let { session ->
+            session.selectedPeerWordId = peer.wordId
+            session.selectedPeerAddress = peer.blePeer.address
 
-        showState(State.ENTER_CODE)
+            // Send SELECT message to peer
+            sendSelectMessage(peer.wordId)
+        }
+
+        // Transition to waiting for mutual selection
+        showState(State.WAITING_MUTUAL_SELECT)
+    }
+
+    /**
+     * Send SELECT message to inform peer we selected them.
+     */
+    private fun sendSelectMessage(peerWordId: String) {
+        val session = pairingSession ?: return
+        val peer = selectedPeer ?: return
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val selectMessage = BlePairingProtocol.createSelectMessage(session, peerWordId)
+                Timber.i("$TAG: Sending SELECT for $peerWordId to ${peer.address}")
+
+                val response = bleScanner?.exchange(peer, selectMessage)
+                if (response != null) {
+                    val messageType = BlePairingProtocol.getMessageType(response)
+                    Timber.i("$TAG: Got response to SELECT: type=$messageType")
+
+                    when (messageType) {
+                        BlePairingProtocol.MSG_PAIRING_SELECT -> {
+                            // They also sent SELECT - check if mutual
+                            val parsed = BlePairingProtocol.parseSelectMessage(response)
+                            if (parsed != null) {
+                                withContext(Dispatchers.Main) {
+                                    handleSelectMessage(peer.address, parsed)
+                                }
+                            }
+                        }
+                        BlePairingProtocol.MSG_PAIRING_ANNOUNCE -> {
+                            // They're still announcing, haven't selected us yet
+                            Timber.d("$TAG: Peer still announcing, waiting for their selection")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG: Failed to send SELECT message")
+            }
+        }
+
+        // Also periodically retry SELECT while waiting
+        scope.launch {
+            while (isActive && currentState == State.WAITING_MUTUAL_SELECT) {
+                delay(3000)
+                if (currentState == State.WAITING_MUTUAL_SELECT) {
+                    sendSelectMessage(peerWordId)
+                }
+            }
+        }
     }
 
     private fun verifyCode(enteredCode: String) {
@@ -649,11 +871,11 @@ class BlePairingFragment : Fragment() {
 
                     when (messageType) {
                         BlePairingProtocol.MSG_PAIRING_CONFIRM -> {
-                            // They confirmed! Extract their public ID
+                            // They confirmed! Extract their public ID (v2: returns publicId, wordId, shortId)
                             val parsed = BlePairingProtocol.parseConfirmMessage(response)
                             if (parsed != null) {
-                                session.peerPublicId = parsed.first
-                                session.peerShortId = parsed.second
+                                val (publicId, wordId, shortId) = parsed
+                                session.peerPublicId = publicId
                                 session.verified = true
                                 verificationInProgress = false
                                 onPairingComplete()
@@ -724,8 +946,8 @@ class BlePairingFragment : Fragment() {
                 if (messageType == BlePairingProtocol.MSG_PAIRING_CONFIRM) {
                     val parsed = BlePairingProtocol.parseConfirmMessage(response)
                     if (parsed != null) {
-                        session.peerPublicId = parsed.first
-                        session.peerShortId = parsed.second
+                        val (publicId, wordId, shortId) = parsed
+                        session.peerPublicId = publicId
                         session.verified = true
                         verificationInProgress = false
                         withContext(Dispatchers.Main) {
@@ -776,10 +998,10 @@ class BlePairingFragment : Fragment() {
 
         // Check if already friends - skip nickname prompt if so
         if (friendStore.hasFriend(session.peerPublicId!!)) {
-            Timber.i("$TAG: Already friends with ${session.peerShortId}")
-            // Show their nickname if they have one, otherwise show shortId
+            Timber.i("$TAG: Already friends with ${session.selectedPeerWordId}")
+            // Show their nickname if they have one, otherwise show wordId
             val displayName = friendStore.getFriendNickname(session.peerPublicId!!)
-                ?: session.peerShortId ?: "this person"
+                ?: session.selectedPeerWordId ?: "this person"
             binding.textFriendName.text = getString(R.string.pairing_already_friends_format, displayName)
             showState(State.SUCCESS)
             return
@@ -796,7 +1018,7 @@ class BlePairingFragment : Fragment() {
         val success = friendStore.addFriendFromString(publicId, nickname)
 
         if (success) {
-            val displayName = nickname ?: "Friend ${session.peerShortId}"
+            val displayName = nickname ?: session.selectedPeerWordId ?: "Friend"
             binding.textFriendName.text = getString(R.string.pairing_friend_added_format, displayName)
             showState(State.SUCCESS)
             Timber.i("$TAG: Friend added successfully: $displayName")
@@ -824,15 +1046,17 @@ class BlePairingFragment : Fragment() {
 
 /**
  * Data class for displaying a nearby device with pairing info.
+ * v2 protocol: wordId is the color+animal identifier (e.g., "Blue Tiger")
  */
 data class DisplayPeer(
     val blePeer: DiscoveredPeer,
     val shortId: String,
-    val code: String
+    val wordId: String  // Color+animal identifier, never a verification code
 )
 
 /**
  * Adapter for the nearby device list.
+ * v2 protocol: Shows word identifiers (e.g., "Blue Tiger") instead of codes.
  */
 class NearbyDeviceAdapter(
     private val onDeviceClick: (DisplayPeer) -> Unit
@@ -862,14 +1086,9 @@ class NearbyDeviceAdapter(
         private val textDeviceCode: TextView = itemView.findViewById(R.id.text_device_code)
         private val textRssi: TextView = itemView.findViewById(R.id.text_rssi)
 
-        init {
-            // Ensure code displays with Western numerals (0-9) regardless of device locale
-            textDeviceCode.textLocale = Locale.US
-        }
-
         fun bind(peer: DisplayPeer) {
-            textDeviceId.text = peer.shortId  // Just the hex ID, small and subtle
-            textDeviceCode.text = peer.code   // The 6-digit code is the main identifier
+            textDeviceId.text = peer.shortId    // Hex ID for debugging (small, subtle)
+            textDeviceCode.text = peer.wordId   // Word identifier (e.g., "Blue Tiger")
             textRssi.text = "${peer.blePeer.rssi}"
 
             itemView.setOnClickListener {

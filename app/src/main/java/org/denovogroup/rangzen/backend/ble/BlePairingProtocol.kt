@@ -2,39 +2,46 @@
  * Copyright (c) 2026, De Novo Group
  * All rights reserved.
  *
- * BLE Mutual-Code Pairing Protocol
+ * BLE Secure Pairing Protocol v2
  *
- * Implements a secure pairing handshake using human-verifiable short codes.
- * Both users must see each other's codes and enter them to complete pairing.
+ * Two-phase protocol ensuring visual verification:
+ * Phase 1: Discovery using color+animal identifiers (no codes broadcast)
+ * Phase 2: Mutual selection, then local code generation for visual verification
  */
 package org.denovogroup.rangzen.backend.ble
 
-import android.util.Base64
+import android.content.Context
 import org.json.JSONObject
 import timber.log.Timber
 import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
- * Protocol for mutual-code BLE pairing.
+ * Protocol for secure two-phase BLE pairing.
  *
  * Flow:
- * 1. Both devices generate a 6-digit pairing code
- * 2. Devices discover each other via BLE and exchange codes
- * 3. Users visually verify codes match what they see on other device
- * 4. Users enter the code they see on the other device
- * 5. Devices exchange public IDs after mutual verification
+ * 1. Both devices display a friendly identifier (e.g., "Blue Tiger")
+ * 2. Users verbally share their identifiers and find each other in the list
+ * 3. Both users tap to select each other (mutual selection via BLE)
+ * 4. AFTER mutual selection: verification codes are generated (NEVER broadcast)
+ * 5. Users must physically look at each other's screens to read and enter codes
+ * 6. Codes verified → public IDs exchanged → friends added
+ *
+ * Security improvement over v1:
+ * - Verification codes are NEVER broadcast over BLE
+ * - Codes only exist on screen after mutual selection
+ * - Visual verification of physical presence is actually required
  */
 object BlePairingProtocol {
 
     private const val TAG = "BlePairingProtocol"
 
-    // Protocol version for future compatibility
-    private const val PROTOCOL_VERSION = 1
+    // Protocol version - v2 is breaking change from v1
+    private const val PROTOCOL_VERSION = 2
 
     // Message types
-    const val MSG_PAIRING_ANNOUNCE = "pairing_announce"  // Broadcast code + short ID
-    const val MSG_PAIRING_REQUEST = "pairing_request"    // Request to pair with a specific device
+    const val MSG_PAIRING_ANNOUNCE = "pairing_announce"  // Broadcast word identifier (no code!)
+    const val MSG_PAIRING_SELECT = "pairing_select"      // Mutual selection handshake
     const val MSG_PAIRING_VERIFY = "pairing_verify"      // Send entered code for verification
     const val MSG_PAIRING_CONFIRM = "pairing_confirm"    // Confirm pairing + exchange public ID
     const val MSG_PAIRING_REJECT = "pairing_reject"      // Reject pairing attempt
@@ -42,20 +49,38 @@ object BlePairingProtocol {
     // Code validity window (5 minutes)
     private const val CODE_VALIDITY_MS = 5 * 60 * 1000L
 
+    // Wordlist sizes
+    private const val NUM_COLORS = 8
+    private const val NUM_ANIMALS = 32
+
     /**
      * Data class representing a pairing session.
      */
     data class PairingSession(
-        val myCode: String,                    // Our 6-digit code
+        val myWordId: String,                  // Our color+animal identifier (e.g., "Blue Tiger")
         val myPublicId: String,                // Our Base64-encoded public ID
-        val myShortId: String,                 // Short identifier for display (first 4 chars of hash)
+        val myShortId: String,                 // Short hex identifier (for debugging)
         val createdAt: Long,                   // When this session was created
-        var peerCode: String? = null,          // Code entered by user (from peer's display)
-        var peerPublicId: String? = null,      // Peer's public ID after verification
-        var peerShortId: String? = null,       // Peer's short identifier
-        var verified: Boolean = false          // Whether mutual verification is complete
+        var selectedPeerWordId: String? = null,  // Word ID of peer we selected
+        var selectedPeerAddress: String? = null, // BLE address of peer we selected
+        var peerSelectedUs: Boolean = false,     // Whether peer has selected us
+        var verificationCode: String? = null,    // Generated AFTER mutual selection (never broadcast)
+        var peerCode: String? = null,            // Code entered by user (from peer's display)
+        var peerPublicId: String? = null,        // Peer's public ID after verification
+        var verified: Boolean = false            // Whether mutual verification is complete
     ) {
         fun isExpired(): Boolean = System.currentTimeMillis() - createdAt > CODE_VALIDITY_MS
+
+        /** Check if mutual selection is complete (both selected each other) */
+        fun isMutuallySelected(): Boolean = selectedPeerWordId != null && peerSelectedUs
+
+        /** Generate verification code after mutual selection */
+        fun generateVerificationCode() {
+            if (verificationCode == null && isMutuallySelected()) {
+                verificationCode = generatePairingCode()
+                Timber.d("$TAG: Generated verification code after mutual selection")
+            }
+        }
     }
 
     /**
@@ -63,21 +88,21 @@ object BlePairingProtocol {
      */
     data class PairingPeer(
         val address: String,                   // BLE device address
-        val shortId: String,                   // Short identifier (4 chars)
-        val code: String,                      // Their 6-digit pairing code
+        val wordId: String,                    // Color+animal identifier (e.g., "Gold Lion")
+        val shortId: String,                   // Short hex identifier
         val rssi: Int,                         // Signal strength
         val lastSeen: Long                     // Last time we heard from them
     )
 
     /**
-     * Generate a new pairing session.
+     * Generate a new pairing session with word identifier.
      */
-    fun createSession(myPublicId: String): PairingSession {
-        val code = generatePairingCode()
+    fun createSession(myPublicId: String, context: Context): PairingSession {
+        val wordId = generateWordIdentifier(myPublicId, context)
         val shortId = generateShortId(myPublicId)
 
         return PairingSession(
-            myCode = code,
+            myWordId = wordId,
             myPublicId = myPublicId,
             myShortId = shortId,
             createdAt = System.currentTimeMillis()
@@ -86,6 +111,7 @@ object BlePairingProtocol {
 
     /**
      * Generate a 6-digit pairing code.
+     * Called ONLY after mutual selection, never broadcast.
      */
     fun generatePairingCode(): String {
         val random = SecureRandom()
@@ -94,8 +120,37 @@ object BlePairingProtocol {
     }
 
     /**
-     * Generate a short identifier from a public ID (for display in device list).
-     * Uses first 4 characters of SHA-256 hash (hex) for readability.
+     * Generate a color+animal identifier from public ID.
+     * Uses hash bytes to deterministically select color and animal.
+     * Returns localized strings based on device locale.
+     */
+    fun generateWordIdentifier(publicId: String, context: Context): String {
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(publicId.toByteArray())
+
+            // Use first two bytes for color and animal indices
+            val colorIndex = (hash[0].toInt() and 0xFF) % NUM_COLORS
+            val animalIndex = (hash[1].toInt() and 0xFF) % NUM_ANIMALS
+
+            // Get localized strings from resources
+            val colors = context.resources.getStringArray(
+                context.resources.getIdentifier("pairing_colors", "array", context.packageName)
+            )
+            val animals = context.resources.getStringArray(
+                context.resources.getIdentifier("pairing_animals", "array", context.packageName)
+            )
+
+            "${colors[colorIndex]} ${animals[animalIndex]}"
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to generate word identifier, falling back to hex")
+            generateShortId(publicId)
+        }
+    }
+
+    /**
+     * Generate a short hex identifier from a public ID (for debugging/fallback).
+     * Uses first 4 characters of SHA-256 hash (hex).
      */
     fun generateShortId(publicId: String): String {
         return try {
@@ -110,13 +165,13 @@ object BlePairingProtocol {
 
     /**
      * Create a pairing announcement message.
-     * This is broadcast to let other devices know we're available for pairing.
+     * Broadcasts word identifier only - NO verification code!
      */
     fun createAnnounceMessage(session: PairingSession): ByteArray {
         val json = JSONObject().apply {
             put("v", PROTOCOL_VERSION)
             put("type", MSG_PAIRING_ANNOUNCE)
-            put("code", session.myCode)
+            put("word_id", session.myWordId)
             put("short_id", session.myShortId)
             put("ts", System.currentTimeMillis())
         }
@@ -125,17 +180,18 @@ object BlePairingProtocol {
 
     /**
      * Parse a pairing announcement message.
+     * Returns (wordId, shortId, timestamp) or null if invalid.
      */
     fun parseAnnounceMessage(data: ByteArray): Triple<String, String, Long>? {
         return try {
             val json = JSONObject(String(data, Charsets.UTF_8))
             if (json.optString("type") != MSG_PAIRING_ANNOUNCE) return null
 
-            val code = json.getString("code")
+            val wordId = json.getString("word_id")
             val shortId = json.getString("short_id")
             val timestamp = json.getLong("ts")
 
-            Triple(code, shortId, timestamp)
+            Triple(wordId, shortId, timestamp)
         } catch (e: Exception) {
             Timber.e(e, "Failed to parse announce message")
             null
@@ -143,18 +199,62 @@ object BlePairingProtocol {
     }
 
     /**
+     * Create a selection message.
+     * Sent when user taps a peer in the list to initiate mutual selection.
+     */
+    fun createSelectMessage(session: PairingSession, peerWordId: String): ByteArray {
+        val json = JSONObject().apply {
+            put("v", PROTOCOL_VERSION)
+            put("type", MSG_PAIRING_SELECT)
+            put("my_word_id", session.myWordId)
+            put("my_short_id", session.myShortId)
+            put("peer_word_id", peerWordId)  // Who we're selecting
+            put("ts", System.currentTimeMillis())
+        }
+        return json.toString().toByteArray(Charsets.UTF_8)
+    }
+
+    /**
+     * Data class for parsed SELECT message.
+     */
+    data class SelectMessageData(
+        val theirWordId: String,
+        val theirShortId: String,
+        val selectedPeerWordId: String  // Who they selected (should be us if mutual)
+    )
+
+    /**
+     * Parse a selection message.
+     */
+    fun parseSelectMessage(data: ByteArray): SelectMessageData? {
+        return try {
+            val json = JSONObject(String(data, Charsets.UTF_8))
+            if (json.optString("type") != MSG_PAIRING_SELECT) return null
+
+            val theirWordId = json.getString("my_word_id")
+            val theirShortId = json.getString("my_short_id")
+            val selectedPeerWordId = json.getString("peer_word_id")
+
+            SelectMessageData(theirWordId, theirShortId, selectedPeerWordId)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to parse select message")
+            null
+        }
+    }
+
+    /**
      * Create a pairing verification message.
-     * Sent when user has entered the code from the other device.
+     * Sent when user has entered the code from the other device's screen.
      * Includes our public ID so the receiver can complete immediately upon sending CONFIRM.
      */
     fun createVerifyMessage(session: PairingSession, enteredCode: String): ByteArray {
         val json = JSONObject().apply {
             put("v", PROTOCOL_VERSION)
             put("type", MSG_PAIRING_VERIFY)
-            put("my_code", session.myCode)
+            put("my_word_id", session.myWordId)
             put("my_short_id", session.myShortId)
-            put("my_public_id", session.myPublicId)  // Include public ID for immediate completion
-            put("entered_code", enteredCode)  // Code we entered (should match their myCode)
+            put("my_public_id", session.myPublicId)
+            put("entered_code", enteredCode)  // Code we entered (should match their verification code)
             put("ts", System.currentTimeMillis())
         }
         return json.toString().toByteArray(Charsets.UTF_8)
@@ -164,27 +264,26 @@ object BlePairingProtocol {
      * Data class for parsed VERIFY message.
      */
     data class VerifyMessageData(
-        val theirCode: String,
+        val theirWordId: String,
         val theirShortId: String,
         val theirPublicId: String?,  // May be null for older clients
         val enteredCode: String
     )
 
     /**
-     * Parse a verification message and check if codes match.
-     * Returns VerifyMessageData or null if invalid.
+     * Parse a verification message.
      */
     fun parseVerifyMessage(data: ByteArray): VerifyMessageData? {
         return try {
             val json = JSONObject(String(data, Charsets.UTF_8))
             if (json.optString("type") != MSG_PAIRING_VERIFY) return null
 
-            val theirCode = json.getString("my_code")
+            val theirWordId = json.getString("my_word_id")
             val theirShortId = json.getString("my_short_id")
             val theirPublicId = json.optString("my_public_id").ifEmpty { null }
             val enteredCode = json.getString("entered_code")
 
-            VerifyMessageData(theirCode, theirShortId, theirPublicId, enteredCode)
+            VerifyMessageData(theirWordId, theirShortId, theirPublicId, enteredCode)
         } catch (e: Exception) {
             Timber.e(e, "Failed to parse verify message")
             null
@@ -193,13 +292,14 @@ object BlePairingProtocol {
 
     /**
      * Create a pairing confirmation message.
-     * Sent after both codes have been verified to exchange public IDs.
+     * Sent after code verification succeeds to exchange public IDs.
      */
     fun createConfirmMessage(session: PairingSession): ByteArray {
         val json = JSONObject().apply {
             put("v", PROTOCOL_VERSION)
             put("type", MSG_PAIRING_CONFIRM)
             put("public_id", session.myPublicId)
+            put("word_id", session.myWordId)
             put("short_id", session.myShortId)
             put("ts", System.currentTimeMillis())
         }
@@ -208,17 +308,18 @@ object BlePairingProtocol {
 
     /**
      * Parse a confirmation message.
-     * Returns (publicId, shortId) or null if invalid.
+     * Returns (publicId, wordId, shortId) or null if invalid.
      */
-    fun parseConfirmMessage(data: ByteArray): Pair<String, String>? {
+    fun parseConfirmMessage(data: ByteArray): Triple<String, String, String>? {
         return try {
             val json = JSONObject(String(data, Charsets.UTF_8))
             if (json.optString("type") != MSG_PAIRING_CONFIRM) return null
 
             val publicId = json.getString("public_id")
+            val wordId = json.getString("word_id")
             val shortId = json.getString("short_id")
 
-            Pair(publicId, shortId)
+            Triple(publicId, wordId, shortId)
         } catch (e: Exception) {
             Timber.e(e, "Failed to parse confirm message")
             null

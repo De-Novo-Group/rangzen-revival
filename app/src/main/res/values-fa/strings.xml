@@ -88,6 +88,7 @@
     <!-- BLE Pairing -->
     <string name="pairing_title">افزودن دوست</string>
     <string name="pairing_nearby_title">دستگاه‌های نزدیک</string>
+    <string name="pairing_waiting_title">در انتظار انتخاب</string>
     <string name="pairing_enter_code_title">وارد کردن کد</string>
     <string name="pairing_verifying_title">در حال تأیید</string>
     <string name="pairing_nickname_title">انتخاب نام</string>
@@ -140,6 +141,62 @@
 
     <string name="action_add_friend_ble">افزودن دوست نزدیک</string>
     <string name="empty_friends_ble">هنوز دوستی ندارید.\nدکمه بالا را بزنید تا دوستی نزدیک اضافه کنید.</string>
+
+    <!-- Two-phase pairing (v2 protocol) -->
+    <string name="pairing_you_are">شما هستید: %1$s</string>
+    <string name="pairing_find_friend">دوستتان را پیدا کنید و روی نامش بزنید:</string>
+    <string name="pairing_selected">شما انتخاب کردید: %1$s</string>
+    <string name="pairing_waiting_mutual">در انتظار انتخاب شما توسط %1$s…</string>
+    <string name="pairing_your_code_display">کد شما: %1$s</string>
+    <string name="pairing_enter_code_from">کد را از صفحه %1$s وارد کنید:</string>
+    <string name="pairing_mutual_confirmed">هر دو انتخاب شدید! حالا کدها را تأیید کنید.</string>
+
+    <!-- Pairing identifier wordlists -->
+    <string-array name="pairing_colors">
+        <item>قرمز</item>
+        <item>آبی</item>
+        <item>سبز</item>
+        <item>طلایی</item>
+        <item>بنفش</item>
+        <item>نارنجی</item>
+        <item>نقره‌ای</item>
+        <item>سیاه</item>
+    </string-array>
+
+    <string-array name="pairing_animals">
+        <item>ببر</item>
+        <item>شیر</item>
+        <item>عقاب</item>
+        <item>گرگ</item>
+        <item>خرس</item>
+        <item>روباه</item>
+        <item>باز</item>
+        <item>جغد</item>
+        <item>آهو</item>
+        <item>اسب</item>
+        <item>خرگوش</item>
+        <item>لاک‌پشت</item>
+        <item>دلفین</item>
+        <item>نهنگ</item>
+        <item>کوسه</item>
+        <item>مار</item>
+        <item>اژدها</item>
+        <item>شاهین</item>
+        <item>کلاغ</item>
+        <item>قو</item>
+        <item>درنا</item>
+        <item>پلنگ</item>
+        <item>یوزپلنگ</item>
+        <item>چیتا</item>
+        <item>جگوار</item>
+        <item>پوما</item>
+        <item>سیاه‌گوش</item>
+        <item>سمور</item>
+        <item>سگ‌آبی</item>
+        <item>گورکن</item>
+        <item>گوزن</item>
+        <item>گاومیش</item>
+    </string-array>
 
     <!-- Friends list -->
     <string name="friends_count_format">دوستان: %1$d</string>
