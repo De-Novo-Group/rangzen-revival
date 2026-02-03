@@ -26,7 +26,7 @@ class MessageStore private constructor(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "rangzen_messages.db"
-        private const val DATABASE_VERSION = 4
+        private const val DATABASE_VERSION = 5
 
         // Legacy trust bounds for safety.
         private const val MIN_TRUST = 0.01
@@ -50,6 +50,7 @@ class MessageStore private constructor(context: Context) :
         private const val COL_LATLONG = "latlong"
         private const val COL_PARENT = "parent_id"
         private const val COL_BIGPARENT = "bigparent_id"
+        private const val COL_SENDER_PUBLIC_ID = "sender_public_id"
 
         // Tombstone table: tracks deleted message IDs so they aren't re-added from peers
         private const val TABLE_TOMBSTONES = "deleted_messages"
@@ -142,7 +143,8 @@ class MessageStore private constructor(context: Context) :
                 $COL_EXPIRATION INTEGER DEFAULT 0,
                 $COL_LATLONG TEXT,
                 $COL_PARENT TEXT,
-                $COL_BIGPARENT TEXT
+                $COL_BIGPARENT TEXT,
+                $COL_SENDER_PUBLIC_ID TEXT
             )
         """.trimIndent()
         db.execSQL(createTable)
@@ -181,6 +183,10 @@ class MessageStore private constructor(context: Context) :
                     $COL_TOMBSTONE_DELETED_AT INTEGER NOT NULL
                 )
             """.trimIndent())
+        }
+        if (oldVersion < 5) {
+            // Add sender_public_id column for sender-based trust verification.
+            db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN $COL_SENDER_PUBLIC_ID TEXT")
         }
     }
 
@@ -254,6 +260,7 @@ class MessageStore private constructor(context: Context) :
             if (message.latLong != null) put(COL_LATLONG, message.latLong)
             if (message.parentId != null) put(COL_PARENT, message.parentId)
             if (message.bigParentId != null) put(COL_BIGPARENT, message.bigParentId)
+            if (message.senderPublicId != null) put(COL_SENDER_PUBLIC_ID, message.senderPublicId)
         }
 
         val id = writableDatabase.insert(TABLE_MESSAGES, null, values)
@@ -749,6 +756,11 @@ class MessageStore private constructor(context: Context) :
             latLong = cursor.getString(cursor.getColumnIndexOrThrow(COL_LATLONG))
             parentId = cursor.getString(cursor.getColumnIndexOrThrow(COL_PARENT))
             bigParentId = cursor.getString(cursor.getColumnIndexOrThrow(COL_BIGPARENT))
+            // Load sender public ID for sender-based trust verification.
+            val senderIdx = cursor.getColumnIndex(COL_SENDER_PUBLIC_ID)
+            if (senderIdx >= 0) {
+                senderPublicId = cursor.getString(senderIdx)
+            }
         }
     }
 
