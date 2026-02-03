@@ -117,6 +117,42 @@ public class Crypto {
     /** Source of secure random bits. */
     public static final SecureRandom random = new SecureRandom();
 
+    /** Canonical byte length for DH-1024 group values (1024 bits = 128 bytes). */
+    private static final int CANONICAL_LENGTH = 128;
+
+    /**
+     * Convert BigInteger to canonical fixed-length byte array.
+     * Ensures mathematically equal values always produce identical byte arrays,
+     * regardless of BigInteger's internal representation (leading zeros, sign byte).
+     *
+     * This fixes a serialization bug where toByteArray() could produce different
+     * byte representations for the same mathematical value, causing hash mismatches
+     * in PSI-Ca comparisons.
+     *
+     * @param value The BigInteger to convert
+     * @return A fixed-length byte array representation
+     */
+    private static byte[] toCanonicalBytes(BigInteger value) {
+        byte[] raw = value.toByteArray();
+
+        // Handle leading sign byte if present (BigInteger adds 0x00 for positive numbers
+        // when the high bit would otherwise indicate negative)
+        int offset = (raw.length > CANONICAL_LENGTH && raw[0] == 0) ? 1 : 0;
+        int srcLen = raw.length - offset;
+
+        byte[] canonical = new byte[CANONICAL_LENGTH];
+
+        if (srcLen <= CANONICAL_LENGTH) {
+            // Pad with leading zeros (right-align the value)
+            System.arraycopy(raw, offset, canonical, CANONICAL_LENGTH - srcLen, srcLen);
+        } else {
+            // Truncate (shouldn't happen with proper DH values, but handle gracefully)
+            System.arraycopy(raw, offset + srcLen - CANONICAL_LENGTH, canonical, 0, CANONICAL_LENGTH);
+        }
+
+        return canonical;
+    }
+
     /**
      * Generates a Diffie-Hellman keypair of the default size.
      *
@@ -253,9 +289,17 @@ public class Crypto {
             this.x = DH_GROUP_PARAMETERS.getG().modPow(rand, DH_GROUP_PARAMETERS.getP());
 
             MessageDigest md = MessageDigest.getInstance(HASH_ALGORITHM);
+            int itemIdx = 0;
             for (byte[] v : values) {
                 md.reset();
-                byte[] itemHash = md.digest(v);
+                // Canonicalize the input to handle variable-length BigInteger serialization.
+                // Friend IDs may be 128 or 129 bytes due to BigInteger.toByteArray() adding
+                // a leading 0x00 when the high bit is set. We normalize to ensure identical
+                // inputs produce identical hashes regardless of leading zero padding.
+                boolean needsCanon = v.length > CANONICAL_LENGTH;
+                byte[] canonicalInput = needsCanon ? toCanonicalBytes(new BigInteger(1, v)) : v;
+
+                byte[] itemHash = md.digest(canonicalInput);
 
                 // Generate a positive BigInteger (signum == 1) from the bytes.
                 BigInteger val = new BigInteger(1, itemHash);
@@ -317,7 +361,9 @@ public class Crypto {
             ArrayList<byte[]> hashedBlindedItems = new ArrayList<byte[]>(blindedItems.size());
             for (BigInteger i : blindedItems) {
                 md.reset();
-                hashedBlindedItems.add(md.digest(i.toByteArray()));
+                byte[] canonBytes = toCanonicalBytes(i);
+                byte[] hash = md.digest(canonBytes);
+                hashedBlindedItems.add(hash);
             }
 
             return new ServerReplyTuple(doubleBlindedItems, hashedBlindedItems);
@@ -350,7 +396,8 @@ public class Crypto {
                 BigInteger i = iDoubleBlind.modPow(xInverse, DH_GROUP_PARAMETERS.getP());
 
                 // Hash it.
-                byte[] d = md.digest(i.toByteArray());
+                byte[] canonBytes = toCanonicalBytes(i);
+                byte[] d = md.digest(canonBytes);
                 ByteBuffer buf = ByteBuffer.wrap(d);
 
                 // Check if it's in the set.
@@ -358,7 +405,6 @@ public class Crypto {
                     cardinality++;
                 }
             }
-
             return cardinality;
         }
     }
