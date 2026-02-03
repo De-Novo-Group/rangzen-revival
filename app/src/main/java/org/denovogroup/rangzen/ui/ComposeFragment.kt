@@ -115,6 +115,10 @@ class ComposeFragment : Fragment() {
 
             // Mark as already read (user just wrote it)
             isRead = true
+
+            // Set sender public ID for sender-based trust verification.
+            // When this message is relayed, receivers can verify we're friends.
+            senderPublicId = FriendStore.getInstance(requireContext()).getMyPublicIdString()
         }
 
         if (messageStore.addMessage(message)) {
