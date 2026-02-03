@@ -173,16 +173,23 @@ private class LegacyExchangeSession(
     private val transport: String = TelemetryEvent.TRANSPORT_BLE
 ) {
 
+    companion object {
+        // Trust score for messages from direct friends (regardless of relay PSI).
+        private const val DIRECT_FRIEND_TRUST = 0.82
+    }
+
     var lastActivityMs: Long = System.currentTimeMillis()
     private var stage: LegacyExchangeStage = LegacyExchangeStage.WAIT_CLIENT_FRIENDS
     private var clientPSI: Crypto.PrivateSetIntersection? = null
     private var serverPSI: Crypto.PrivateSetIntersection? = null
     private var remoteBlindedFriends: List<ByteArray> = emptyList()
     private var commonFriends: Int = 0
-    // Identity contract: peer's device_id_hash and exchange_id from the handshake.
+    // Identity contract: peer's device_id_hash, exchange_id, and public_id from the handshake.
     var peerDeviceIdHash: String? = null
         private set
     var peerExchangeId: String? = null
+        private set
+    var peerPublicId: String? = null
         private set
     private var expectedMessages: Int = 0
     private var receivedMessages: Int = 0
@@ -204,9 +211,10 @@ private class LegacyExchangeSession(
         val clientMessage = LegacyExchangeCodec.decodeClientMessage(json)
         remoteBlindedFriends = if (useTrust) clientMessage.blindedFriends else emptyList()
 
-        // Identity contract: capture the client's device_id_hash and exchange_id.
+        // Identity contract: capture the client's device_id_hash, exchange_id, and public_id.
         peerDeviceIdHash = clientMessage.deviceIdHash
         peerExchangeId = clientMessage.exchangeId
+        peerPublicId = clientMessage.publicId
 
         val localFriends = friendStore.getAllFriendIds()
         val friendCountBefore = localFriends.size
@@ -391,6 +399,16 @@ private class LegacyExchangeSession(
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
             } else if (message.text != null && message.text.isNotEmpty()) {
+                // Check if sender is a direct friend (sender-based trust).
+                val senderPublicId = message.senderPublicId
+                val senderIsFriend = senderPublicId != null && friendStore.hasFriend(senderPublicId)
+
+                if (senderIsFriend) {
+                    // Sender is our friend - use direct friend trust regardless of relay PSI.
+                    Timber.i("Server sender-based trust: ${message.messageId.take(8)} from friend ${senderPublicId?.take(8)}...")
+                    message.trustScore = DIRECT_FRIEND_TRUST
+                }
+
                 // New message - add to store (only count if actually added;
                 // addMessage returns false for tombstoned/TTL-expired messages)
                 if (messageStore.addMessage(message)) {
