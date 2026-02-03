@@ -1012,8 +1012,16 @@ class BlePairingFragment : Fragment() {
     }
 
     private fun saveFriend(nickname: String?) {
-        val session = pairingSession ?: return
-        val publicId = session.peerPublicId ?: return
+        Timber.i("$TAG: saveFriend() called with nickname=$nickname")
+        val session = pairingSession ?: run {
+            Timber.e("$TAG: saveFriend() - pairingSession is null!")
+            return
+        }
+        val publicId = session.peerPublicId ?: run {
+            Timber.e("$TAG: saveFriend() - peerPublicId is null!")
+            return
+        }
+        Timber.i("$TAG: saveFriend() - calling addFriendFromString with publicId len=${publicId.length}")
 
         val success = friendStore.addFriendFromString(publicId, nickname)
 

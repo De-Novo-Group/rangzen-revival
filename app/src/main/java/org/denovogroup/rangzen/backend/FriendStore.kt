@@ -213,10 +213,11 @@ class FriendStore private constructor(context: Context) :
      */
     fun addFriend(publicId: ByteArray, nickname: String? = null): Boolean {
         val base64Id = Base64.encodeToString(publicId, Base64.NO_WRAP)
+        Timber.i("FriendStore: addFriend() called with ${publicId.size} bytes, nickname=$nickname")
 
         // Check for duplicate
         if (hasFriend(base64Id)) {
-            Timber.d("Friend already exists")
+            Timber.d("FriendStore: Friend already exists: ${base64Id.take(20)}...")
             return false
         }
 
@@ -239,11 +240,12 @@ class FriendStore private constructor(context: Context) :
      * Add a friend from a Base64-encoded public ID string.
      */
     fun addFriendFromString(publicIdBase64: String, nickname: String? = null): Boolean {
+        Timber.i("FriendStore: addFriendFromString() called with base64 len=${publicIdBase64.length}, nickname=$nickname")
         return try {
             val publicId = Base64.decode(publicIdBase64, Base64.NO_WRAP)
             addFriend(publicId, nickname)
         } catch (e: Exception) {
-            Timber.e(e, "Invalid public ID format")
+            Timber.e(e, "FriendStore: Invalid public ID format")
             false
         }
     }

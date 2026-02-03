@@ -33,12 +33,6 @@ class LegacyExchangeClient(
     private val transport: String = TelemetryEvent.TRANSPORT_BLE
 ) {
 
-    companion object {
-        // Trust score for messages from direct friends (regardless of relay PSI).
-        // This gives ~0.82 trust via sigmoid(0.5, 0.3, 13) formula.
-        private const val DIRECT_FRIEND_TRUST = 0.82
-    }
-
     suspend fun exchangeWithPeer(bleScanner: BleScanner, peer: DiscoveredPeer): LegacyExchangeResult? {
         val peerIdHash = sha256(peer.address)
         val exchangeCtx = ExchangeContext.create(transport, peerIdHash, context)
@@ -518,31 +512,19 @@ class LegacyExchangeClient(
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
             } else {
-                // New message - compute trust locally
-                val senderTrust = message.trustScore  // Capture sender's trust before overwriting
-
-                // Check if sender is a direct friend (sender-based trust).
-                val senderPublicId = message.senderPublicId
-                val senderIsFriend = senderPublicId != null && friendStore.hasFriend(senderPublicId)
-
-                val localTrust = if (senderIsFriend) {
-                    // Sender is our friend - use direct friend trust regardless of relay PSI.
-                    Timber.i("Sender-based trust: ${message.messageId.take(8)} from friend ${senderPublicId?.take(8)}...")
-                    DIRECT_FRIEND_TRUST
-                } else {
-                    // Not a direct friend - use relay PSI result as usual.
-                    LegacyExchangeMath.computeNewPriority_sigmoidFractionOfFriends(
-                        priority = 1.0,  // Base priority for new message
-                        sharedFriends = commonFriends,
-                        myFriends = myFriendsCount
-                    )
-                }
+                // New message - compute trust locally using PSI-Ca result
+                // Per Rangzen paper: trust is based on mutual friends between
+                // the TWO COMMUNICATING DEVICES, not the message author.
+                // Messages are fully anonymous - no authorship information.
+                val localTrust = LegacyExchangeMath.computeNewPriority_sigmoidFractionOfFriends(
+                    priority = 1.0,  // Base priority for new message
+                    sharedFriends = commonFriends,
+                    myFriends = myFriendsCount
+                )
 
                 // Log trust computation for verification
                 Timber.d("Trust computation for ${message.messageId.take(8)}: " +
-                    "senderTrust=$senderTrust, " +
                     "localTrust=$localTrust, " +
-                    "senderIsFriend=$senderIsFriend, " +
                     "mutualFriends=$commonFriends, " +
                     "myFriends=$myFriendsCount")
                 // Update message with locally-computed trust before storing

@@ -260,7 +260,6 @@ class MessageStore private constructor(context: Context) :
             if (message.latLong != null) put(COL_LATLONG, message.latLong)
             if (message.parentId != null) put(COL_PARENT, message.parentId)
             if (message.bigParentId != null) put(COL_BIGPARENT, message.bigParentId)
-            if (message.senderPublicId != null) put(COL_SENDER_PUBLIC_ID, message.senderPublicId)
         }
 
         val id = writableDatabase.insert(TABLE_MESSAGES, null, values)
@@ -268,7 +267,8 @@ class MessageStore private constructor(context: Context) :
             // Update store version to signal new data.
             updateStoreVersion()
             refreshMessages()
-            Timber.d("Message added: ${message.messageId}")
+            val storedTrust = clampTrust(message.trustScore)
+            Timber.d("Message added: ${message.messageId} with trust=$storedTrust")
             return true
         }
         return false
@@ -756,11 +756,6 @@ class MessageStore private constructor(context: Context) :
             latLong = cursor.getString(cursor.getColumnIndexOrThrow(COL_LATLONG))
             parentId = cursor.getString(cursor.getColumnIndexOrThrow(COL_PARENT))
             bigParentId = cursor.getString(cursor.getColumnIndexOrThrow(COL_BIGPARENT))
-            // Load sender public ID for sender-based trust verification.
-            val senderIdx = cursor.getColumnIndex(COL_SENDER_PUBLIC_ID)
-            if (senderIdx >= 0) {
-                senderPublicId = cursor.getString(senderIdx)
-            }
         }
     }
 

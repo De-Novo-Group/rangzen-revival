@@ -173,11 +173,6 @@ private class LegacyExchangeSession(
     private val transport: String = TelemetryEvent.TRANSPORT_BLE
 ) {
 
-    companion object {
-        // Trust score for messages from direct friends (regardless of relay PSI).
-        private const val DIRECT_FRIEND_TRUST = 0.82
-    }
-
     var lastActivityMs: Long = System.currentTimeMillis()
     private var stage: LegacyExchangeStage = LegacyExchangeStage.WAIT_CLIENT_FRIENDS
     private var clientPSI: Crypto.PrivateSetIntersection? = null
@@ -399,17 +394,22 @@ private class LegacyExchangeSession(
                     messageStore.updateTrustScore(message.messageId, newTrust)
                 }
             } else if (message.text != null && message.text.isNotEmpty()) {
-                // Check if sender is a direct friend (sender-based trust).
-                val senderPublicId = message.senderPublicId
-                val senderIsFriend = senderPublicId != null && friendStore.hasFriend(senderPublicId)
+                // New message - compute trust locally using PSI-Ca result
+                // Per Rangzen paper: trust is based on mutual friends between
+                // the TWO COMMUNICATING DEVICES, not the message author.
+                val localTrust = LegacyExchangeMath.computeNewPriority_sigmoidFractionOfFriends(
+                    priority = 1.0,  // Base priority for new message
+                    sharedFriends = commonFriends,
+                    myFriends = myFriendsCount
+                )
 
-                if (senderIsFriend) {
-                    // Sender is our friend - use direct friend trust regardless of relay PSI.
-                    Timber.i("Server sender-based trust: ${message.messageId.take(8)} from friend ${senderPublicId?.take(8)}...")
-                    message.trustScore = DIRECT_FRIEND_TRUST
-                }
+                Timber.d("BLE Trust computation for ${message.messageId.take(8)}: " +
+                    "localTrust=$localTrust, commonFriends=$commonFriends, myFriends=$myFriendsCount")
 
-                // New message - add to store (only count if actually added;
+                // Update message with locally-computed trust before storing
+                message.trustScore = localTrust
+
+                // Add to store (only count if actually added;
                 // addMessage returns false for tombstoned/TTL-expired messages)
                 if (messageStore.addMessage(message)) {
                     newCount++

@@ -632,8 +632,40 @@ class RangzenService : Service() {
         // =====================================================================
         // LAN/NSD Exchanges (parallel with WiFi Direct)
         // =====================================================================
+        // Prioritize friends for exchange: compute device ID prefixes for all friends,
+        // then sort peers so friends come first. This ensures we exchange with friends
+        // before strangers, which is critical for PSI-Ca trust computation.
+        // =====================================================================
+        val friendPublicKeys = friendStore.getAllFriendIds()
+        val friendDeviceIdPrefixes = friendPublicKeys.map { publicKey ->
+            DeviceIdentity.computeDeviceIdPrefix(publicKey)
+        }.toSet()
+
+        // Debug: Log the friend prefixes and peer IDs for troubleshooting
+        if (friendPublicKeys.isNotEmpty()) {
+            Timber.d("FRIEND-PRIORITY: ${friendPublicKeys.size} friends have prefixes: " +
+                friendDeviceIdPrefixes.joinToString(", "))
+            Timber.d("FRIEND-PRIORITY: Network peer IDs: " +
+                allNetworkPeers.joinToString(", ") { it.deviceId.take(8) + "..." })
+        }
+
+        val sortedNetworkPeers = allNetworkPeers.sortedByDescending { peer ->
+            // Friends get priority (true = 1, false = 0 in sortedByDescending)
+            friendDeviceIdPrefixes.any { prefix -> peer.deviceId.startsWith(prefix) }
+        }
+
+        if (friendDeviceIdPrefixes.isNotEmpty()) {
+            val friendPeers = sortedNetworkPeers.filter { peer ->
+                friendDeviceIdPrefixes.any { prefix -> peer.deviceId.startsWith(prefix) }
+            }
+            if (friendPeers.isNotEmpty()) {
+                Timber.i("PARALLEL: Prioritizing ${friendPeers.size} friend(s) for exchange: " +
+                    friendPeers.joinToString(", ") { it.deviceId.take(8) + "..." })
+            }
+        }
+
         if (!lanTransport.isExchangeInProgress()) {
-            for (lanPeer in allNetworkPeers) {
+            for (lanPeer in sortedNetworkPeers) {
                 val deviceId = lanPeer.deviceId
                 val job = serviceScope.launch {
                     try {

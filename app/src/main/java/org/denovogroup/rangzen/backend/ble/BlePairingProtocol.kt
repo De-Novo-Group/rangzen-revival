@@ -13,7 +13,6 @@ package org.denovogroup.rangzen.backend.ble
 import android.content.Context
 import org.json.JSONObject
 import timber.log.Timber
-import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
@@ -95,11 +94,13 @@ object BlePairingProtocol {
     )
 
     /**
-     * Generate a new pairing session with word identifier.
+     * Generate a new pairing session with random word identifier.
+     * PRIVACY: Both wordId and shortId are randomized each session
+     * to prevent device fingerprinting across pairing attempts.
      */
     fun createSession(myPublicId: String, context: Context): PairingSession {
-        val wordId = generateWordIdentifier(myPublicId, context)
-        val shortId = generateShortId(myPublicId)
+        val wordId = generateWordIdentifier(context)
+        val shortId = generateShortId()
 
         return PairingSession(
             myWordId = wordId,
@@ -120,18 +121,17 @@ object BlePairingProtocol {
     }
 
     /**
-     * Generate a color+animal identifier from public ID.
-     * Uses hash bytes to deterministically select color and animal.
+     * Generate a random color+animal identifier for this pairing session.
+     * PRIVACY: Randomized each session to prevent device fingerprinting.
      * Returns localized strings based on device locale.
      */
-    fun generateWordIdentifier(publicId: String, context: Context): String {
+    fun generateWordIdentifier(context: Context): String {
         return try {
-            val digest = MessageDigest.getInstance("SHA-256")
-            val hash = digest.digest(publicId.toByteArray())
+            val random = SecureRandom()
 
-            // Use first two bytes for color and animal indices
-            val colorIndex = (hash[0].toInt() and 0xFF) % NUM_COLORS
-            val animalIndex = (hash[1].toInt() and 0xFF) % NUM_ANIMALS
+            // Randomly select color and animal
+            val colorIndex = random.nextInt(NUM_COLORS)
+            val animalIndex = random.nextInt(NUM_ANIMALS)
 
             // Get localized strings from resources
             val colors = context.resources.getStringArray(
@@ -144,23 +144,19 @@ object BlePairingProtocol {
             "${colors[colorIndex]} ${animals[animalIndex]}"
         } catch (e: Exception) {
             Timber.e(e, "Failed to generate word identifier, falling back to hex")
-            generateShortId(publicId)
+            generateShortId()
         }
     }
 
     /**
-     * Generate a short hex identifier from a public ID (for debugging/fallback).
-     * Uses first 4 characters of SHA-256 hash (hex).
+     * Generate a random short hex identifier for this pairing session.
+     * PRIVACY: Randomized each session to prevent device fingerprinting.
      */
-    fun generateShortId(publicId: String): String {
-        return try {
-            val digest = MessageDigest.getInstance("SHA-256")
-            val hash = digest.digest(publicId.toByteArray())
-            hash.take(2).joinToString("") { String.format("%02X", it) }
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to generate short ID")
-            publicId.take(4).uppercase()
-        }
+    fun generateShortId(): String {
+        val random = SecureRandom()
+        val bytes = ByteArray(2)
+        random.nextBytes(bytes)
+        return bytes.joinToString("") { String.format("%02X", it) }
     }
 
     /**

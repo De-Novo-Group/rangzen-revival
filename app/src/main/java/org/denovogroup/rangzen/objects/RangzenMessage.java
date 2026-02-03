@@ -71,9 +71,6 @@ public class RangzenMessage {
     /** Optional big parent message id */
     private String bigParentId;
 
-    /** Sender's public ID (for sender-based trust verification) */
-    private String senderPublicId;
-
     /** Maximum message length in characters */
     public static final int MAX_MESSAGE_LENGTH = 140;
     
@@ -97,8 +94,6 @@ public class RangzenMessage {
     public static final String MIN_USERS_P_HOP_KEY = "min_users_p_hop";
     // Creation timestamp - when the message was originally composed
     public static final String TIMESTAMP_KEY = "ts";
-    // Sender's public ID for sender-based trust verification
-    public static final String SENDER_ID_KEY = "sender_id";
 
     /** Random source for legacy trust noise */
     private static final Random TRUST_RANDOM = new Random();
@@ -296,14 +291,6 @@ public class RangzenMessage {
 
     public void setBigParentId(String bigParentId) {
         this.bigParentId = bigParentId;
-    }
-
-    public String getSenderPublicId() {
-        return senderPublicId;
-    }
-
-    public void setSenderPublicId(String senderPublicId) {
-        this.senderPublicId = senderPublicId;
     }
 
     /**
@@ -504,10 +491,6 @@ public class RangzenMessage {
                 }
                 result.put(TRUST_KEY, noisyTrust);
             }
-            // Optional sender public ID for sender-based trust verification.
-            if (senderPublicId != null && !senderPublicId.isEmpty()) {
-                result.put(SENDER_ID_KEY, senderPublicId);
-            }
         } catch (JSONException e) {
             throw new IllegalStateException("Failed to serialize RangzenMessage to legacy JSON", e);
         }
@@ -581,8 +564,6 @@ public class RangzenMessage {
         message.setBigParentId(json.optString(BIGPARENT_KEY, null));
         message.setHopCount(json.optInt(HOP_KEY, 0));
         message.setMinContactsForHop(json.optInt(MIN_USERS_P_HOP_KEY, 0));
-        // Sender public ID for sender-based trust verification.
-        message.setSenderPublicId(json.optString(SENDER_ID_KEY, null));
         // Parse original creation timestamp. If not present (old protocol), use now.
         // This preserves when the message was originally composed.
         long creationTime = json.optLong(TIMESTAMP_KEY, 0L);

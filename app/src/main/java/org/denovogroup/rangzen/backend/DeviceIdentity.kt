@@ -118,4 +118,17 @@ object DeviceIdentity {
         cachedDeviceId = null
         Timber.d("Device ID cache invalidated")
     }
+
+    /**
+     * Compute device ID prefix from a public key byte array.
+     *
+     * This allows matching a peer's deviceId with a friend's public key.
+     * The prefix is the first 8 hex characters of SHA-256(publicKey).
+     *
+     * @param publicKey The public key bytes
+     * @return 8-character hex device ID prefix
+     */
+    fun computeDeviceIdPrefix(publicKey: ByteArray): String {
+        return sha256(publicKey).take(8)
+    }
 }

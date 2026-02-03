@@ -14,7 +14,9 @@ cd "$PROJECT_DIR"
 # Build debug APK if requested or if it doesn't exist
 if [[ "$1" == "--build" ]] || [[ ! -f "$APK_PATH" ]]; then
     echo "Building debug APK..."
-    ./gradlew assembleDebug -q
+    # Use --no-daemon to avoid hanging, --console=plain for non-TTY compatibility
+    ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tail -20
+    echo "Build complete."
 fi
 
 if [[ ! -f "$APK_PATH" ]]; then
@@ -37,6 +39,10 @@ echo ""
 for DEVICE in $DEVICES; do
     echo "=== Deploying to $DEVICE ==="
 
+    # Get model name for better output
+    MODEL=$(adb -s "$DEVICE" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || echo "unknown")
+    echo "  Device: $MODEL"
+
     # Force stop any running instance
     adb -s "$DEVICE" shell am force-stop "$PACKAGE" 2>/dev/null || true
 
@@ -46,7 +52,10 @@ for DEVICE in $DEVICES; do
 
     # Install debug APK
     echo "  Installing..."
-    adb -s "$DEVICE" install -r "$APK_PATH" || { echo "  FAILED to install"; continue; }
+    if ! adb -s "$DEVICE" install -r "$APK_PATH"; then
+        echo "  FAILED to install on $DEVICE"
+        continue
+    fi
 
     # Grant ALL permissions non-interactively
     echo "  Granting permissions..."
@@ -64,18 +73,16 @@ for DEVICE in $DEVICES; do
     echo "  Launching..."
     adb -s "$DEVICE" shell am start -n "$PACKAGE/.ui.MainActivity" >/dev/null
 
-    echo "  Done!"
+    echo "  Done: $MODEL"
     echo ""
 done
 
-echo "All devices deployed. Waiting 5 seconds for services to start..."
-sleep 5
-
+echo "All devices deployed!"
 echo ""
-echo "=== Current Status ==="
+
+# Quick status check
+echo "=== Device Summary ==="
 for DEVICE in $DEVICES; do
-    MODEL=$(adb -s "$DEVICE" shell getprop ro.product.model | tr -d '\r')
-    MSG_COUNT=$(adb -s "$DEVICE" logcat -d -s "MessageStore:*" | grep -c "insert" 2>/dev/null || echo "0")
-    PEERS=$(adb -s "$DEVICE" logcat -d | grep "PeerRegistry.*reachable" | tail -1 | grep -oE "[0-9]+ reachable" || echo "checking...")
-    echo "$DEVICE ($MODEL): $PEERS peers"
+    MODEL=$(adb -s "$DEVICE" shell getprop ro.product.model 2>/dev/null | tr -d '\r' || echo "unknown")
+    echo "✓ $DEVICE ($MODEL)"
 done

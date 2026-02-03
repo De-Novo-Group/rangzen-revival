@@ -239,11 +239,17 @@ class LanTransport {
             
             // Step 4: Create our PSI objects and send our blinded friends
             val localFriends = friendStore.getAllFriendIds()
+            Timber.d("PSI-DEBUG: getAllFriendIds() returned ${localFriends.size} friends")
+            localFriends.forEachIndexed { idx, id ->
+                Timber.d("PSI-DEBUG: friend[$idx] len=${id.size} sha=${id.take(8).joinToString("") { "%02x".format(it) }}")
+            }
             // Paper-aligned: Include our own public ID in the PSI input.
             // This makes direct friends count as "mutual friends" in the trust computation.
             friendStore.getMyPublicId()?.let { myId ->
+                Timber.d("PSI-DEBUG: adding myId len=${myId.size} sha=${myId.take(8).joinToString("") { "%02x".format(it) }}")
                 localFriends.add(myId)
-            }
+            } ?: Timber.w("PSI-DEBUG: getMyPublicId() returned null!")
+            Timber.d("PSI-DEBUG: total localFriends size=${localFriends.size}")
             val clientPSI = Crypto.PrivateSetIntersection(localFriends)
             val serverPSI = Crypto.PrivateSetIntersection(localFriends)
             
@@ -283,7 +289,7 @@ class LanTransport {
             } else {
                 0
             }
-            
+
             Timber.d("LAN PSI complete: $commonFriends common friends with ${peerDeviceId.take(8)}...")
             
             // Step 8: Check minimum shared contacts
@@ -437,11 +443,17 @@ class LanTransport {
             // Step 3: PSI - Send our blinded friends
             val useTrust = SecurityManager.useTrust(context)
             val localFriends = friendStore.getAllFriendIds()
+            Timber.d("PSI-DEBUG-CLIENT: getAllFriendIds() returned ${localFriends.size} friends")
+            localFriends.forEachIndexed { idx, id ->
+                Timber.d("PSI-DEBUG-CLIENT: friend[$idx] len=${id.size} sha=${id.take(8).joinToString("") { "%02x".format(it) }}")
+            }
             // Paper-aligned: Include our own public ID in the PSI input.
             // This makes direct friends count as "mutual friends" in the trust computation.
             friendStore.getMyPublicId()?.let { myId ->
+                Timber.d("PSI-DEBUG-CLIENT: adding myId len=${myId.size} sha=${myId.take(8).joinToString("") { "%02x".format(it) }}")
                 localFriends.add(myId)
-            }
+            } ?: Timber.w("PSI-DEBUG-CLIENT: getMyPublicId() returned null!")
+            Timber.d("PSI-DEBUG-CLIENT: total localFriends size=${localFriends.size}")
             val clientPSI = Crypto.PrivateSetIntersection(localFriends)
             val serverPSI = Crypto.PrivateSetIntersection(localFriends)
 
@@ -746,7 +758,25 @@ class LanTransport {
                         messageStore.updateTrustScore(msg.messageId, newTrust)
                     }
                 } else {
-                    // New message - add to store (only count if actually added;
+                    // New message - compute trust locally using PSI-Ca result
+                    // Per Rangzen paper: trust is based on mutual friends between
+                    // the TWO COMMUNICATING DEVICES, not the message author.
+                    val localTrust = LegacyExchangeMath.computeNewPriority_sigmoidFractionOfFriends(
+                        priority = 1.0,  // Base priority for new message
+                        sharedFriends = commonFriends,
+                        myFriends = myFriendsCount
+                    )
+
+                    Timber.d("LAN Trust computation for ${msg.messageId.take(8)}: " +
+                        "localTrust=$localTrust, commonFriends=$commonFriends, myFriends=$myFriendsCount")
+
+                    // Update message with locally-computed trust before storing
+                    val originalTrust = msg.trustScore
+                    msg.trustScore = localTrust
+                    Timber.d("LAN Trust SET for ${msg.messageId.take(8)}: " +
+                        "original=$originalTrust, after=${"%.4f".format(msg.trustScore)}")
+
+                    // Add to store (only count if actually added;
                     // addMessage returns false for tombstoned/TTL-expired messages)
                     if (messageStore.addMessage(msg)) {
                         received.add(msg)
