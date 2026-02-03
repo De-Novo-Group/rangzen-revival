@@ -209,11 +209,26 @@ private class LegacyExchangeSession(
         peerExchangeId = clientMessage.exchangeId
 
         val localFriends = friendStore.getAllFriendIds()
+        val friendCountBefore = localFriends.size
         // Paper-aligned: Include our own public ID in the PSI input.
         // This makes direct friends count as "mutual friends" in the trust computation.
-        friendStore.getMyPublicId()?.let { myId ->
+        val myPublicIdBytes = friendStore.getMyPublicId()
+        val myIdAdded = myPublicIdBytes?.let { myId ->
             localFriends.add(myId)
+            true
+        } ?: false
+
+        // Debug logging for PSI investigation
+        Timber.d("PSI-DEBUG-SERVER: useTrust=$useTrust, friendsBefore=$friendCountBefore, friendsAfter=${localFriends.size}, myIdAdded=$myIdAdded")
+        if (myPublicIdBytes != null) {
+            val myIdHex = myPublicIdBytes.take(8).joinToString("") { "%02x".format(it) }
+            Timber.d("PSI-DEBUG-SERVER: myPublicId first 8 bytes: $myIdHex")
         }
+        localFriends.forEachIndexed { idx, friend ->
+            val friendHex = friend.take(8).joinToString("") { "%02x".format(it) }
+            Timber.d("PSI-DEBUG-SERVER: friend[$idx] first 8 bytes: $friendHex")
+        }
+
         clientPSI = Crypto.PrivateSetIntersection(localFriends)
         serverPSI = Crypto.PrivateSetIntersection(localFriends)
 
@@ -251,6 +266,9 @@ private class LegacyExchangeSession(
         } else {
             0
         }
+
+        // Debug logging for PSI result
+        Timber.d("PSI-DEBUG-SERVER: commonFriends=$commonFriends")
 
         // Enforce minimum shared contacts when trust is enabled (from SecurityManager profile).
         val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)

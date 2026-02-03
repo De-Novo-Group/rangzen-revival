@@ -50,11 +50,26 @@ class LegacyExchangeClient(
                 // Decide whether to use the trust/PSI pipeline (from SecurityManager profile).
                 val useTrust = SecurityManager.useTrust(context)
                 val localFriends = friendStore.getAllFriendIds()
+                val friendCountBefore = localFriends.size
                 // Paper-aligned: Include our own public ID in the PSI input.
                 // This makes direct friends count as "mutual friends" in the trust computation.
-                friendStore.getMyPublicId()?.let { myId ->
+                val myPublicIdBytes = friendStore.getMyPublicId()
+                val myIdAdded = myPublicIdBytes?.let { myId ->
                     localFriends.add(myId)
+                    true
+                } ?: false
+
+                // Debug logging for PSI investigation
+                Timber.d("PSI-DEBUG: useTrust=$useTrust, friendsBefore=$friendCountBefore, friendsAfter=${localFriends.size}, myIdAdded=$myIdAdded")
+                if (myPublicIdBytes != null) {
+                    val myIdHex = myPublicIdBytes.take(8).joinToString("") { "%02x".format(it) }
+                    Timber.d("PSI-DEBUG: myPublicId first 8 bytes: $myIdHex")
                 }
+                localFriends.forEachIndexed { idx, friend ->
+                    val friendHex = friend.take(8).joinToString("") { "%02x".format(it) }
+                    Timber.d("PSI-DEBUG: friend[$idx] first 8 bytes: $friendHex")
+                }
+
                 val clientPSI = Crypto.PrivateSetIntersection(localFriends)
                 val serverPSI = Crypto.PrivateSetIntersection(localFriends)
                 exchangeCtx.localFriendCount = localFriends.size
@@ -128,6 +143,9 @@ class LegacyExchangeClient(
                 exchangeCtx.advanceStage(ExchangeStage.TRUST_COMPUTED)
                 exchangeCtx.mutualFriends = commonFriends
                 exchangeCtx.trustScore = if (localFriends.isNotEmpty()) commonFriends.toDouble() / localFriends.size else 0.0
+
+                // Debug logging for PSI result
+                Timber.d("PSI-DEBUG: commonFriends=$commonFriends, localFriends=${localFriends.size}, trustScore=${exchangeCtx.trustScore}")
 
                 // Enforce minimum shared contacts when trust is enabled (from SecurityManager profile).
                 val minSharedContacts = SecurityManager.minSharedContactsForExchange(context)
